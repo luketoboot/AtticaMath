@@ -83,6 +83,30 @@ export interface ScoreConfig {
   speedBonusMultiplier: number;
 }
 
+export interface ExpressionConfig {
+  /** Targets per wave, ramping over the run. */
+  baseTargetsPerWave: number;
+  targetsPerWaveGrowth: number;
+  maxTargetsPerWave: number;
+  /** Decoy number chips added to the hand beyond the canonical solution's chips. */
+  handDecoys: number;
+  /** Seconds a target takes to fall at wave 1. */
+  baseFallSeconds: number;
+  fallSpeedupPerWave: number;
+  minFallSeconds: number;
+  /** Extra fall seconds per canonical chip beyond two (bigger puzzles get more time). */
+  extraSecondsPerChip: number;
+  /** Score bonus per unused number chip on a successful fire. */
+  efficiencyBonusPerChip: number;
+  /** Score bonus per distinct operator in the fired expression. */
+  varietyBonusPerOperator: number;
+  /** Weight multiplier for operators the player has been avoiding. */
+  avoidedOpWeight: number;
+  /** Overall rating thresholds that unlock 3-chip and 4-chip puzzles. */
+  threeChipRating: number;
+  fourChipRating: number;
+}
+
 export interface EconomyConfig {
   /** Currency per point of score, end of run. */
   creditsPerScore: number;
@@ -96,6 +120,7 @@ export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
   meteors: MeteorConfig;
+  expression: ExpressionConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
 }
@@ -144,6 +169,21 @@ export const CONFIG: GameConfig = {
     baseHp: 5,
     breatherSeconds: 6,
     maxConcurrentMeteors: 4,
+  },
+  expression: {
+    baseTargetsPerWave: 5,
+    targetsPerWaveGrowth: 1,
+    maxTargetsPerWave: 9,
+    handDecoys: 2,
+    baseFallSeconds: 25,
+    fallSpeedupPerWave: 0.95,
+    minFallSeconds: 12,
+    extraSecondsPerChip: 6,
+    efficiencyBonusPerChip: 40,
+    varietyBonusPerOperator: 60,
+    avoidedOpWeight: 2.5,
+    threeChipRating: 550,
+    fourChipRating: 850,
   },
   score: {
     killBase: 100,
