@@ -303,6 +303,11 @@ export class ExpressionScene extends Phaser.Scene {
   private bindKeys(): void {
     // Stop the browser from scrolling on Space/arrows while playing.
     this.input.keyboard?.addCapture('SPACE,UP,DOWN,LEFT,RIGHT');
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.phase === 'over') return;
+      this.scene.launch('Pause', { target: 'Expression' });
+      this.scene.pause();
+    });
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       if (this.phase !== 'wave') return;
       const key = event.key;
@@ -319,9 +324,6 @@ export class ExpressionScene extends Phaser.Scene {
         } else {
           this.undo();
         }
-      } else if (key === 'Escape') {
-        this.pending = '';
-        this.renderExpression();
       } else if (key >= '0' && key <= '9') {
         this.typeDigit(key);
       } else if (OP_KEYS[key]) {

@@ -31,7 +31,7 @@ export class InputBuffer {
   }
 
   private handleKey(event: KeyboardEvent): void {
-    if (event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Escape') {
+    if (event.key === 'Backspace' || event.key === 'Delete') {
       this.clear();
       return;
     }

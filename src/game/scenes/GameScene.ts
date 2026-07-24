@@ -88,6 +88,12 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     padToggle.on('pointerdown', () => numpad.setVisible(!numpad.visible));
 
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.phase === 'over') return;
+      this.scene.launch('Pause', { target: 'Game' });
+      this.scene.pause();
+    });
+
     this.startWave();
   }
 
