@@ -9,8 +9,8 @@ import type { Problem } from './generator/problem';
 import { createRng, type Rng } from './rng';
 import { seedFromPlacement, type PlacementAttempt } from './skills/placement';
 import { applyAttempt, targetLatencyMs, type SkillTable } from './skills/rating';
-import type { SkillId } from './skills/taxonomy';
-import { composePlacementWave, composeWave, type WavePlan } from './waves/compose';
+import type { SkillFilter, SkillId } from './skills/taxonomy';
+import { composePlacementWave, composeWave, OPEN_FILTER, type WavePlan } from './waves/compose';
 
 export interface RunSessionInit {
   seed: number;
@@ -21,6 +21,8 @@ export interface RunSessionInit {
   ownedUpgrades: readonly string[];
   loadout: readonly string[];
   config?: GameConfig;
+  /** Practice-mode restriction; omitted = full adaptive mix. */
+  filter?: SkillFilter;
 }
 
 const COACH_RECENCY_WAVES = 3;
@@ -35,6 +37,7 @@ export class RunSession {
   private readonly placementLog: PlacementAttempt[] = [];
   private coached: SkillId | undefined;
   private lastTipSkill: SkillId | undefined;
+  private readonly filter: SkillFilter;
 
   score = 0;
   streak = 0;
@@ -53,6 +56,7 @@ export class RunSession {
     this.placementDone = init.placementDone;
     this.loadout = init.loadout.filter((u) => init.ownedUpgrades.includes(u));
     this.hp = this.cfg.meteors.baseHp + (this.loadout.includes('upgrade.hp') ? 2 : 0);
+    this.filter = init.filter ?? OPEN_FILTER;
   }
 
   /** Global wave counter (lifetime), used for recency in the skill table. */
@@ -80,10 +84,10 @@ export class RunSession {
   nextWave(): WavePlan {
     this.waveInRun += 1;
     if (!this.placementDone) {
-      const plan = composePlacementWave(this.waveInRun, this.cfg, this.rng);
+      const plan = composePlacementWave(this.waveInRun, this.cfg, this.rng, this.filter);
       return { ...plan, wave: this.waveInRun };
     }
-    const plan = composeWave(this.skills, this.globalWave, this.cfg, this.rng, this.coached);
+    const plan = composeWave(this.skills, this.globalWave, this.cfg, this.rng, this.coached, this.filter);
     this.coached = undefined;
     return { ...plan, wave: this.waveInRun };
   }

@@ -84,6 +84,37 @@ describe('recipe correctness', () => {
     }
   });
 
+  it('div.long and div.big divide cleanly at their digit sizes', () => {
+    for (const [id, minDigits, maxDigits] of [
+      ['div.long', 3, 3],
+      ['div.big', 4, 4],
+    ] as const) {
+      for (let i = 0; i < 200; i++) {
+        const p = generateProblem(id, rng);
+        const [dividend, divisor] = p.prompt.split(' ÷ ').map(Number);
+        expect(String(dividend).length).toBeGreaterThanOrEqual(minDigits);
+        expect(String(dividend).length).toBeLessThanOrEqual(maxDigits);
+        expect(dividend! % divisor!).toBe(0);
+        expect(dividend! / divisor!).toBe(Number(p.answer));
+      }
+    }
+  });
+
+  it('sub.triple and sub.quad stay positive at their digit sizes', () => {
+    for (const [id, digits] of [
+      ['sub.triple', 3],
+      ['sub.quad', 4],
+    ] as const) {
+      for (let i = 0; i < 200; i++) {
+        const p = generateProblem(id, rng);
+        const [a, b] = p.prompt.split(' − ').map(Number);
+        expect(String(a).length).toBe(digits);
+        expect(a! - b!).toBe(Number(p.answer));
+        expect(Number(p.answer)).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it('div.remainder answer is a valid nonzero remainder', () => {
     for (let i = 0; i < 200; i++) {
       const p = generateProblem('div.remainder', rng);

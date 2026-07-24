@@ -7,7 +7,21 @@ import type { Rng } from '../rng';
 import { generateProblem, hasRecipe } from '../generator/generate';
 import type { Problem } from '../generator/problem';
 import type { SkillTable } from '../skills/rating';
-import { getSkill, maxTier, skillsInTier, type SkillId } from '../skills/taxonomy';
+import {
+  getSkill,
+  skillMatchesFilter,
+  SKILLS,
+  type SkillFilter,
+  type SkillId,
+} from '../skills/taxonomy';
+
+/** The unrestricted default: every family, up to four digits. */
+export const OPEN_FILTER: SkillFilter = { op: 'all', maxDigits: 4 };
+
+/** Skills admitted by a filter that also have generator recipes. */
+function poolFor(filter: SkillFilter): SkillId[] {
+  return SKILLS.filter((s) => skillMatchesFilter(s, filter) && hasRecipe(s.id)).map((s) => s.id);
+}
 
 export type SkillCategory = 'fluent' | 'frontier' | 'review';
 
@@ -23,6 +37,7 @@ export function categorizeSkills(
   table: SkillTable,
   wave: number,
   cfg: GameConfig,
+  filter: SkillFilter = OPEN_FILTER,
 ): Record<SkillCategory, SkillId[]> {
   const fluent: SkillId[] = [];
   const frontier: SkillId[] = [];
@@ -30,6 +45,7 @@ export function categorizeSkills(
 
   for (const [id, state] of Object.entries(table)) {
     if (!hasRecipe(id)) continue;
+    if (!skillMatchesFilter(getSkill(id), filter)) continue;
     const gap = state.rating - getSkill(id).baseDifficulty;
     const decayed =
       state.attempts > 0 && wave - state.lastAttemptWave >= cfg.waves.decayedAfterWaves;
@@ -56,8 +72,9 @@ export function composeWave(
   cfg: GameConfig,
   rng: Rng,
   coachedSkill?: SkillId,
+  filter: SkillFilter = OPEN_FILTER,
 ): WavePlan {
-  const buckets = categorizeSkills(table, wave, cfg);
+  const buckets = categorizeSkills(table, wave, cfg, filter);
   const count = problemsForWave(wave, cfg);
   const problems: Problem[] = [];
   const categories: SkillCategory[] = [];
@@ -87,8 +104,10 @@ export function composeWave(
       }
     }
     if (pool.length === 0) {
-      // Empty table edge case: fall back to tier-0 skills.
-      pool = skillsInTier(0).map((s) => s.id);
+      // Empty table edge case: fall back to the easiest tier within the filter.
+      const allowed = poolFor(filter);
+      const easiest = Math.min(...allowed.map((id) => getSkill(id).tier));
+      pool = allowed.filter((id) => getSkill(id).tier === easiest);
       used = 'frontier';
     }
     const weighted =
@@ -113,15 +132,22 @@ export function isPlacementWave(wave: number, cfg: GameConfig): boolean {
  * configured number of placement waves. Wave 1 probes the lowest tiers,
  * the final placement wave probes the highest.
  */
-export function composePlacementWave(wave: number, cfg: GameConfig, rng: Rng): WavePlan {
-  const tiers = maxTier() + 1;
-  const perWave = Math.ceil(tiers / cfg.waves.placementWaves);
-  const firstTier = (wave - 1) * perWave;
-  const lastTier = Math.min(tiers - 1, firstTier + perWave - 1);
+export function composePlacementWave(
+  wave: number,
+  cfg: GameConfig,
+  rng: Rng,
+  filter: SkillFilter = OPEN_FILTER,
+): WavePlan {
+  const allowed = poolFor(filter);
+  const tiersPresent = [...new Set(allowed.map((id) => getSkill(id).tier))].sort((a, b) => a - b);
+  const perWave = Math.ceil(tiersPresent.length / cfg.waves.placementWaves);
+  const slice = tiersPresent.slice((wave - 1) * perWave, wave * perWave);
 
-  const pool: SkillId[] = [];
-  for (let t = firstTier; t <= lastTier; t++) {
-    for (const s of skillsInTier(t)) if (hasRecipe(s.id)) pool.push(s.id);
+  let pool: SkillId[] = allowed.filter((id) => slice.includes(getSkill(id).tier));
+  if (pool.length === 0) {
+    // Fewer distinct tiers than placement waves: re-probe the hardest tier.
+    const hardest = Math.max(...allowed.map((id) => getSkill(id).tier));
+    pool = allowed.filter((id) => getSkill(id).tier === hardest);
   }
 
   const problems: Problem[] = [];

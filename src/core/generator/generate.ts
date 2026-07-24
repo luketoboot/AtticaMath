@@ -50,6 +50,11 @@ const RECIPES: Record<SkillId, Recipe> = {
     const b = rng.int(101, 900);
     return { skillIds: ['add.triple'], prompt: `${a} + ${b}`, answer: String(a + b), difficultyAdjust: 0 };
   },
+  'add.quad': (rng) => {
+    const a = rng.int(1100, 8999);
+    const b = rng.int(1001, 9000);
+    return { skillIds: ['add.quad'], prompt: `${a} + ${b}`, answer: String(a + b), difficultyAdjust: 0 };
+  },
   'sub.single': (rng) => {
     const a = rng.int(3, 9);
     const b = rng.int(1, a - 1);
@@ -74,6 +79,16 @@ const RECIPES: Record<SkillId, Recipe> = {
     const a = aTens * 10 + aOnes;
     const b = bTens * 10 + bOnes;
     return { skillIds: ['sub.borrow'], prompt: `${a} ${MINUS} ${b}`, answer: String(a - b), difficultyAdjust: 0 };
+  },
+  'sub.triple': (rng) => {
+    const a = rng.int(200, 999);
+    const b = rng.int(101, a - 50);
+    return { skillIds: ['sub.triple'], prompt: `${a} ${MINUS} ${b}`, answer: String(a - b), difficultyAdjust: 0 };
+  },
+  'sub.quad': (rng) => {
+    const a = rng.int(2000, 9999);
+    const b = rng.int(1001, a - 500);
+    return { skillIds: ['sub.quad'], prompt: `${a} ${MINUS} ${b}`, answer: String(a - b), difficultyAdjust: 0 };
   },
   'mul.table.2': timesTableRecipe(2),
   'mul.table.3': timesTableRecipe(3),
@@ -127,6 +142,30 @@ const RECIPES: Record<SkillId, Recipe> = {
       skillIds: ['div.remainder'],
       prompt: `${dividend} ${DIVIDE} ${divisor} r?`,
       answer: String(remainder),
+      difficultyAdjust: 0,
+    };
+  },
+  'div.long': (rng) => {
+    // 3-digit dividend, exact single-digit division.
+    const divisor = rng.int(3, 9);
+    const quotient = rng.int(Math.ceil(100 / divisor), Math.floor(999 / divisor));
+    const dividend = divisor * quotient;
+    return {
+      skillIds: ['div.long'],
+      prompt: `${dividend} ${DIVIDE} ${divisor}`,
+      answer: String(quotient),
+      difficultyAdjust: 0,
+    };
+  },
+  'div.big': (rng) => {
+    // 4-digit dividend, exact single-digit division.
+    const divisor = rng.int(3, 9);
+    const quotient = rng.int(Math.ceil(1000 / divisor), Math.floor(9999 / divisor));
+    const dividend = divisor * quotient;
+    return {
+      skillIds: ['div.big'],
+      prompt: `${dividend} ${DIVIDE} ${divisor}`,
+      answer: String(quotient),
       difficultyAdjust: 0,
     };
   },

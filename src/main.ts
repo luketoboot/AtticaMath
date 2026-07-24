@@ -5,6 +5,7 @@ import { DebriefScene } from './game/scenes/DebriefScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
 import { GameScene } from './game/scenes/GameScene';
 import { MenuScene } from './game/scenes/MenuScene';
+import { ModeSelectScene } from './game/scenes/ModeSelectScene';
 import { ShopScene } from './game/scenes/ShopScene';
 
 const game = new Phaser.Game({
@@ -17,7 +18,7 @@ const game = new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BootScene, MenuScene, GameScene, ExpressionScene, DebriefScene, ShopScene],
+  scene: [BootScene, MenuScene, ModeSelectScene, GameScene, ExpressionScene, DebriefScene, ShopScene],
 });
 
 declare global {

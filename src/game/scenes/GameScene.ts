@@ -54,6 +54,9 @@ export class GameScene extends Phaser.Scene {
     this.cannonX = width / 2;
 
     const save = this.saves.save;
+    const filter = this.registry.get('meteorFilter') as
+      | { op: 'add' | 'sub' | 'mul' | 'div' | 'all'; maxDigits: 1 | 2 | 3 | 4 }
+      | undefined;
     this.session = new RunSession({
       seed: Date.now() >>> 0,
       skills: save.skills,
@@ -61,6 +64,7 @@ export class GameScene extends Phaser.Scene {
       placementDone: save.placementDone,
       ownedUpgrades: save.ownedUpgrades,
       loadout: save.loadout,
+      ...(filter ? { filter } : {}),
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);

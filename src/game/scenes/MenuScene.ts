@@ -52,7 +52,7 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.makeButton(width / 2, height * 0.5, 'METEOR DEFENSE', () => this.scene.start('Game'));
+    this.makeButton(width / 2, height * 0.5, 'METEOR DEFENSE', () => this.scene.start('ModeSelect'));
     this.makeButton(width / 2, height * 0.59, 'EXPRESSION BUILDER', () => this.scene.start('Expression'));
     this.makeButton(width / 2, height * 0.68, 'ARMORY', () => this.scene.start('Shop'));
     this.makeButton(
@@ -66,8 +66,8 @@ export class MenuScene extends Phaser.Scene {
       },
     );
 
-    this.input.keyboard?.once('keydown-ENTER', () => this.scene.start('Game'));
-    this.input.keyboard?.once('keydown-SPACE', () => this.scene.start('Game'));
+    this.input.keyboard?.once('keydown-ENTER', () => this.scene.start('ModeSelect'));
+    this.input.keyboard?.once('keydown-SPACE', () => this.scene.start('ModeSelect'));
   }
 
   private drawGrid(): void {
