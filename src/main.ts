@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE } from './fx/palette';
 import { BootScene } from './game/scenes/BootScene';
+import { BossScene } from './game/scenes/BossScene';
 import { BrainScanScene } from './game/scenes/BrainScanScene';
 import { DebriefScene } from './game/scenes/DebriefScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
@@ -27,6 +28,7 @@ const game = new Phaser.Game({
     ModeSelectScene,
     GameScene,
     ExpressionScene,
+    BossScene,
     DebriefScene,
     ShopScene,
     BrainScanScene,

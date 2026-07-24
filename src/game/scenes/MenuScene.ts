@@ -52,11 +52,12 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.makeButton(width / 2, height * 0.48, 'METEOR DEFENSE', () => this.scene.start('ModeSelect'));
-    this.makeButton(width / 2, height * 0.56, 'EXPRESSION BUILDER', () => this.scene.start('Expression'));
-    this.makeButton(width / 2, height * 0.64, 'ARMORY', () => this.scene.start('Shop'));
-    this.makeButton(width / 2, height * 0.72, 'BRAIN SCAN', () => this.scene.start('BrainScan'));
-    this.makeButton(width / 2, height * 0.8, 'SETTINGS', () => this.scene.start('Settings'));
+    this.makeButton(width / 2, height * 0.46, 'METEOR DEFENSE', () => this.scene.start('ModeSelect'));
+    this.makeButton(width / 2, height * 0.53, 'EXPRESSION BUILDER', () => this.scene.start('Expression'));
+    this.makeButton(width / 2, height * 0.6, 'BOSS RUSH', () => this.scene.start('Boss'));
+    this.makeButton(width / 2, height * 0.67, 'ARMORY', () => this.scene.start('Shop'));
+    this.makeButton(width / 2, height * 0.74, 'BRAIN SCAN', () => this.scene.start('BrainScan'));
+    this.makeButton(width / 2, height * 0.81, 'SETTINGS', () => this.scene.start('Settings'));
 
     this.input.keyboard?.once('keydown-ENTER', () => this.scene.start('ModeSelect'));
     this.input.keyboard?.once('keydown-SPACE', () => this.scene.start('ModeSelect'));

@@ -111,6 +111,28 @@ export interface ExpressionConfig {
   fourChipRating: number;
 }
 
+export interface BossConfig {
+  /** First boss HP; later bosses multiply. */
+  baseHp: number;
+  hpGrowthPerBoss: number;
+  /** Number chips dealt per damage hand. */
+  handSize: number;
+  /** Seconds between boss attacks, shrinking per boss. */
+  attackIntervalSeconds: number;
+  minAttackIntervalSeconds: number;
+  attackIntervalShrinkPerBoss: number;
+  /** Seconds an attack takes to reach the player, shrinking per boss. */
+  attackTravelSeconds: number;
+  minAttackTravelSeconds: number;
+  attackTravelShrinkPerBoss: number;
+  /** Score per point of expression damage dealt. */
+  scorePerDamage: number;
+  /** Flat score bonus for downing a boss. */
+  defeatBonus: number;
+  /** Score for blocking an attack. */
+  blockScore: number;
+}
+
 export interface EconomyConfig {
   /** Currency per point of score, end of run. */
   creditsPerScore: number;
@@ -125,6 +147,7 @@ export interface GameConfig {
   waves: WaveConfig;
   meteors: MeteorConfig;
   expression: ExpressionConfig;
+  boss: BossConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
 }
@@ -190,6 +213,20 @@ export const CONFIG: GameConfig = {
     avoidedOpWeight: 2.5,
     threeChipRating: 550,
     fourChipRating: 850,
+  },
+  boss: {
+    baseHp: 250,
+    hpGrowthPerBoss: 1.45,
+    handSize: 5,
+    attackIntervalSeconds: 10,
+    minAttackIntervalSeconds: 5,
+    attackIntervalShrinkPerBoss: 0.92,
+    attackTravelSeconds: 9,
+    minAttackTravelSeconds: 5,
+    attackTravelShrinkPerBoss: 0.95,
+    scorePerDamage: 3,
+    defeatBonus: 1500,
+    blockScore: 150,
   },
   score: {
     killBase: 100,
