@@ -6,6 +6,8 @@ import { CSS, FONT, PALETTE } from '../../fx/palette';
 interface DebriefData {
   stats: RunStats;
   credits: number;
+  /** Scene key to relaunch into; defaults to meteor defense. */
+  mode?: string;
 }
 
 export class DebriefScene extends Phaser.Scene {
@@ -58,11 +60,12 @@ export class DebriefScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.makeButton(width / 2, height * 0.74, 'RELAUNCH', () => this.scene.start('Game'));
+    const relaunchScene = data.mode ?? 'Game';
+    this.makeButton(width / 2, height * 0.74, 'RELAUNCH', () => this.scene.start(relaunchScene));
     this.makeButton(width / 2, height * 0.82, 'ARMORY', () => this.scene.start('Shop'));
     this.makeButton(width / 2, height * 0.9, 'MENU', () => this.scene.start('Menu'));
 
-    this.input.keyboard?.once('keydown-ENTER', () => this.scene.start('Game'));
+    this.input.keyboard?.once('keydown-ENTER', () => this.scene.start(relaunchScene));
   }
 
   private makeButton(x: number, y: number, label: string, onClick: () => void): void {

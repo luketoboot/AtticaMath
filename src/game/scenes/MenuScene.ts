@@ -51,11 +51,12 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.makeButton(width / 2, height * 0.52, 'LAUNCH', () => this.scene.start('Game'));
-    this.makeButton(width / 2, height * 0.62, 'ARMORY', () => this.scene.start('Shop'));
+    this.makeButton(width / 2, height * 0.5, 'METEOR DEFENSE', () => this.scene.start('Game'));
+    this.makeButton(width / 2, height * 0.59, 'EXPRESSION BUILDER', () => this.scene.start('Expression'));
+    this.makeButton(width / 2, height * 0.68, 'ARMORY', () => this.scene.start('Shop'));
     this.makeButton(
       width / 2,
-      height * 0.72,
+      height * 0.77,
       `CRT ${saves.save.settings.crtEnabled ? 'ON' : 'OFF'}`,
       () => {
         saves.save.settings.crtEnabled = !saves.save.settings.crtEnabled;
