@@ -24,6 +24,7 @@ export class BrainScanScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     const saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    getAudio(this)?.playMusic('menu');
     applyCrt(this);
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
 

@@ -6,6 +6,7 @@ import type { Token } from '../../core/expression/expression';
 import type { Problem } from '../../core/generator/problem';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
+import { clearHitStop, impact, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -49,7 +50,10 @@ export class BossScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    getAudio(this)?.playMusic('boss');
     applyCrt(this);
+    clearHitStop(this);
+    this.events.once('shutdown', () => clearHitStop(this));
 
     this.phase = 'fight';
     this.attack = null;
@@ -120,7 +124,7 @@ export class BossScene extends Phaser.Scene {
 
   override update(_time: number, deltaMs: number): void {
     if (this.phase !== 'fight') return;
-    const dt = deltaMs / 1000;
+    const dt = (deltaMs / 1000) * timeScale(this);
 
     if (!this.attack) {
       this.sinceAttack += dt;
@@ -178,21 +182,40 @@ export class BossScene extends Phaser.Scene {
       return;
     }
 
+    const { juice } = CONFIG;
     const audio = getAudio(this);
-    audio?.play('laser');
-    audio?.play('explosion');
+    // Damage scales the cue: a big expression should hit harder than a chip.
+    const heavy = outcome.damage >= 40;
+    audio?.play('bossHit', { pitch: heavy ? 0.85 : 1.1, gain: heavy ? 1.2 : 1 });
+
     const { width, height } = this.scale;
     const g = this.add.graphics();
+    g.lineStyle(14, PALETTE.magenta, 0.3);
+    g.lineBetween(width / 2, height - 160, this.boss.x, this.boss.y);
     g.lineStyle(5, PALETTE.cyan, 1);
     g.lineBetween(width / 2, height - 160, this.boss.x, this.boss.y);
     g.lineStyle(2, PALETTE.white, 1);
     g.lineBetween(width / 2, height - 160, this.boss.x, this.boss.y);
-    this.tweens.add({ targets: g, alpha: 0, duration: 180, onComplete: () => g.destroy() });
+    this.tweens.add({ targets: g, alpha: 0, duration: 200, onComplete: () => g.destroy() });
 
-    this.explode(this.boss.x, this.boss.y + 40, PALETTE.cyan, 20);
+    this.explode(this.boss.x, this.boss.y + 40, PALETTE.cyan, juice.killParticles);
+    shockwave(this, this.boss.x, this.boss.y + 40, PALETTE.cyan);
     this.scorePopup(this.boss.x, this.boss.y + 70, `-${outcome.damage}`);
-    this.cameras.main.shake(120, 0.006);
-    this.tweens.add({ targets: this.boss, x: this.boss.x + 10, duration: 50, yoyo: true, repeat: 3 });
+    impact(this, {
+      shakeMs: juice.bossHitShakeMs,
+      shakeIntensity: juice.bossHitShakeIntensity * (heavy ? 1.6 : 1),
+      glow: heavy ? juice.glowPulseHeavy : juice.glowPulseKill,
+      hitStopMs: juice.hitStopMs,
+    });
+    // The boss is a Container, so it can't tint — punch its scale instead.
+    this.tweens.add({
+      targets: this.boss,
+      scale: 1.12,
+      duration: 60,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+    });
+    this.tweens.add({ targets: this.boss, x: this.boss.x + 14, duration: 45, yoyo: true, repeat: 3 });
 
     this.renderBoss();
     this.updateHud();
@@ -207,9 +230,16 @@ export class BossScene extends Phaser.Scene {
   private bossDown(): void {
     this.phase = 'breather';
     this.clearAttack();
-    getAudio(this)?.play('gameover'); // big down-sweep reads as a boss kill
-    this.explode(this.boss.x, this.boss.y, PALETTE.magentaHot, 60);
-    this.cameras.main.shake(400, 0.015);
+    getAudio(this)?.play('bossDown');
+    this.explode(this.boss.x, this.boss.y, PALETTE.magentaHot, 90);
+    shockwave(this, this.boss.x, this.boss.y, PALETTE.magentaHot);
+    this.cameras.main.flash(300, 255, 90, 209);
+    impact(this, {
+      shakeMs: CONFIG.juice.bossDownShakeMs,
+      shakeIntensity: CONFIG.juice.bossDownShakeIntensity,
+      glow: CONFIG.juice.glowPulseHeavy,
+      hitStopMs: CONFIG.juice.heavyHitStopMs,
+    });
 
     const { width, height } = this.scale;
     const pick = this.session.bossDownTip();
@@ -294,26 +324,40 @@ export class BossScene extends Phaser.Scene {
   private tryBlock(): void {
     if (!this.attack) return;
     if (this.attackBuffer !== this.attack.problem.answer) return;
+    const { juice } = CONFIG;
     const a = this.attack;
     const points = this.session.blockAttack(a.problem, this.time.now - a.spawnedAt);
     const audio = getAudio(this);
-    audio?.play('laser');
+    audio?.play('block');
     audio?.play('fast');
-    this.explode(a.container.x, a.container.y, PALETTE.cyan, 22);
+    this.explode(a.container.x, a.container.y, PALETTE.cyan, juice.killParticles);
+    shockwave(this, a.container.x, a.container.y, PALETTE.cyan);
     this.scorePopup(a.container.x, a.container.y, `BLOCKED +${points}`);
-    this.cameras.main.shake(80, 0.004);
+    impact(this, {
+      shakeMs: juice.killShakeMs,
+      shakeIntensity: juice.killShakeIntensity,
+      glow: juice.glowPulseKill,
+      hitStopMs: juice.hitStopMs,
+    });
     this.clearAttack();
     this.updateHud();
   }
 
   private attackHits(): void {
     if (!this.attack) return;
+    const { juice } = CONFIG;
     const a = this.attack;
     this.session.attackLands(a.problem, this.time.now - a.spawnedAt);
     getAudio(this)?.play('land');
-    this.explode(a.container.x, a.container.y, PALETTE.red, 30);
-    this.cameras.main.shake(220, 0.012);
-    this.cameras.main.flash(120, 255, 40, 40);
+    this.explode(a.container.x, a.container.y, PALETTE.red, juice.landParticles);
+    shockwave(this, a.container.x, a.container.y, PALETTE.red);
+    this.cameras.main.flash(180, 255, 40, 40);
+    impact(this, {
+      shakeMs: juice.landShakeMs,
+      shakeIntensity: juice.landShakeIntensity,
+      glow: juice.glowPulseHeavy,
+      hitStopMs: juice.heavyHitStopMs,
+    });
     this.clearAttack();
     this.updateHud();
     if (this.session.gameOver) this.endRun();
@@ -381,6 +425,7 @@ export class BossScene extends Phaser.Scene {
 
   private endRun(): void {
     this.phase = 'over';
+    clearHitStop(this);
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
     save.skills = this.session.skillTable;

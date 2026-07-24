@@ -17,6 +17,7 @@ export class SettingsScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
     const audio = this.registry.get(AUDIO_REGISTRY_KEY) as AudioManager | undefined;
+    audio?.playMusic('menu');
     applyCrt(this);
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
     this.resetArmed = false;

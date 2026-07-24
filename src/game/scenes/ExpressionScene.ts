@@ -6,6 +6,7 @@ import type { ExpressionProblem } from '../../core/expression/generate';
 import { ExpressionSession } from '../../core/expression/session';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
+import { clearHitStop, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -38,7 +39,10 @@ export class ExpressionScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    getAudio(this)?.playMusic('game');
     applyCrt(this);
+    clearHitStop(this);
+    this.events.once('shutdown', () => clearHitStop(this));
 
     this.phase = 'wave';
     this.queue = [];
@@ -84,16 +88,22 @@ export class ExpressionScene extends Phaser.Scene {
 
   override update(_time: number, deltaMs: number): void {
     if (this.phase !== 'wave' || !this.target || !this.current) return;
-    this.target.y += this.targetSpeed * (deltaMs / 1000);
+    this.target.y += this.targetSpeed * (deltaMs / 1000) * timeScale(this);
     if (this.target.y >= this.groundY - 30) {
       const m = this.current;
       const landX = this.target.x;
       this.clearTarget();
       this.session.recordMiss(m, this.time.now - this.targetSpawnedAt);
       getAudio(this)?.play('land');
-      this.explode(landX, this.groundY - 30, PALETTE.red, 30);
-      this.cameras.main.shake(220, 0.012);
-      this.cameras.main.flash(120, 255, 40, 40);
+      this.explode(landX, this.groundY - 30, PALETTE.red, CONFIG.juice.landParticles);
+      shockwave(this, landX, this.groundY - 30, PALETTE.red);
+      this.cameras.main.flash(180, 255, 40, 40);
+      impact(this, {
+        shakeMs: CONFIG.juice.landShakeMs,
+        shakeIntensity: CONFIG.juice.landShakeIntensity,
+        glow: CONFIG.juice.glowPulseHeavy,
+        hitStopMs: CONFIG.juice.heavyHitStopMs,
+      });
       this.updateHud();
       if (this.session.gameOver) {
         this.endRun();
@@ -199,17 +209,27 @@ export class ExpressionScene extends Phaser.Scene {
     const outcome = this.session.fire(this.current, tokens, this.time.now - this.targetSpawnedAt);
 
     if (outcome.result === 'hit') {
+      const { juice } = CONFIG;
       const audio = getAudio(this);
-      audio?.play('laser');
-      audio?.play('explosion');
+      // A lean or varied solution earns the wider spread-cannon report.
+      const bonus = outcome.efficiencyBonus > 0 || outcome.varietyBonus > 0;
+      const pitch = streakPitch(this.session.streak);
+      audio?.play(bonus ? 'laserSpread' : 'laser', { pitch });
+      audio?.play(bonus ? 'fast' : 'explosion', { pitch });
       const { x, y } = this.target;
       this.laser(x, y);
-      this.explode(x, y, PALETTE.cyan, 24);
+      this.explode(x, y, bonus ? PALETTE.yellow : PALETTE.cyan, bonus ? juice.fastKillParticles : juice.killParticles);
+      shockwave(this, x, y, bonus ? PALETTE.yellow : PALETTE.cyan);
       let popup = `+${outcome.points}`;
       if (outcome.efficiencyBonus > 0) popup += '  LEAN';
       if (outcome.varietyBonus > 0) popup += '  COMBO';
       this.scorePopup(x, y, popup);
-      this.cameras.main.shake(90, 0.005);
+      impact(this, {
+        shakeMs: juice.killShakeMs,
+        shakeIntensity: juice.killShakeIntensity,
+        glow: bonus ? juice.glowPulseHeavy : juice.glowPulseKill,
+        hitStopMs: juice.hitStopMs,
+      });
       this.clearTarget();
       this.updateHud();
       this.time.delayedCall(700, () => {
@@ -290,6 +310,7 @@ export class ExpressionScene extends Phaser.Scene {
 
   private endRun(): void {
     this.phase = 'over';
+    clearHitStop(this);
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
     save.skills = this.session.skillTable;

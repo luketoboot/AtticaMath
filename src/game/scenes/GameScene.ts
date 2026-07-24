@@ -6,6 +6,7 @@ import { RunSession } from '../../core/session';
 import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
+import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { isTouchDevice, Numpad } from '../../ui/Numpad';
 import { InputBuffer } from '../InputBuffer';
@@ -45,7 +46,11 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    getAudio(this)?.playMusic('game');
     applyCrt(this);
+    // Clock scaling survives a scene restart, so never inherit a stale freeze.
+    clearHitStop(this);
+    this.events.once('shutdown', () => clearHitStop(this));
 
     this.meteors = [];
     this.spawnQueue = [];
@@ -99,7 +104,8 @@ export class GameScene extends Phaser.Scene {
 
   override update(_time: number, deltaMs: number): void {
     if (this.phase !== 'wave') return;
-    const dt = deltaMs / 1000;
+    // Scaled so hit-stop freezes falling meteors along with tweens and timers.
+    const dt = (deltaMs / 1000) * timeScale(this);
 
     this.sinceSpawn += dt;
     if (
@@ -132,7 +138,13 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'wave';
     this.waveText.setText(`WAVE ${plan.wave}`);
     this.banner(`WAVE ${plan.wave}`, CSS.magenta);
-    getAudio(this)?.play('wave');
+    const audio = getAudio(this);
+    audio?.play('wave');
+    // Slow field spins up audibly at the top of every wave.
+    if (this.session.loadout.includes('upgrade.slowfield')) {
+      this.time.delayedCall(220, () => audio?.play('slowfield'));
+    }
+    glowPulse(this, CONFIG.juice.glowPulseKill);
   }
 
   private waveComplete(): void {
@@ -213,12 +225,38 @@ export class GameScene extends Phaser.Scene {
   }
 
   private landMeteor(m: LiveMeteor): void {
+    const { juice } = CONFIG;
+    const hpBefore = this.session.hp;
     this.removeMeteor(m);
     this.session.recordMiss(m.problem, this.time.now - m.spawnedAt);
-    getAudio(this)?.play('land');
-    this.explode(m.container.x, this.groundY - 20, PALETTE.red, 26);
-    this.cameras.main.shake(220, 0.012);
-    this.cameras.main.flash(120, 255, 40, 40);
+    // Equal HP means the miss shield ate it — that deserves its own cue.
+    const shielded = this.session.hp === hpBefore;
+
+    const x = m.container.x;
+    const y = this.groundY - 20;
+    if (shielded) {
+      getAudio(this)?.play('shield');
+      this.explode(x, y, PALETTE.cyan, juice.landParticles / 2);
+      shockwave(this, x, y, PALETTE.cyan);
+      this.cameras.main.flash(160, 0, 220, 255);
+      impact(this, {
+        shakeMs: juice.killShakeMs,
+        shakeIntensity: juice.killShakeIntensity,
+        glow: juice.glowPulseKill,
+      });
+    } else {
+      getAudio(this)?.play('land');
+      this.explode(x, y, PALETTE.red, juice.landParticles);
+      shockwave(this, x, y, PALETTE.red);
+      this.cameras.main.flash(180, 255, 40, 40);
+      impact(this, {
+        shakeMs: juice.landShakeMs,
+        shakeIntensity: juice.landShakeIntensity,
+        glow: juice.glowPulseHeavy,
+        hitStopMs: juice.heavyHitStopMs,
+      });
+    }
+
     this.updateHud();
     if (this.session.gameOver) this.endRun();
   }
@@ -232,50 +270,109 @@ export class GameScene extends Phaser.Scene {
     matches.sort((a, b) => b.container.y - a.container.y);
     const targets = this.session.loadout.includes('upgrade.spread') ? matches : [matches[0]!];
 
+    const { juice } = CONFIG;
     const audio = getAudio(this);
-    audio?.play('laser');
+    const spread = targets.length > 1;
+    // The spread cannon fires a visibly and audibly different shot.
+    audio?.play(spread ? 'laserSpread' : 'laser', { pitch: streakPitch(this.session.streak) });
+
+    let anyFast = false;
     for (const target of targets) {
-      this.laser(target.container.x, target.container.y);
+      const tx = target.container.x;
+      const ty = target.container.y;
+      this.laser(tx, ty, spread);
       const responseMs = this.time.now - target.spawnedAt;
+      // Pitch climbs with the streak as it stands *before* this kill lands.
+      const pitch = streakPitch(this.session.streak);
       const points = this.session.recordHit(target.problem, responseMs);
       const fast = responseMs <= targetLatencyMs(target.problem.difficulty, CONFIG.rating);
-      this.scorePopup(target.container.x, target.container.y, points, fast);
-      this.explode(target.container.x, target.container.y, PALETTE.cyan, 18);
+      anyFast = anyFast || fast;
+      this.scorePopup(tx, ty, points, fast);
+      this.explode(tx, ty, fast ? PALETTE.yellow : PALETTE.cyan, fast ? juice.fastKillParticles : juice.killParticles);
+      shockwave(this, tx, ty, fast ? PALETTE.yellow : PALETTE.cyan);
       this.removeMeteor(target);
-      audio?.play(fast ? 'fast' : 'explosion');
+      audio?.play(fast ? 'fast' : 'explosion', { pitch });
     }
 
-    this.cameras.main.shake(90, 0.004);
+    impact(this, {
+      shakeMs: juice.killShakeMs,
+      shakeIntensity:
+        juice.killShakeIntensity + (targets.length - 1) * juice.spreadShakePerTarget,
+      glow: anyFast ? juice.glowPulseHeavy : juice.glowPulseKill,
+      hitStopMs: juice.hitStopMs,
+    });
     this.buffer.clear();
     this.updateHud();
   }
 
   // --- fx ---
 
-  private laser(tx: number, ty: number): void {
+  /** Beam from the cannon. The spread cannon draws a thicker magenta bolt. */
+  private laser(tx: number, ty: number, spread: boolean): void {
+    const outer = spread ? PALETTE.magenta : PALETTE.cyan;
     const g = this.add.graphics();
-    g.lineStyle(4, PALETTE.cyan, 1);
+    g.lineStyle(spread ? 12 : 9, outer, 0.35);
     g.lineBetween(this.cannonX, this.groundY, tx, ty);
-    g.lineStyle(2, PALETTE.white, 1);
+    g.lineStyle(spread ? 6 : 4, outer, 1);
     g.lineBetween(this.cannonX, this.groundY, tx, ty);
-    this.tweens.add({ targets: g, alpha: 0, duration: 140, onComplete: () => g.destroy() });
+    g.lineStyle(spread ? 3 : 2, PALETTE.white, 1);
+    g.lineBetween(this.cannonX, this.groundY, tx, ty);
+    this.tweens.add({ targets: g, alpha: 0, duration: 180, onComplete: () => g.destroy() });
+
+    // Muzzle flash at the cannon mouth.
+    const muzzle = this.add
+      .image(this.cannonX, this.groundY, 'glowdot')
+      .setTint(outer)
+      .setScale(spread ? 5 : 3.5)
+      .setAlpha(0.95);
+    this.tweens.add({
+      targets: muzzle,
+      scale: spread ? 9 : 6,
+      alpha: 0,
+      duration: 160,
+      onComplete: () => muzzle.destroy(),
+    });
   }
 
   private explode(x: number, y: number, tint: number, count: number): void {
+    const n = Math.round(count);
     const emitter = this.add.particles(x, y, 'particle', {
-      speed: { min: 60, max: 320 },
+      speed: { min: 80, max: 460 },
       angle: { min: 0, max: 360 },
-      lifespan: { min: 250, max: 600 },
-      scale: { start: 1.6, end: 0 },
+      lifespan: { min: 250, max: 750 },
+      scale: { start: 2.1, end: 0 },
       tint,
-      quantity: count,
+      quantity: n,
       emitting: false,
     });
-    emitter.explode(count);
-    this.time.delayedCall(700, () => emitter.destroy());
+    emitter.explode(n);
 
-    const flash = this.add.image(x, y, 'glowdot').setTint(tint).setScale(3).setAlpha(0.9);
-    this.tweens.add({ targets: flash, scale: 6, alpha: 0, duration: 220, onComplete: () => flash.destroy() });
+    // Second, faster white sheet of sparks reads as the hot core of the blast.
+    const core = this.add.particles(x, y, 'particle', {
+      speed: { min: 200, max: 700 },
+      angle: { min: 0, max: 360 },
+      lifespan: { min: 120, max: 280 },
+      scale: { start: 1.2, end: 0 },
+      tint: PALETTE.white,
+      quantity: Math.max(4, Math.round(n / 3)),
+      emitting: false,
+    });
+    core.explode(Math.max(4, Math.round(n / 3)));
+
+    this.time.delayedCall(900, () => {
+      emitter.destroy();
+      core.destroy();
+    });
+
+    const flash = this.add.image(x, y, 'glowdot').setTint(tint).setScale(4).setAlpha(1);
+    this.tweens.add({
+      targets: flash,
+      scale: 9,
+      alpha: 0,
+      duration: 260,
+      ease: 'Cubic.easeOut',
+      onComplete: () => flash.destroy(),
+    });
   }
 
   private scorePopup(x: number, y: number, points: number, fast: boolean): void {
@@ -371,6 +468,7 @@ export class GameScene extends Phaser.Scene {
 
   private endRun(): void {
     this.phase = 'over';
+    clearHitStop(this); // never hand a frozen clock to the next scene
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
 
@@ -384,7 +482,12 @@ export class GameScene extends Phaser.Scene {
     this.saves.persist();
 
     getAudio(this)?.play('gameover');
-    this.cameras.main.shake(500, 0.02);
+    this.cameras.main.flash(400, 255, 45, 149);
+    impact(this, {
+      shakeMs: CONFIG.juice.gameOverShakeMs,
+      shakeIntensity: CONFIG.juice.gameOverShakeIntensity,
+      glow: CONFIG.juice.glowPulseHeavy,
+    });
     this.time.delayedCall(900, () => {
       this.scene.start('Debrief', {
         stats: this.session.stats(),

@@ -33,6 +33,7 @@ export class ModeSelectScene extends Phaser.Scene {
 
   create(): void {
     const { width, height } = this.scale;
+    getAudio(this)?.playMusic('menu');
     applyCrt(this);
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
     this.opButtons = [];

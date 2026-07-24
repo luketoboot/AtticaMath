@@ -142,6 +142,44 @@ export interface EconomyConfig {
   prices: Readonly<Record<string, number>>;
 }
 
+/** Feel tunables: shake, hit-stop, glow pulses, particle counts, sfx pitch. */
+export interface JuiceConfig {
+  /** Camera shake (duration ms, intensity as a fraction of viewport). */
+  killShakeMs: number;
+  killShakeIntensity: number;
+  /** Added to kill shake per extra target the spread cannon catches. */
+  spreadShakePerTarget: number;
+  landShakeMs: number;
+  landShakeIntensity: number;
+  bossHitShakeMs: number;
+  bossHitShakeIntensity: number;
+  bossDownShakeMs: number;
+  bossDownShakeIntensity: number;
+  gameOverShakeMs: number;
+  gameOverShakeIntensity: number;
+  /** Hit-stop: freeze scale (0 = full stop) held for this long, then released. */
+  hitStopMs: number;
+  hitStopScale: number;
+  /** Heavier hit-stop for landings and boss kills. */
+  heavyHitStopMs: number;
+  /** Baseline CRT phosphor glow strength. */
+  crtGlowBase: number;
+  /** Glow added on top of the baseline by a pulse, and how fast it decays (per second). */
+  glowPulseKill: number;
+  glowPulseHeavy: number;
+  glowPulseDecayPerSecond: number;
+  /** Particle counts. */
+  killParticles: number;
+  fastKillParticles: number;
+  landParticles: number;
+  /** Shockwave ring radius and lifetime on a kill. */
+  shockwaveRadius: number;
+  shockwaveMs: number;
+  /** SFX pitch rises with the streak: 1 + streak * step, capped. */
+  streakPitchStep: number;
+  maxStreakPitch: number;
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
@@ -150,6 +188,7 @@ export interface GameConfig {
   boss: BossConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
+  juice: JuiceConfig;
 }
 
 export const CONFIG: GameConfig = {
@@ -244,5 +283,32 @@ export const CONFIG: GameConfig = {
       'upgrade.shield': 400,
       'upgrade.spread': 500,
     },
+  },
+  juice: {
+    killShakeMs: 160,
+    killShakeIntensity: 0.011,
+    spreadShakePerTarget: 0.005,
+    landShakeMs: 420,
+    landShakeIntensity: 0.028,
+    bossHitShakeMs: 200,
+    bossHitShakeIntensity: 0.014,
+    bossDownShakeMs: 700,
+    bossDownShakeIntensity: 0.035,
+    gameOverShakeMs: 900,
+    gameOverShakeIntensity: 0.03,
+    hitStopMs: 55,
+    hitStopScale: 0.12,
+    heavyHitStopMs: 110,
+    crtGlowBase: 0.22,
+    glowPulseKill: 0.5,
+    glowPulseHeavy: 1.1,
+    glowPulseDecayPerSecond: 4.5,
+    killParticles: 34,
+    fastKillParticles: 52,
+    landParticles: 46,
+    shockwaveRadius: 130,
+    shockwaveMs: 320,
+    streakPitchStep: 0.035,
+    maxStreakPitch: 1.7,
   },
 };

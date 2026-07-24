@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getAudio } from '../../audio/getAudio';
 import type { RunStats } from '../../core/economy/economy';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
@@ -19,6 +20,7 @@ export class DebriefScene extends Phaser.Scene {
 
   create(data: DebriefData): void {
     const { width, height } = this.scale;
+    getAudio(this)?.playMusic('menu');
     applyCrt(this);
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
 
