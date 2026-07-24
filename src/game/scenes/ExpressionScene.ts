@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
+import { newMilestones } from '../../core/skills/milestones';
 import { formatTokens, num, op, type Op, type Token } from '../../core/expression/expression';
 import type { ExpressionProblem } from '../../core/expression/generate';
 import { ExpressionSession } from '../../core/expression/session';
@@ -75,7 +77,7 @@ export class ExpressionScene extends Phaser.Scene {
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
       ownedUpgrades: save.ownedUpgrades,
-      loadout: save.ownedUpgrades,
+      loadout: save.loadout,
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
@@ -97,6 +99,7 @@ export class ExpressionScene extends Phaser.Scene {
       const landX = this.target.x;
       this.clearTarget();
       this.session.recordMiss(m, this.time.now - this.targetSpawnedAt);
+      getAudio(this)?.play('land');
       this.explode(landX, this.groundY - 30, PALETTE.red, 30);
       this.cameras.main.shake(220, 0.012);
       this.cameras.main.flash(120, 255, 40, 40);
@@ -118,6 +121,7 @@ export class ExpressionScene extends Phaser.Scene {
     this.phase = 'wave';
     this.waveText.setText(`WAVE ${this.wave}`);
     this.banner(`WAVE ${this.wave}`, CSS.magenta);
+    getAudio(this)?.play('wave');
     this.nextTarget();
   }
 
@@ -149,6 +153,7 @@ export class ExpressionScene extends Phaser.Scene {
         .setOrigin(0.5),
     ];
     if (pick) {
+      getAudio(this)?.play('tip');
       lines.push(
         this.add
           .text(width / 2, height * 0.38, 'OPERATOR //', { fontFamily: FONT, fontSize: '18px', color: CSS.magentaHot })
@@ -454,6 +459,7 @@ export class ExpressionScene extends Phaser.Scene {
 
   /** Red buzz on the expression line for a keypress that makes no sense here. */
   private errorCue(): void {
+    getAudio(this)?.play('error');
     this.exprText.setColor(CSS.red);
     this.tweens.killTweensOf(this.exprText);
     this.exprText.setX(this.scale.width / 2);
@@ -513,6 +519,9 @@ export class ExpressionScene extends Phaser.Scene {
     const outcome = this.session.fire(problem, this.tokens, this.time.now - this.targetSpawnedAt);
 
     if (outcome.result === 'hit') {
+      const audio = getAudio(this);
+      audio?.play('laser');
+      audio?.play('explosion');
       const { x, y } = this.target;
       this.laser(x, y);
       this.explode(x, y, PALETTE.cyan, 24);
@@ -611,11 +620,19 @@ export class ExpressionScene extends Phaser.Scene {
     save.totalWaves += this.session.currentWaveNumber;
     save.credits += credits;
     save.bestScore = Math.max(save.bestScore, this.session.score);
+    const unlocked = newMilestones(this.session.skillTable, save.milestones, CONFIG);
+    save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
 
+    getAudio(this)?.play('gameover');
     this.cameras.main.shake(500, 0.02);
     this.time.delayedCall(900, () => {
-      this.scene.start('Debrief', { stats: this.session.stats(), credits, mode: 'Expression' });
+      this.scene.start('Debrief', {
+        stats: this.session.stats(),
+        credits,
+        mode: 'Expression',
+        milestones: unlocked.map((m) => m.label),
+      });
     });
   }
 }

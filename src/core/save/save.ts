@@ -12,7 +12,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 1;
+export const CURRENT_SAVE_VERSION = 2;
 
 export interface SaveV1 {
   version: 1;
@@ -32,7 +32,13 @@ export interface SaveV1 {
   bestScore: number;
 }
 
-export type Save = SaveV1;
+export interface SaveV2 extends Omit<SaveV1, 'version'> {
+  version: 2;
+  /** Milestone ids already surfaced in a debrief, so each fires once. */
+  milestones: string[];
+}
+
+export type Save = SaveV2;
 
 export function defaultSave(): Save {
   return {
@@ -45,6 +51,7 @@ export function defaultSave(): Save {
     loadout: [],
     settings: { crtEnabled: true, musicVolume: 0.8, sfxVolume: 0.9 },
     bestScore: 0,
+    milestones: [],
   };
 }
 
@@ -55,8 +62,13 @@ export function migrate(raw: unknown): Save {
   }
   const versioned = raw as { version: number };
   switch (versioned.version) {
-    case 1:
-      return raw as SaveV1;
+    case 1: {
+      const v1 = raw as SaveV1;
+      // v1 auto-equipped everything owned; carry that into the explicit loadout.
+      return { ...v1, version: 2, loadout: [...v1.ownedUpgrades], milestones: [] };
+    }
+    case 2:
+      return raw as SaveV2;
     default:
       // Unknown/newer version: refuse to guess, start fresh.
       return defaultSave();

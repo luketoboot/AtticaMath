@@ -23,6 +23,10 @@ export interface RatingConfig {
   latencyBands: readonly { maxDifficulty: number; targetMs: number }[];
   /** Fallback target latency for anything above the last band. */
   fallbackTargetMs: number;
+  /** Rating margin above a skill's base difficulty that counts as mastery. */
+  masteryMargin: number;
+  /** Attempts required before a mastery milestone can fire. */
+  masteryMinAttempts: number;
 }
 
 export interface WaveConfig {
@@ -143,6 +147,8 @@ export const CONFIG: GameConfig = {
       { maxDifficulty: 1400, targetMs: 9000 },
     ],
     fallbackTargetMs: 12000,
+    masteryMargin: 250,
+    masteryMinAttempts: 10,
   },
   waves: {
     fluentShare: 0.7,

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getAudio } from '../../audio/getAudio';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -98,6 +99,9 @@ export class MenuScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     text.on('pointerover', () => text.setColor(CSS.magentaHot));
     text.on('pointerout', () => text.setColor(CSS.cyan));
-    text.on('pointerdown', onClick);
+    text.on('pointerdown', () => {
+      getAudio(this)?.play('ui');
+      onClick();
+    });
   }
 }

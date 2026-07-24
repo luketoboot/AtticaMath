@@ -37,6 +37,26 @@ describe('migrate', () => {
     expect(migrate(save)).toEqual(save);
   });
 
+  it('migrates v1 to v2, equipping owned upgrades and adding milestones', () => {
+    const v1 = {
+      version: 1,
+      skills: { 'add.single': { rating: 700, attempts: 9, lastAttemptWave: 3 } },
+      totalWaves: 12,
+      placementDone: true,
+      credits: 300,
+      ownedUpgrades: ['upgrade.hp', 'upgrade.shield'],
+      loadout: [],
+      settings: { crtEnabled: false, musicVolume: 0.5, sfxVolume: 0.7 },
+      bestScore: 9000,
+    };
+    const migrated = migrate(v1);
+    expect(migrated.version).toBe(2);
+    expect(migrated.milestones).toEqual([]);
+    expect(migrated.loadout).toEqual(['upgrade.hp', 'upgrade.shield']);
+    expect(migrated.skills).toEqual(v1.skills);
+    expect(migrated.bestScore).toBe(9000);
+  });
+
   it('resets unknown future versions', () => {
     expect(migrate({ version: 999, junk: true })).toEqual(defaultSave());
   });

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { AudioManager, AUDIO_REGISTRY_KEY } from '../../audio/AudioManager';
 import { CrtPipeline } from '../../fx/CrtPipeline';
 import { PALETTE } from '../../fx/palette';
 import { SaveManager, SAVE_REGISTRY_KEY } from '../storage';
@@ -10,7 +11,12 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.registry.set(SAVE_REGISTRY_KEY, new SaveManager());
+    const saves = new SaveManager();
+    this.registry.set(SAVE_REGISTRY_KEY, saves);
+    this.registry.set(
+      AUDIO_REGISTRY_KEY,
+      new AudioManager(saves.save.settings.sfxVolume, saves.save.settings.musicVolume),
+    );
 
     if (this.game.renderer.type === Phaser.WEBGL) {
       const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;

@@ -8,6 +8,8 @@ interface DebriefData {
   credits: number;
   /** Scene key to relaunch into; defaults to meteor defense. */
   mode?: string;
+  /** Newly earned mastery labels to surface as unlocks. */
+  milestones?: string[];
 }
 
 export class DebriefScene extends Phaser.Scene {
@@ -38,7 +40,7 @@ export class DebriefScene extends Phaser.Scene {
       ['CREDITS EARNED', `+${data.credits}`],
     ];
     rows.forEach(([label, value], i) => {
-      const y = height * 0.34 + i * 40;
+      const y = height * 0.3 + i * 36;
       this.add.text(width * 0.32, y, label!, { fontFamily: FONT, fontSize: '22px', color: CSS.cyanDim });
       this.add
         .text(width * 0.68, y, value!, {
@@ -50,8 +52,27 @@ export class DebriefScene extends Phaser.Scene {
         .setOrigin(1, 0);
     });
 
+    const unlocked = data.milestones ?? [];
+    unlocked.slice(0, 3).forEach((label, i) => {
+      const y = height * 0.3 + rows.length * 36 + 14 + i * 30;
+      const text = this.add
+        .text(width / 2, y, `UNLOCKED // ${label}`, {
+          fontFamily: FONT,
+          fontSize: '20px',
+          fontStyle: 'bold',
+          color: CSS.yellow,
+        })
+        .setOrigin(0.5)
+        .setAlpha(0);
+      this.tweens.add({ targets: text, alpha: 1, duration: 300, delay: 400 + i * 250 });
+    });
+
+    const quote =
+      unlocked.length > 0
+        ? 'OPERATOR // New hardware in the brain. Logged. Go break it in.'
+        : 'OPERATOR // Debrief logged. The rocks don’t care. Neither do I. Go again.';
     this.add
-      .text(width / 2, height * 0.62, 'OPERATOR // Debrief logged. The rocks don’t care. Neither do I. Go again.', {
+      .text(width / 2, height * 0.66, quote, {
         fontFamily: FONT,
         fontSize: '17px',
         color: CSS.magentaHot,

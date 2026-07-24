@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
+import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
 import type { Problem } from '../../core/generator/problem';
 import { RunSession } from '../../core/session';
+import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { isTouchDevice, Numpad } from '../../ui/Numpad';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
@@ -57,7 +60,7 @@ export class GameScene extends Phaser.Scene {
       totalWavesBefore: save.totalWaves,
       placementDone: save.placementDone,
       ownedUpgrades: save.ownedUpgrades,
-      loadout: save.ownedUpgrades, // MVP: everything owned is equipped
+      loadout: save.loadout,
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
@@ -69,6 +72,17 @@ export class GameScene extends Phaser.Scene {
       this.bufferText.setText(value.length > 0 ? value : '_');
       this.tryFire(value);
     });
+
+    const numpad = new Numpad(
+      this,
+      (digit) => this.buffer.push(digit),
+      () => this.buffer.clear(),
+    );
+    numpad.setVisible(isTouchDevice());
+    const padToggle = this.add
+      .text(24, 54, '[ PAD ]', { fontFamily: FONT, fontSize: '16px', color: CSS.cyanDim })
+      .setInteractive({ useHandCursor: true });
+    padToggle.on('pointerdown', () => numpad.setVisible(!numpad.visible));
 
     this.startWave();
   }
@@ -108,6 +122,7 @@ export class GameScene extends Phaser.Scene {
     this.phase = 'wave';
     this.waveText.setText(`WAVE ${plan.wave}`);
     this.banner(`WAVE ${plan.wave}`, CSS.magenta);
+    getAudio(this)?.play('wave');
   }
 
   private waveComplete(): void {
@@ -127,6 +142,7 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(0.5),
     );
     if (pick) {
+      getAudio(this)?.play('tip');
       lines.push(
         this.add
           .text(width / 2, height * 0.44, 'OPERATOR //', {
@@ -189,6 +205,7 @@ export class GameScene extends Phaser.Scene {
   private landMeteor(m: LiveMeteor): void {
     this.removeMeteor(m);
     this.session.recordMiss(m.problem, this.time.now - m.spawnedAt);
+    getAudio(this)?.play('land');
     this.explode(m.container.x, this.groundY - 20, PALETTE.red, 26);
     this.cameras.main.shake(220, 0.012);
     this.cameras.main.flash(120, 255, 40, 40);
@@ -205,6 +222,8 @@ export class GameScene extends Phaser.Scene {
     matches.sort((a, b) => b.container.y - a.container.y);
     const targets = this.session.loadout.includes('upgrade.spread') ? matches : [matches[0]!];
 
+    const audio = getAudio(this);
+    audio?.play('laser');
     for (const target of targets) {
       this.laser(target.container.x, target.container.y);
       const responseMs = this.time.now - target.spawnedAt;
@@ -213,6 +232,7 @@ export class GameScene extends Phaser.Scene {
       this.scorePopup(target.container.x, target.container.y, points, fast);
       this.explode(target.container.x, target.container.y, PALETTE.cyan, 18);
       this.removeMeteor(target);
+      audio?.play(fast ? 'fast' : 'explosion');
     }
 
     this.cameras.main.shake(90, 0.004);
@@ -349,11 +369,18 @@ export class GameScene extends Phaser.Scene {
     save.placementDone = !this.session.inPlacement;
     save.credits += credits;
     save.bestScore = Math.max(save.bestScore, this.session.score);
+    const unlocked = newMilestones(this.session.skillTable, save.milestones, CONFIG);
+    save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
 
+    getAudio(this)?.play('gameover');
     this.cameras.main.shake(500, 0.02);
     this.time.delayedCall(900, () => {
-      this.scene.start('Debrief', { stats: this.session.stats(), credits });
+      this.scene.start('Debrief', {
+        stats: this.session.stats(),
+        credits,
+        milestones: unlocked.map((m) => m.label),
+      });
     });
   }
 }
