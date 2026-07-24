@@ -16,7 +16,7 @@ interface Chip {
   used: boolean;
 }
 
-const OP_KEYS: Record<string, Op> = { '+': '+', '-': '-', '*': '×', '/': '÷' };
+const OP_KEYS: Record<string, Op> = { '+': '+', '-': '-', '*': '×', x: '×', X: '×', '/': '÷' };
 
 export class ExpressionScene extends Phaser.Scene {
   private session!: ExpressionSession;
@@ -35,6 +35,13 @@ export class ExpressionScene extends Phaser.Scene {
   private tokenChipIndices: number[] = [];
   private chips: Chip[] = [];
   private wave = 0;
+  /** Digits typed so far toward the next chip (players type real values). */
+  private pending = '';
+  /** Arrow-key selection: row 0 = chips, row 1 = operators. Hidden until first arrow press. */
+  private selVisible = false;
+  private selRow = 0;
+  private selCol = 0;
+  private selHighlight!: Phaser.GameObjects.Rectangle;
 
   private hpText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
@@ -218,7 +225,7 @@ export class ExpressionScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
-      btn.on('pointerdown', () => this.pushOp(o));
+      btn.on('pointerdown', () => this.typeOp(o));
       this.opButtons.push(btn);
     });
 
@@ -231,7 +238,13 @@ export class ExpressionScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
-    fire.on('pointerdown', () => this.fire());
+    fire.on('pointerdown', () => {
+      if (this.pending !== '' && !this.commitPending()) {
+        this.errorCue();
+        return;
+      }
+      this.fire();
+    });
 
     const undo = this.add
       .text(90, opY, '[ UNDO ]', {
@@ -243,6 +256,20 @@ export class ExpressionScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     undo.on('pointerdown', () => this.undo());
+
+    this.selHighlight = this.add
+      .rectangle(0, 0, 88, 64)
+      .setStrokeStyle(3, PALETTE.yellow)
+      .setFillStyle(0, 0)
+      .setVisible(false);
+
+    this.add
+      .text(width / 2, height - 14, 'TYPE THE NUMBERS  ·  + − × ÷  ·  ENTER FIRE  ·  BACKSPACE UNDO  ·  ARROWS + SPACE', {
+        fontFamily: FONT,
+        fontSize: '13px',
+        color: CSS.cyanDim,
+      })
+      .setOrigin(0.5);
   }
 
   private dealHand(problem: ExpressionProblem): void {
@@ -257,45 +284,188 @@ export class ExpressionScene extends Phaser.Scene {
       const label = this.add
         .text(0, 0, String(value), { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: CSS.white })
         .setOrigin(0.5);
-      const hint = this.add
-        .text(0, 36, String(i + 1), { fontFamily: FONT, fontSize: '13px', color: CSS.cyanDim })
-        .setOrigin(0.5);
-      const container = this.add.container(x, y, [bg, label, hint]);
+      const container = this.add.container(x, y, [bg, label]);
       bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => this.pushChip(i));
+      bg.on('pointerdown', () => {
+        if (!this.pushChip(i)) this.errorCue();
+      });
       this.chips.push({ container, bg, value, used: false });
     });
+    this.selCol = 0;
+    this.updateSelectionHighlight();
   }
 
   private bindKeys(): void {
+    // Stop the browser from scrolling on Space/arrows while playing.
+    this.input.keyboard?.addCapture('SPACE,UP,DOWN,LEFT,RIGHT');
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       if (this.phase !== 'wave') return;
-      if (event.key === 'Enter') this.fire();
-      else if (event.key === 'Backspace' || event.key === 'Delete') this.undo();
-      else if (OP_KEYS[event.key]) this.pushOp(OP_KEYS[event.key]!);
-      else if (event.key >= '1' && event.key <= '9') this.pushChip(Number(event.key) - 1);
+      const key = event.key;
+      if (key === 'Enter' || key === '=') {
+        if (this.pending !== '' && !this.commitPending()) {
+          this.errorCue();
+          return;
+        }
+        this.fire();
+      } else if (key === 'Backspace' || key === 'Delete') {
+        if (this.pending !== '') {
+          this.pending = this.pending.slice(0, -1);
+          this.renderExpression();
+        } else {
+          this.undo();
+        }
+      } else if (key === 'Escape') {
+        this.pending = '';
+        this.renderExpression();
+      } else if (key >= '0' && key <= '9') {
+        this.typeDigit(key);
+      } else if (OP_KEYS[key]) {
+        this.typeOp(OP_KEYS[key]!);
+      } else if (key.startsWith('Arrow')) {
+        this.moveSelection(key);
+      } else if (key === ' ') {
+        this.activateSelection();
+      }
     });
+  }
+
+  /** Chips (by index) still available for the pending buffer to match. */
+  private matchableChips(prefix: string): { exact: number[]; longer: number[] } {
+    const exact: number[] = [];
+    const longer: number[] = [];
+    this.chips.forEach((chip, i) => {
+      if (chip.used) return;
+      const s = String(chip.value);
+      if (s === prefix) exact.push(i);
+      else if (s.startsWith(prefix)) longer.push(i);
+    });
+    return { exact, longer };
+  }
+
+  /**
+   * Typing real chip values: digits accumulate, and commit to a chip as soon
+   * as the buffer matches exactly and no other chip continues the digits
+   * (so "5" waits when the hand also has "55"). A digit that matches nothing
+   * in the hand is refused with a visual buzz.
+   */
+  private typeDigit(digit: string): void {
+    if (!this.expectingNumber()) {
+      this.errorCue();
+      return;
+    }
+    const proposed = this.pending + digit;
+    const { exact, longer } = this.matchableChips(proposed);
+    if (exact.length === 0 && longer.length === 0) {
+      this.errorCue();
+      return;
+    }
+    this.pending = proposed;
+    if (exact.length > 0 && longer.length === 0) this.commitPending();
+    this.renderExpression();
+  }
+
+  /** Operators commit any pending digits first, then extend the expression. */
+  private typeOp(o: Op): void {
+    if (this.pending !== '' && !this.commitPending()) {
+      this.errorCue();
+      return;
+    }
+    if (!this.pushOp(o)) this.errorCue();
+  }
+
+  /** Consume the chip matching the pending buffer exactly. */
+  private commitPending(): boolean {
+    const { exact } = this.matchableChips(this.pending);
+    const index = exact[0];
+    if (index === undefined) return false;
+    this.pending = '';
+    return this.pushChip(index);
   }
 
   private expectingNumber(): boolean {
     return this.tokens.length === 0 || this.tokens[this.tokens.length - 1]!.kind === 'op';
   }
 
-  private pushChip(index: number): void {
+  private pushChip(index: number): boolean {
     const chip = this.chips[index];
-    if (!chip || chip.used || !this.expectingNumber()) return;
+    if (!chip || chip.used || !this.expectingNumber()) return false;
     chip.used = true;
     chip.bg.setFillStyle(PALETTE.black).setStrokeStyle(2, PALETTE.purple);
     chip.container.setAlpha(0.35);
     this.tokens.push(num(chip.value));
     this.tokenChipIndices.push(index);
     this.renderExpression();
+    return true;
   }
 
-  private pushOp(o: Op): void {
-    if (this.expectingNumber()) return;
+  private pushOp(o: Op): boolean {
+    if (this.expectingNumber()) return false;
     this.tokens.push(op(o));
     this.renderExpression();
+    return true;
+  }
+
+  // --- arrow-key selection ---
+
+  private moveSelection(key: string): void {
+    if (!this.selVisible) {
+      this.selVisible = true;
+    } else if (key === 'ArrowLeft') {
+      this.selCol -= 1;
+    } else if (key === 'ArrowRight') {
+      this.selCol += 1;
+    } else if (key === 'ArrowUp' || key === 'ArrowDown') {
+      this.selRow = this.selRow === 0 ? 1 : 0;
+    }
+    const rowLen = this.selRow === 0 ? this.chips.length : this.opButtons.length;
+    this.selCol = Phaser.Math.Wrap(this.selCol, 0, Math.max(1, rowLen));
+    this.updateSelectionHighlight();
+  }
+
+  private activateSelection(): void {
+    if (!this.selVisible) return;
+    // A pending buffer takes priority so Space can't split a half-typed number.
+    if (this.pending !== '' && !this.commitPending()) {
+      this.errorCue();
+      return;
+    }
+    const ok =
+      this.selRow === 0
+        ? this.pushChip(this.selCol)
+        : this.pushOp((['+', '-', '×', '÷'] as Op[])[this.selCol]!);
+    if (!ok) this.errorCue();
+  }
+
+  private updateSelectionHighlight(): void {
+    if (!this.selVisible) {
+      this.selHighlight.setVisible(false);
+      return;
+    }
+    if (this.selRow === 0) {
+      const chip = this.chips[this.selCol];
+      if (!chip) return;
+      this.selHighlight.setPosition(chip.container.x, chip.container.y).setDisplaySize(88, 64).setVisible(true);
+    } else {
+      const btn = this.opButtons[this.selCol];
+      if (!btn) return;
+      this.selHighlight.setPosition(btn.x, btn.y).setDisplaySize(76, 54).setVisible(true);
+    }
+  }
+
+  /** Red buzz on the expression line for a keypress that makes no sense here. */
+  private errorCue(): void {
+    this.exprText.setColor(CSS.red);
+    this.tweens.killTweensOf(this.exprText);
+    this.exprText.setX(this.scale.width / 2);
+    this.tweens.add({
+      targets: this.exprText,
+      x: { from: this.scale.width / 2 - 7, to: this.scale.width / 2 },
+      duration: 60,
+      repeat: 2,
+      onComplete: () => {
+        if (this.phase === 'wave') this.renderExpression();
+      },
+    });
   }
 
   private undo(): void {
@@ -318,6 +488,7 @@ export class ExpressionScene extends Phaser.Scene {
   private resetTokens(): void {
     this.tokens = [];
     this.tokenChipIndices = [];
+    this.pending = '';
     for (const chip of this.chips) {
       chip.used = false;
       chip.bg.setFillStyle(PALETTE.deepPurple).setStrokeStyle(2, PALETTE.cyan);
@@ -328,7 +499,10 @@ export class ExpressionScene extends Phaser.Scene {
 
   private renderExpression(): void {
     this.exprText.setColor(CSS.cyan);
-    this.exprText.setText(this.tokens.length > 0 ? formatTokens(this.tokens) : '. . .');
+    const parts = [];
+    if (this.tokens.length > 0) parts.push(formatTokens(this.tokens));
+    if (this.pending !== '') parts.push(`${this.pending}▌`);
+    this.exprText.setText(parts.length > 0 ? parts.join(' ') : '. . .');
   }
 
   // --- firing ---
