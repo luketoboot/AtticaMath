@@ -58,6 +58,7 @@ export class MenuScene extends Phaser.Scene {
       ['METEOR DEFENSE', 'ModeSelect'],
       ['EXPRESSION BUILDER', 'Expression'],
       ['FACTOR STORM', 'Factor'],
+      ['COLLAPSE (PROTO)', 'Collapse'],
       ['BOSS RUSH', 'Boss'],
       ['ARMORY', 'Shop'],
       ['LEADERBOARD', 'Leaderboard'],

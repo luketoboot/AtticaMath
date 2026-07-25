@@ -285,6 +285,50 @@ export interface EconomyConfig {
   prices: Readonly<Record<string, number>>;
 }
 
+/** Collapse: push fractions into their matching percentage. */
+export interface CollapseConfig {
+  /** Pairs on the field at wave 1, and how many more each wave adds. */
+  basePairs: number;
+  pairsPerWave: number;
+  maxPairs: number;
+  /** Waves at which the pool opens to tier 2 and tier 3 values. */
+  tier2Wave: number;
+  tier3Wave: number;
+  /** Chance a fraction is shown unreduced (2/4 rather than 1/2). */
+  unreducedChance: number;
+  /** Drift speed range (px/sec) for free-floating tokens. */
+  slowestDrift: number;
+  fastestDrift: number;
+  fractionRadius: number;
+  percentRadius: number;
+  /** Ship handling, matched to Factor Storm so flight feel carries over. */
+  shipAccel: number;
+  shipDrag: number;
+  shipMaxSpeed: number;
+  shipRadius: number;
+  /**
+   * The repulsor: a radial shove that only moves fractions. Standoff range is
+   * the whole point — you should never have to ride a fraction into a hazard.
+   */
+  pulseRadius: number;
+  pulseImpulse: number;
+  pulseCooldownSeconds: number;
+  /** Speed ceiling on a shoved fraction, so a stacked pulse stays controllable. */
+  maxFractionSpeed: number;
+  /** Drag on fractions: they coast, but not forever. */
+  fractionDrag: number;
+  startingHp: number;
+  invulnSeconds: number;
+  collisionKnockback: number;
+  /** A wrong pairing bounces rather than killing the fraction. */
+  wrongBounceSpeed: number;
+  wrongLockoutSeconds: number;
+  /** Scoring. */
+  matchBase: number;
+  tierBonus: number;
+  unreducedBonus: number;
+}
+
 /** Feel tunables: shake, hit-stop, glow pulses, particle counts, sfx pitch. */
 export interface JuiceConfig {
   /** Camera shake (duration ms, intensity as a fraction of viewport). */
@@ -358,6 +402,7 @@ export interface GameConfig {
   drops: DropConfig;
   expression: ExpressionConfig;
   factor: FactorConfig;
+  collapse: CollapseConfig;
   boss: BossConfig;
   hazard: HazardConfig;
   score: ScoreConfig;
@@ -493,6 +538,35 @@ export const CONFIG: GameConfig = {
     primeMultiplier: 2.5,
     balancedMultiplier: 2,
     splitSpeed: 90,
+  },
+  collapse: {
+    basePairs: 3,
+    pairsPerWave: 1,
+    maxPairs: 7,
+    tier2Wave: 3,
+    tier3Wave: 5,
+    unreducedChance: 0.35,
+    slowestDrift: 14,
+    fastestDrift: 46,
+    fractionRadius: 34,
+    percentRadius: 38,
+    shipAccel: 1500,
+    shipDrag: 2.6,
+    shipMaxSpeed: 460,
+    shipRadius: 18,
+    pulseRadius: 165,
+    pulseImpulse: 300,
+    pulseCooldownSeconds: 0.45,
+    maxFractionSpeed: 420,
+    fractionDrag: 0.55,
+    startingHp: 3,
+    invulnSeconds: 1.4,
+    collisionKnockback: 300,
+    wrongBounceSpeed: 190,
+    wrongLockoutSeconds: 0.5,
+    matchBase: 150,
+    tierBonus: 75,
+    unreducedBonus: 50,
   },
   boss: {
     baseHp: 250,
