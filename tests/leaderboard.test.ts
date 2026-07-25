@@ -146,10 +146,16 @@ describe('presentation helpers', () => {
       expect(MODE_LABEL[mode]).toBeTruthy();
       expect(MODE_TAB_LABEL[mode]).toBeTruthy();
     }
-    const boards = new Set(
-      ['Game', 'Expression', 'Factor', 'Collapse', 'Boss'].map(modeFromSceneKey),
-    );
+    const boards = new Set(['Game', 'Expression', 'Factor', 'Collapse'].map(modeFromSceneKey));
     expect([...boards].sort()).toEqual([...LEADERBOARD_MODES].sort());
+  });
+
+  it('keeps the benched boss board addressable without giving it a tab', () => {
+    // Boss Rush is cut from the menu, but saves may hold boss scores and the
+    // dormant scene still resolves its board. Only the tab row forgets it.
+    expect(modeFromSceneKey('Boss')).toBe('boss');
+    expect(MODE_LABEL.boss).toBeTruthy();
+    expect(LEADERBOARD_MODES).not.toContain('boss');
   });
 
   it('writes ordinals the way a cabinet does', () => {

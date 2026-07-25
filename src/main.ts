@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { PALETTE } from './fx/palette';
 import { BootScene } from './game/scenes/BootScene';
-import { BossScene } from './game/scenes/BossScene';
 import { BrainScanScene } from './game/scenes/BrainScanScene';
 import { CollapseScene } from './game/scenes/CollapseScene';
 import { ControlsScene } from './game/scenes/ControlsScene';
@@ -35,7 +34,7 @@ const game = new Phaser.Game({
     ExpressionScene,
     FactorScene,
     CollapseScene,
-    BossScene,
+    // BossScene is benched pending a redesign — see the note in MenuScene.
     DebriefScene,
     LeaderboardScene,
     ShopScene,

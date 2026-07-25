@@ -8,13 +8,16 @@
 /** One board per mode: scores across modes are not comparable. */
 export type LeaderboardMode = 'meteor' | 'expression' | 'factor' | 'collapse' | 'boss';
 
-/** Menu order. Every playable mode has a board — adding one here adds its tab. */
+/**
+ * Menu order. Every playable mode has a board — adding one here adds its tab.
+ * 'boss' stays in the type but not the tab row: the mode is benched, and any
+ * scores already sitting on that board keep their shape until it returns.
+ */
 export const LEADERBOARD_MODES: readonly LeaderboardMode[] = [
   'meteor',
   'expression',
   'factor',
   'collapse',
-  'boss',
 ];
 
 export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {

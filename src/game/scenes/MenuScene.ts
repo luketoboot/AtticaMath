@@ -44,14 +44,11 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     badge: 'PROTO',
     onSelect: () => {},
   },
-  {
-    label: 'BOSS\nRUSH',
-    tagline: 'CHIP THE HP. BLOCK WHAT IT THROWS BACK.',
-    icon: 'boss',
-    accent: PALETTE.red,
-    scene: 'Boss',
-    onSelect: () => {},
-  },
+  // Boss Rush is benched, not deleted: with no target to hit, any expression
+  // counted as correct, which both flattened the game (optimal play was
+  // "multiply the big chips", forever) and let ratings inflate off attempts
+  // nothing ever graded. core/boss and BossScene stay in the tree for a
+  // redesign around a demanded number; see git history for the cut.
 ];
 
 export class MenuScene extends Phaser.Scene {
