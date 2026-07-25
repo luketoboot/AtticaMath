@@ -305,8 +305,6 @@ export interface JuiceConfig {
   hitStopScale: number;
   /** Heavier hit-stop for landings and boss kills. */
   heavyHitStopMs: number;
-  /** Baseline CRT phosphor glow strength. */
-  crtGlowBase: number;
   /** Glow added on top of the baseline by a pulse, and how fast it decays (per second). */
   glowPulseKill: number;
   glowPulseHeavy: number;
@@ -323,6 +321,35 @@ export interface JuiceConfig {
   maxStreakPitch: number;
 }
 
+/**
+ * The CRT itself: the glass, not the game. Every one of these is visible on
+ * screen, so they are the first knobs to reach for if the picture is too dim,
+ * too busy, or too washed out on someone else's monitor.
+ */
+export interface CrtConfig {
+  /** Baseline phosphor bloom; pulses ride on top of it. */
+  glowBase: number;
+  /** Brightness a pixel must exceed before it blooms at all. */
+  bloomThreshold: number;
+  /**
+   * Barrel distortion. 0 is a flat panel. Above ~0.13 the corners start pushing
+   * the HUD, which sits 24px from the edge, out under the bezel.
+   */
+  curvature: number;
+  /** Corner radius of the glass, in screen widths. */
+  cornerRadius: number;
+  /** Strength of the RGB aperture mask (0 = off, 1 = full stripe). */
+  maskStrength: number;
+  /** Scanline depth. */
+  scanlineDepth: number;
+  /** Reflected-light sheen on the glass. */
+  glareStrength: number;
+  /** Radial chromatic split at the edges. */
+  aberration: number;
+  /** Vignette falloff. */
+  vignette: number;
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
@@ -336,6 +363,7 @@ export interface GameConfig {
   score: ScoreConfig;
   economy: EconomyConfig;
   juice: JuiceConfig;
+  crt: CrtConfig;
 }
 
 export const CONFIG: GameConfig = {
@@ -527,7 +555,6 @@ export const CONFIG: GameConfig = {
     hitStopMs: 55,
     hitStopScale: 0.12,
     heavyHitStopMs: 110,
-    crtGlowBase: 0.22,
     glowPulseKill: 0.5,
     glowPulseHeavy: 1.1,
     glowPulseDecayPerSecond: 4.5,
@@ -538,5 +565,16 @@ export const CONFIG: GameConfig = {
     shockwaveMs: 320,
     streakPitchStep: 0.035,
     maxStreakPitch: 1.7,
+  },
+  crt: {
+    glowBase: 0.22,
+    bloomThreshold: 0.26,
+    curvature: 0.12,
+    cornerRadius: 0.05,
+    maskStrength: 0.6,
+    scanlineDepth: 0.26,
+    glareStrength: 1.5,
+    aberration: 0.0032,
+    vignette: 0.85,
   },
 };
