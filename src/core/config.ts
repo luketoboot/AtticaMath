@@ -73,6 +73,35 @@ export interface MeteorConfig {
   breatherSeconds: number;
   /** Max meteors simultaneously on screen. */
   maxConcurrentMeteors: number;
+  /**
+   * Marked meteors drawn from frontier skills, worth far more if you take them
+   * early. Greed points at the skills the player is weakest on, and it reads as
+   * risk appetite rather than as remediation.
+   */
+  hotPerWave: number;
+  hotScoreMultiplier: number;
+  hotComboGain: number;
+  /** A hot meteor pays its bonus only while it has fallen less than this. */
+  hotHighFraction: number;
+}
+
+/** Power-up drops. See core/drops.ts. */
+export interface DropConfig {
+  /** Meteors per wave that carry a payload. */
+  carriersPerWave: number;
+  /** Descent speed of a dropped pickup (px/sec). */
+  fallSpeed: number;
+  /** How close the cannon must be, horizontally, to catch one. */
+  catchRadius: number;
+  freezeSeconds: number;
+  doubleSeconds: number;
+  doubleMultiplier: number;
+  /** Kills covered by one chain pickup. */
+  chainKills: number;
+  /** HP at or below which repair takes its boosted weight. */
+  lowHpAt: number;
+  lowHpRepairWeight: number;
+  weights: Readonly<Record<'freeze' | 'nuke' | 'repair' | 'double' | 'chain', number>>;
 }
 
 /**
@@ -247,6 +276,7 @@ export interface GameConfig {
   waves: WaveConfig;
   meteors: MeteorConfig;
   combo: ComboConfig;
+  drops: DropConfig;
   expression: ExpressionConfig;
   boss: BossConfig;
   hazard: HazardConfig;
@@ -301,6 +331,22 @@ export const CONFIG: GameConfig = {
     baseHp: 5,
     breatherSeconds: 3.5,
     maxConcurrentMeteors: 5,
+    hotPerWave: 2,
+    hotScoreMultiplier: 3,
+    hotComboGain: 2,
+    hotHighFraction: 0.55,
+  },
+  drops: {
+    carriersPerWave: 1,
+    fallSpeed: 95,
+    catchRadius: 62,
+    freezeSeconds: 3,
+    doubleSeconds: 8,
+    doubleMultiplier: 2,
+    chainKills: 3,
+    lowHpAt: 2,
+    lowHpRepairWeight: 6,
+    weights: { freeze: 3, nuke: 2, repair: 2, double: 3, chain: 3 },
   },
   combo: {
     baseWindowSeconds: 4.5,

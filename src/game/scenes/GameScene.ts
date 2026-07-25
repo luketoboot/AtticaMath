@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
+import { DROP_LABEL, type DropKind } from '../../core/drops';
 import type { Problem } from '../../core/generator/problem';
 import { RunSession } from '../../core/session';
+import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
@@ -17,10 +19,29 @@ interface LiveMeteor {
   /** Kept out of the container's child list so the prefix lock can recolour it. */
   label: Phaser.GameObjects.Text;
   problem: Problem;
+  payload: MeteorPayload;
+  /** Label colour when the buffer is not pointing at it — hot rocks stay gold. */
+  baseColor: string;
+  /**
+   * Looping tweens started for this meteor. Phaser does not stop a tween when
+   * its target is destroyed, so they are killed by hand on removal.
+   */
+  tweens: Phaser.Tweens.Tween[];
   spawnedAt: number;
   speed: number;
   /** Scene-clock time before which this meteor will not fire again. */
   nextFireAt: number;
+}
+
+/** A power-up falling from a killed carrier, caught by sliding underneath. */
+interface LivePickup {
+  container: Phaser.GameObjects.Container;
+  kind: DropKind;
+}
+
+interface QueuedMeteor {
+  problem: Problem;
+  payload: MeteorPayload;
 }
 
 /** An aimed shot from a meteor, travelling on a fixed heading. */
@@ -46,7 +67,8 @@ export class GameScene extends Phaser.Scene {
 
   private meteors: LiveMeteor[] = [];
   private bullets: LiveBullet[] = [];
-  private spawnQueue: Problem[] = [];
+  private pickups: LivePickup[] = [];
+  private spawnQueue: QueuedMeteor[] = [];
   private phase: Phase = 'wave';
   private sinceSpawn = 0;
   private groundY = 0;
@@ -68,6 +90,7 @@ export class GameScene extends Phaser.Scene {
   private waveText!: Phaser.GameObjects.Text;
   private bufferText!: Phaser.GameObjects.Text;
   private comboBar!: Phaser.GameObjects.Rectangle;
+  private effectsText!: Phaser.GameObjects.Text;
   /** Previous frame's combo state, so tier crossings can be celebrated once. */
   private lastComboTier = 0;
   private overdriveWasActive = false;
@@ -89,6 +112,7 @@ export class GameScene extends Phaser.Scene {
 
     this.meteors = [];
     this.bullets = [];
+    this.pickups = [];
     this.spawnQueue = [];
     this.phase = 'wave';
     this.pointerTargetX = null;
@@ -169,9 +193,13 @@ export class GameScene extends Phaser.Scene {
       this.spawnMeteor(this.spawnQueue.shift()!);
     }
 
-    // Overdrive freezes the descent but not the spawning: the board fills up
-    // while you clear it for free, then everything resumes at once.
-    const descent = this.session.overdriveActive ? 0 : dt;
+    // Pickups keep falling through a freeze — otherwise the reward window would
+    // strand the reward.
+    this.updatePickups(dt);
+
+    // Overdrive and freeze pickups halt the descent but not the spawning: the
+    // board fills up while you clear it for free, then it all resumes at once.
+    const descent = this.session.overdriveActive || this.session.descentFrozen ? 0 : dt;
     for (const m of [...this.meteors]) {
       m.container.y += m.speed * descent;
       if (m.container.y >= this.groundY - 10) {
@@ -184,7 +212,12 @@ export class GameScene extends Phaser.Scene {
     this.updateBullets(dt);
     if (this.phase !== 'wave') return; // a shot ended the run
 
-    if (this.spawnQueue.length === 0 && this.meteors.length === 0 && this.bullets.length === 0) {
+    if (
+      this.spawnQueue.length === 0 &&
+      this.meteors.length === 0 &&
+      this.bullets.length === 0 &&
+      this.pickups.length === 0
+    ) {
       this.waveComplete();
     }
   }
@@ -193,7 +226,10 @@ export class GameScene extends Phaser.Scene {
 
   private startWave(): void {
     const plan = this.session.nextWave();
-    this.spawnQueue = [...plan.problems];
+    this.spawnQueue = plan.problems.map((problem, i) => ({
+      problem,
+      payload: plan.payloads[i] ?? 'none',
+    }));
     this.sinceSpawn = Number.POSITIVE_INFINITY; // spawn the first meteor immediately
     this.phase = 'wave';
     this.waveText.setText(`WAVE ${plan.wave}`);
@@ -301,26 +337,66 @@ export class GameScene extends Phaser.Scene {
 
   // --- meteors ---
 
-  private spawnMeteor(problem: Problem): void {
+  private spawnMeteor(entry: QueuedMeteor): void {
+    const { problem, payload } = entry;
     const { width } = this.scale;
     const margin = 110;
     const x = Phaser.Math.Between(margin, width - margin);
     const startY = METEOR_START_Y;
 
     const rock = this.add.image(0, 0, 'meteor');
+    const baseColor = payload === 'hot' ? CSS.yellow : CSS.white;
     const label = this.add
       .text(0, 0, problem.prompt, {
         fontFamily: FONT,
         fontSize: '26px',
         fontStyle: 'bold',
-        color: CSS.white,
+        color: baseColor,
         stroke: CSS.black,
         strokeThickness: 6,
       })
       .setOrigin(0.5);
 
-    const container = this.add.container(x, startY, [rock, label]);
-    this.tweens.add({ targets: rock, angle: 360, duration: 9000, repeat: -1 });
+    const extras: Phaser.GameObjects.GameObject[] = [];
+    const loops: Phaser.Tweens.Tween[] = [];
+    if (payload === 'hot') {
+      // Gold and breathing. It has to read as "worth more" from across the
+      // field, before the player has parsed the problem on it.
+      rock.setTint(PALETTE.yellow);
+      const halo = this.add.circle(0, 0, 44).setStrokeStyle(3, PALETTE.yellow, 0.9);
+      extras.push(halo);
+      loops.push(
+        this.tweens.add({
+          targets: halo,
+          scale: 1.25,
+          alpha: 0.35,
+          duration: 620,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        }),
+      );
+    } else if (payload === 'carrier') {
+      rock.setTint(PALETTE.cyan);
+      const pod = this.add.circle(0, 0, 9, PALETTE.cyan);
+      extras.push(pod);
+      // Orbiting pod: motion the eye catches even in a crowded field.
+      loops.push(
+        this.tweens.addCounter({
+          from: 0,
+          to: Math.PI * 2,
+          duration: 1500,
+          repeat: -1,
+          onUpdate: (tween) => {
+            const a = tween.getValue() ?? 0;
+            pod.setPosition(Math.cos(a) * 46, Math.sin(a) * 46);
+          },
+        }),
+      );
+    }
+
+    const container = this.add.container(x, startY, [rock, ...extras, label]);
+    loops.push(this.tweens.add({ targets: rock, angle: 360, duration: 9000, repeat: -1 }));
 
     const distance = this.groundY - startY;
     // Read once, at spawn: this meteor keeps the pace it was born with even if
@@ -330,6 +406,9 @@ export class GameScene extends Phaser.Scene {
       container,
       label,
       problem,
+      payload,
+      baseColor,
+      tweens: loops,
       spawnedAt: this.time.now,
       speed,
       nextFireAt: this.time.now + CONFIG.hazard.fireCooldownSeconds * 1000,
@@ -340,6 +419,7 @@ export class GameScene extends Phaser.Scene {
 
   private removeMeteor(m: LiveMeteor): void {
     this.meteors = this.meteors.filter((x) => x !== m);
+    for (const t of m.tweens) t.stop();
     m.container.destroy();
   }
 
@@ -409,9 +489,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Closest to the ground first; spread cannon hits all matches.
+    // Closest to the ground first; spread cannon and chain pickups hit all matches.
     matches.sort((a, b) => b.container.y - a.container.y);
-    const targets = this.session.loadout.includes('upgrade.spread') ? matches : [matches[0]!];
+    const wide = this.session.loadout.includes('upgrade.spread') || this.session.chainReady;
+    const targets = wide ? matches : [matches[0]!];
+    // The chain pickup is spent per shot, not per meteor it happens to catch.
+    if (this.session.chainReady) this.session.useChain();
 
     const { juice } = CONFIG;
     const audio = getAudio(this);
@@ -427,14 +510,19 @@ export class GameScene extends Phaser.Scene {
       const responseMs = this.time.now - target.spawnedAt;
       // Pitch climbs with the streak as it stands *before* this kill lands.
       const pitch = streakPitch(this.session.streak);
-      const points = this.session.recordHit(target.problem, responseMs);
+      const hotBonus = target.payload === 'hot' && this.fallFraction(target) <= CONFIG.meteors.hotHighFraction;
+      const points = this.session.recordHit(target.problem, responseMs, hotBonus);
       const fast = responseMs <= targetLatencyMs(target.problem.difficulty, CONFIG.rating);
       anyFast = anyFast || fast;
-      this.scorePopup(tx, ty, points, fast);
-      this.explode(tx, ty, fast ? PALETTE.yellow : PALETTE.cyan, fast ? juice.fastKillParticles : juice.killParticles);
-      shockwave(this, tx, ty, fast ? PALETTE.yellow : PALETTE.cyan);
+      this.scorePopup(tx, ty, points, fast || hotBonus);
+      const tint = hotBonus ? PALETTE.yellow : fast ? PALETTE.yellow : PALETTE.cyan;
+      this.explode(tx, ty, tint, fast || hotBonus ? juice.fastKillParticles : juice.killParticles);
+      shockwave(this, tx, ty, tint);
+      // At the kill, not across the field: the player is still reading meteors.
+      if (hotBonus) this.hotPopup(tx, ty);
+      if (target.payload === 'carrier') this.spawnPickup(tx, ty);
       this.removeMeteor(target);
-      audio?.play(fast ? 'fast' : 'explosion', { pitch });
+      audio?.play(fast || hotBonus ? 'fast' : 'explosion', { pitch });
     }
 
     impact(this, {
@@ -449,6 +537,134 @@ export class GameScene extends Phaser.Scene {
     this.updateHud();
   }
 
+  /** "HOT x3" rising off a bonus kill, under its score popup. */
+  private hotPopup(x: number, y: number): void {
+    this.floatText(x, y + 26, `HOT  x${CONFIG.meteors.hotScoreMultiplier}`, CSS.yellow, 20);
+  }
+
+  /** Short label that rises off a point on the field and fades. */
+  private floatText(x: number, y: number, message: string, color: string, size: number): void {
+    const text = this.add
+      .text(x, y, message, {
+        fontFamily: FONT,
+        fontSize: `${size}px`,
+        fontStyle: 'bold',
+        color,
+        stroke: CSS.black,
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(11);
+    this.tweens.add({
+      targets: text,
+      y: y - 48,
+      alpha: 0,
+      duration: 900,
+      ease: 'Cubic.easeOut',
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  /** 0 at the spawn line, 1 at the ground. */
+  private fallFraction(m: LiveMeteor): number {
+    return (m.container.y - METEOR_START_Y) / (this.groundY - METEOR_START_Y);
+  }
+
+  // --- power-up drops ---
+
+  private spawnPickup(x: number, y: number): void {
+    const kind = this.session.rollDrop();
+    const pod = this.add.circle(0, 0, 22).setStrokeStyle(3, PALETTE.cyan, 1);
+    const label = this.add
+      .text(0, 0, DROP_LABEL[kind], {
+        fontFamily: FONT,
+        fontSize: '15px',
+        fontStyle: 'bold',
+        color: CSS.cyan,
+      })
+      .setOrigin(0.5);
+    const container = this.add.container(x, y, [pod, label]).setDepth(6);
+    this.tweens.add({ targets: pod, scale: 1.2, duration: 500, yoyo: true, repeat: -1 });
+    this.pickups.push({ container, kind });
+    getAudio(this)?.play('shield', { pitch: 1.3 });
+  }
+
+  /**
+   * Pickups fall slowly and are caught by sliding the cannon under them, which
+   * is the whole point: dodging has only ever cost the player something, and
+   * this is what makes the same movement pay.
+   */
+  private updatePickups(dt: number): void {
+    const drops = CONFIG.drops;
+    for (const p of [...this.pickups]) {
+      p.container.y += drops.fallSpeed * dt;
+      if (p.container.y < this.groundY - 34) continue;
+
+      if (Math.abs(p.container.x - this.cannonX) <= drops.catchRadius) {
+        this.collectPickup(p);
+      } else if (p.container.y >= this.groundY + 12) {
+        // Missed: a dull fizzle, no penalty. Losing the pickup is the penalty.
+        this.explode(p.container.x, this.groundY, PALETTE.deepPurple, 8);
+        this.removePickup(p);
+      }
+    }
+  }
+
+  private removePickup(p: LivePickup): void {
+    this.pickups = this.pickups.filter((x) => x !== p);
+    p.container.destroy();
+  }
+
+  private collectPickup(p: LivePickup): void {
+    const { kind } = p;
+    const x = p.container.x;
+    const y = p.container.y;
+    this.removePickup(p);
+    this.session.collectDrop(kind);
+    const audio = getAudio(this);
+
+    switch (kind) {
+      case 'nuke':
+        this.detonateNuke();
+        break;
+      case 'repair':
+        audio?.play('shield');
+        this.cameras.main.flash(200, 0, 220, 255);
+        break;
+      case 'freeze':
+        audio?.play('slowfield');
+        this.cameras.main.flash(160, 0, 220, 255);
+        break;
+      default:
+        audio?.play('purchase');
+        break;
+    }
+    // Named at the cannon where it was caught, not across the field — meteors
+    // are still falling and the middle of the screen is not free real estate.
+    this.floatText(x, y, DROP_LABEL[kind], CSS.cyan, 24);
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    this.updateHud();
+  }
+
+  /** Clears the board for score. No ratings move — the player answered none of it. */
+  private detonateNuke(): void {
+    const { juice } = CONFIG;
+    getAudio(this)?.play('bossDown');
+    for (const m of [...this.meteors]) {
+      const points = this.session.recordNuke(m.problem);
+      this.scorePopup(m.container.x, m.container.y, points, false);
+      this.explode(m.container.x, m.container.y, PALETTE.magenta, juice.killParticles);
+      this.removeMeteor(m);
+    }
+    this.cameras.main.flash(320, 255, 45, 149);
+    impact(this, {
+      shakeMs: juice.bossDownShakeMs,
+      shakeIntensity: juice.bossDownShakeIntensity,
+      glow: juice.glowPulseHeavy,
+      hitStopMs: juice.heavyHitStopMs,
+    });
+  }
+
   /**
    * Light up every meteor the current buffer could still become. Typing is the
    * aiming in this game, so the field has to show what the buffer is aimed at
@@ -457,7 +673,7 @@ export class GameScene extends Phaser.Scene {
   private refreshLocks(buffer: string): void {
     for (const m of this.meteors) {
       const locked = buffer.length > 0 && m.problem.answer.startsWith(buffer);
-      m.label.setColor(locked ? CSS.yellow : CSS.white);
+      m.label.setColor(locked ? CSS.magentaHot : m.baseColor);
       m.container.setScale(locked ? 1.08 : 1);
     }
   }
@@ -786,6 +1002,12 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setDepth(hud)
       .setVisible(false);
+    // Active pickups, right under the combo. Timed effects need a visible clock
+    // or the player cannot plan around them.
+    this.effectsText = this.add
+      .text(width - 24, 94, '', { fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: CSS.cyan })
+      .setOrigin(1, 0)
+      .setDepth(hud);
     this.waveText = this.add
       .text(width / 2, 20, '', { ...style, color: CSS.cyanDim })
       .setOrigin(0.5, 0)
@@ -827,6 +1049,7 @@ export class GameScene extends Phaser.Scene {
     const mult = session.comboMultiplier;
 
     this.streakText.setText(session.streak > 0 ? `x${mult}  ${session.streak}` : '');
+    this.effectsText.setText(this.effectsLine());
     this.streakText.setColor(overdrive ? CSS.magentaHot : CSS.yellow);
     this.comboBar
       .setVisible(session.streak > 0)
@@ -861,6 +1084,16 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.flash(160, 0, 220, 255);
     }
     this.overdriveWasActive = overdrive;
+  }
+
+  /** e.g. "FREEZE 1.8  ·  x2 5.2  ·  CHAIN 2" — empty when nothing is running. */
+  private effectsLine(): string {
+    const d = this.session.dropState;
+    const parts: string[] = [];
+    if (d.freezeLeft > 0) parts.push(`FREEZE ${d.freezeLeft.toFixed(1)}`);
+    if (d.doubleLeft > 0) parts.push(`x2 ${d.doubleLeft.toFixed(1)}`);
+    if (d.chainLeft > 0) parts.push(`CHAIN ${d.chainLeft}`);
+    return parts.join('  ·  ');
   }
 
   // --- end of run ---

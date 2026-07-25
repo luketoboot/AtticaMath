@@ -114,3 +114,46 @@ describe('composePlacementWave', () => {
     expect(plan.problems.length).toBe(CONFIG.waves.placementProblems);
   });
 });
+
+describe('meteor payloads', () => {
+  it('marks hot meteors only on frontier problems', () => {
+    const table = tableWith({});
+    const rng = createRng(7);
+    let hotSeen = 0;
+    let carriersSeen = 0;
+    for (let wave = 1; wave <= 12; wave++) {
+      const plan = composeWave(table, wave, CONFIG, rng);
+      plan.payloads.forEach((payload, i) => {
+        if (payload === 'hot') {
+          hotSeen += 1;
+          expect(plan.categories[i]).toBe('frontier');
+        }
+        if (payload === 'carrier') carriersSeen += 1;
+      });
+    }
+    // Guard against the assertion above passing because nothing was ever marked.
+    expect(hotSeen).toBeGreaterThan(0);
+    expect(carriersSeen).toBeGreaterThan(0);
+  });
+
+  it('never exceeds the configured counts, and never double-marks a meteor', () => {
+    const table = tableWith({});
+    const rng = createRng(11);
+    for (let wave = 1; wave <= 12; wave++) {
+      const plan = composeWave(table, wave, CONFIG, rng);
+      expect(plan.payloads).toHaveLength(plan.problems.length);
+      const hot = plan.payloads.filter((p) => p === 'hot').length;
+      const carriers = plan.payloads.filter((p) => p === 'carrier').length;
+      expect(hot).toBeLessThanOrEqual(CONFIG.meteors.hotPerWave);
+      expect(carriers).toBeLessThanOrEqual(CONFIG.drops.carriersPerWave);
+    }
+  });
+
+  it('leaves placement waves unmarked so the sweep stays clean', () => {
+    const rng = createRng(3);
+    for (let wave = 1; wave <= CONFIG.waves.placementWaves; wave++) {
+      const plan = composePlacementWave(wave, CONFIG, rng);
+      expect(plan.payloads.every((p) => p === 'none')).toBe(true);
+    }
+  });
+});

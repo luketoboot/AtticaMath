@@ -213,3 +213,66 @@ describe('combo in a run', () => {
     expect(s.stats().bestStreak).toBe(7);
   });
 });
+
+describe('hot meteors and drops in a run', () => {
+  it('a hot kill pays a multiple and jumps the combo further', () => {
+    const plain = freshSession({ placementDone: true });
+    const hot = freshSession({ placementDone: true });
+    const p = plain.nextWave().problems[0]!;
+    hot.nextWave();
+
+    const plainPoints = plain.recordHit(p, 1200);
+    const hotPoints = hot.recordHit(p, 1200, true);
+    expect(hotPoints).toBe(plainPoints * CONFIG.meteors.hotScoreMultiplier);
+    expect(hot.streak).toBe(CONFIG.meteors.hotComboGain);
+    expect(plain.streak).toBe(1);
+  });
+
+  it('an x2 pickup stacks on top of the combo multiplier', () => {
+    const s = freshSession({ placementDone: true });
+    const p = s.nextWave().problems[0]!;
+    const before = s.scoreMultiplier;
+    s.collectDrop('double');
+    expect(s.scoreMultiplier).toBe(before * CONFIG.drops.doubleMultiplier);
+
+    s.tick(CONFIG.drops.doubleSeconds + 0.1);
+    expect(s.scoreMultiplier).toBe(before);
+    expect(p).toBeDefined();
+  });
+
+  it('repair tops up but never past where the run started', () => {
+    const s = freshSession({ placementDone: true });
+    const full = s.hp;
+    s.collectDrop('repair');
+    expect(s.hp).toBe(full);
+
+    s.takeDamage();
+    s.collectDrop('repair');
+    expect(s.hp).toBe(full);
+  });
+
+  it('freeze and chain expose themselves to the scene', () => {
+    const s = freshSession({ placementDone: true });
+    s.collectDrop('freeze');
+    expect(s.descentFrozen).toBe(true);
+    s.tick(CONFIG.drops.freezeSeconds + 0.1);
+    expect(s.descentFrozen).toBe(false);
+
+    s.collectDrop('chain');
+    expect(s.chainReady).toBe(true);
+    for (let i = 0; i < CONFIG.drops.chainKills; i++) s.useChain();
+    expect(s.chainReady).toBe(false);
+  });
+
+  it('a nuked meteor scores but never touches the skill table or the combo', () => {
+    const s = freshSession({ placementDone: true });
+    const problem = s.nextWave().problems[0]!;
+    const skillId = problem.skillIds[0]!;
+    const before = s.skillTable[skillId]!;
+
+    const points = s.recordNuke(problem);
+    expect(points).toBeGreaterThan(0);
+    expect(s.streak).toBe(0);
+    expect(s.skillTable[skillId]).toEqual(before);
+  });
+});

@@ -20,6 +20,18 @@ import {
 } from './combo';
 import { CONFIG, type GameConfig } from './config';
 import { selectTip, type CoachPick } from './coach/select';
+import {
+  applyDrop,
+  chainReady,
+  consumeChain,
+  createDrops,
+  descentFrozen,
+  dropMultiplier,
+  rollDrop,
+  tickDrops,
+  type DropKind,
+  type DropState,
+} from './drops';
 import { creditsForRun, killScore, type RunStats } from './economy/economy';
 import type { Problem } from './generator/problem';
 import {
@@ -57,6 +69,8 @@ export class RunSession {
    * composition depend on how many frames elapsed, killing reproducibility.
    */
   private readonly hazardRng: Rng;
+  /** Drop rolls get their own stream for the same reason gunfire does. */
+  private readonly dropRng: Rng;
   private skills: SkillTable;
   private readonly startWave: number;
   private waveInRun = 0;
@@ -77,16 +91,20 @@ export class RunSession {
   private combo: ComboState = createCombo();
   /** Landings this wave; a clean wave carries the combo through the breather. */
   private missesThisWave = 0;
+  private drops: DropState = createDrops();
+  private readonly maxHp: number;
 
   constructor(init: RunSessionInit) {
     this.cfg = init.config ?? CONFIG;
     this.rng = createRng(init.seed);
     this.hazardRng = createRng((init.seed ^ 0x9e3779b9) >>> 0);
+    this.dropRng = createRng((init.seed ^ 0x85ebca6b) >>> 0);
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.placementDone = init.placementDone;
     this.loadout = init.loadout.filter((u) => init.ownedUpgrades.includes(u));
     this.hp = this.cfg.meteors.baseHp + (this.loadout.includes('upgrade.hp') ? 2 : 0);
+    this.maxHp = this.hp; // repair tops up to where the run started, never past it
     this.filter = init.filter ?? OPEN_FILTER;
   }
 
@@ -139,9 +157,10 @@ export class RunSession {
     return overdriveActive(this.combo);
   }
 
-  /** Bleed the combo clock. The scene calls this once per frame while a wave runs. */
+  /** Bleed the combo and drop clocks. Called once per frame while a wave runs. */
   tick(dtSeconds: number): void {
     this.combo = tickCombo(this.combo, dtSeconds, this.cfg.combo);
+    this.drops = tickDrops(this.drops, dtSeconds);
   }
 
   /**
@@ -150,6 +169,58 @@ export class RunSession {
    */
   recordWrongDigit(): void {
     this.combo = comboWrongDigit(this.combo, this.cfg.combo);
+  }
+
+  // --- drops ---
+
+  get dropState(): Readonly<DropState> {
+    return this.drops;
+  }
+
+  /** Descent is halted by a freeze pickup. */
+  get descentFrozen(): boolean {
+    return descentFrozen(this.drops);
+  }
+
+  /** The next kill hits every meteor sharing its answer. */
+  get chainReady(): boolean {
+    return chainReady(this.drops);
+  }
+
+  /** What the carrier meteor that just died was holding. */
+  rollDrop(): DropKind {
+    return rollDrop(this.dropRng, this.hp, this.cfg.drops);
+  }
+
+  /** The player caught a pickup. */
+  collectDrop(kind: DropKind): void {
+    if (kind === 'repair') {
+      this.hp = Math.min(this.maxHp, this.hp + 1);
+      return;
+    }
+    this.drops = applyDrop(this.drops, kind, this.cfg.drops);
+  }
+
+  /** Spend one kill of the chain shot. */
+  useChain(): void {
+    this.drops = consumeChain(this.drops);
+  }
+
+  /**
+   * Score a meteor the nuke cleared. Deliberately no rating update and no combo
+   * gain: the player did not answer these, and telling the skill model
+   * otherwise would poison the very table the game schedules from.
+   */
+  recordNuke(problem: Problem): number {
+    const points = killScore(problem.difficulty, this.scoreMultiplier, false, this.cfg.score);
+    this.kills += 1;
+    this.score += points;
+    return points;
+  }
+
+  /** Combo tier and any active x2 pickup, together. */
+  get scoreMultiplier(): number {
+    return this.comboMultiplier * dropMultiplier(this.drops, this.cfg.drops);
   }
 
   /** Advance to the next wave and get its problem list. */
@@ -173,11 +244,15 @@ export class RunSession {
   }
 
   /**
-   * Player killed a meteor (typed the right answer). `comboGain` is above 1 for
-   * bonus targets. Scores at the multiplier as it stands *before* this kill, so
-   * crossing a tier pays out from the next kill on.
+   * Player killed a meteor (typed the right answer). Scores at the multiplier
+   * as it stands *before* this kill, so crossing a tier pays out from the next
+   * kill on.
+   *
+   * `hotBonus` is set by the scene when a hot meteor was taken while it was
+   * still high — the bonus is for the risk of leaving it up there, so the scene
+   * (which owns the geometry) decides whether it was earned.
    */
-  recordHit(problem: Problem, responseMs: number, comboGain = 1): number {
+  recordHit(problem: Problem, responseMs: number, hotBonus = false): number {
     const attempt = { correct: true, responseMs, difficulty: problem.difficulty, wave: this.globalWave };
     this.skills = applyAttempt(this.skills, problem.skillIds, attempt, this.cfg.rating);
     if (!this.placementDone) {
@@ -186,9 +261,11 @@ export class RunSession {
       }
     }
     this.kills += 1;
+    const m = this.cfg.meteors;
     const fast = responseMs <= targetLatencyMs(problem.difficulty, this.cfg.rating);
-    const points = killScore(problem.difficulty, this.comboMultiplier, fast, this.cfg.score);
-    this.combo = comboHit(this.combo, this.cfg.combo, comboGain);
+    const multiplier = this.scoreMultiplier * (hotBonus ? m.hotScoreMultiplier : 1);
+    const points = killScore(problem.difficulty, multiplier, fast, this.cfg.score);
+    this.combo = comboHit(this.combo, this.cfg.combo, hotBonus ? m.hotComboGain : 1);
     this.score += points;
     return points;
   }

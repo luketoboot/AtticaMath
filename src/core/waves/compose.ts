@@ -25,11 +25,46 @@ function poolFor(filter: SkillFilter): SkillId[] {
 
 export type SkillCategory = 'fluent' | 'frontier' | 'review';
 
+/**
+ * What a meteor is carrying, decided at composition time.
+ *
+ * `hot` is worth a multiple if killed early and is only ever attached to a
+ * frontier problem, so the score chase and the practice schedule point the same
+ * way. `carrier` drops a power-up. A meteor is never both: two marks on one
+ * rock and the player cannot read either at speed.
+ */
+export type MeteorPayload = 'none' | 'hot' | 'carrier';
+
 export interface WavePlan {
   wave: number;
   problems: Problem[];
   /** Which bucket each problem was drawn from (for tests and debug). */
   categories: SkillCategory[];
+  /** Parallel to `problems`. */
+  payloads: MeteorPayload[];
+}
+
+/**
+ * Mark the hot and carrier meteors for a wave. Hot goes on frontier problems
+ * only; carriers take any unmarked slot.
+ */
+function assignPayloads(
+  categories: readonly SkillCategory[],
+  cfg: GameConfig,
+  rng: Rng,
+): MeteorPayload[] {
+  const payloads: MeteorPayload[] = categories.map(() => 'none');
+
+  const frontier = categories.flatMap((c, i) => (c === 'frontier' ? [i] : []));
+  for (const i of rng.shuffle(frontier).slice(0, cfg.meteors.hotPerWave)) {
+    payloads[i] = 'hot';
+  }
+
+  const free = payloads.flatMap((p, i) => (p === 'none' ? [i] : []));
+  for (const i of rng.shuffle(free).slice(0, cfg.drops.carriersPerWave)) {
+    payloads[i] = 'carrier';
+  }
+  return payloads;
 }
 
 /** Classify every known skill for a given wave. */
@@ -119,7 +154,7 @@ export function composeWave(
     categories.push(used);
   }
 
-  return { wave, problems, categories };
+  return { wave, problems, categories, payloads: assignPayloads(categories, cfg, rng) };
 }
 
 /** True while the profile is still in the stealth placement sweep. */
@@ -159,5 +194,7 @@ export function composePlacementWave(
     problems.push(generateProblem(skillId, rng));
     categories.push('frontier');
   }
-  return { wave, problems, categories };
+  // Placement stays plain: the sweep is measuring the player, and a bonus
+  // target would distort both the timings and the choice of what to shoot.
+  return { wave, problems, categories, payloads: problems.map(() => 'none') };
 }
