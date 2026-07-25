@@ -579,7 +579,7 @@ export const CONFIG: GameConfig = {
     projectileSpeed: 620,
     projectileRadius: 7,
     projectileLifeSeconds: 1.6,
-    swapLockoutSeconds: 0.36,
+    swapLockoutSeconds: 0.17,
     armedSeconds: 9,
     mismatchLockoutSeconds: 0.45,
     startingHp: 3,

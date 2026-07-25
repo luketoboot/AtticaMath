@@ -56,6 +56,165 @@ const MUSIC_TRACKS: Record<MusicTrack, string> = {
   debrief: 'music/Rain_on_the_Pane.mp3',
 };
 
+/**
+ * One layer of a sampled effect. Real weapon audio is several recordings
+ * stacked — a mechanical transient, a body, a tail — so a layer is the unit,
+ * not the sound.
+ */
+interface SampleLayer {
+  /** Interchangeable takes; one is drawn at random per trigger. */
+  files: readonly string[];
+  /** Seconds after the trigger. */
+  delay?: number;
+  gain?: number;
+  /** Reverb send, 0..1. Transients want less than tails. */
+  send?: number;
+  /** Playback-rate jitter as a fraction, so repeats never phase-lock. */
+  pitchVary?: number;
+  /**
+   * Fixed playback-rate offset baked into this mapping, on top of whatever the
+   * caller asks for. Lets one recording serve several events at different
+   * weights — a hit pitched up is a block, pitched down is a heavier impact.
+   */
+  rate?: number;
+}
+
+/**
+ * Sampled replacements for the procedural effects. Anything listed here that
+ * actually loads wins; anything missing silently falls back to synthesis, so
+ * the game is fully playable with public/sfx/ empty. See that folder's README
+ * for what to drop in.
+ */
+const SAMPLES: Partial<Record<SfxName, readonly SampleLayer[]>> = {
+  gunFraction: [
+    { files: ['sfx/gun_fraction_mech.mp3'], gain: 0.5, send: 0.05, pitchVary: 0.05 },
+    {
+      files: ['sfx/gun_fraction_a.mp3', 'sfx/gun_fraction_b.mp3', 'sfx/gun_fraction_c.mp3'],
+      gain: 0.9,
+      send: 0.2,
+      pitchVary: 0.07,
+    },
+    { files: ['sfx/gun_fraction_tail.mp3'], delay: 0.02, gain: 0.4, send: 0.6, pitchVary: 0.04 },
+  ],
+  gunPercent: [
+    { files: ['sfx/gun_percent_mech.mp3'], gain: 0.5, send: 0.05, pitchVary: 0.05 },
+    {
+      files: ['sfx/gun_percent_a.mp3', 'sfx/gun_percent_b.mp3', 'sfx/gun_percent_c.mp3'],
+      gain: 0.9,
+      send: 0.25,
+      pitchVary: 0.07,
+    },
+    { files: ['sfx/gun_percent_tail.mp3'], delay: 0.02, gain: 0.45, send: 0.65, pitchVary: 0.04 },
+  ],
+  // Three stages, timed to land inside CONFIG.collapse.swapLockoutSeconds.
+  reload: [
+    { files: ['sfx/reload_mag.mp3'], gain: 0.75, send: 0.12, pitchVary: 0.03 },
+    { files: ['sfx/reload_rack.mp3'], delay: 0.028, gain: 0.85, send: 0.2, pitchVary: 0.03 },
+    { files: ['sfx/reload_bolt.mp3'], delay: 0.075, gain: 1, send: 0.35, pitchVary: 0.03 },
+  ],
+  boltHit: [
+    {
+      files: ['sfx/bolt_hit_a.mp3', 'sfx/bolt_hit_b.mp3'],
+      gain: 0.8,
+      send: 0.45,
+      pitchVary: 0.12,
+    },
+  ],
+  implode: [
+    { files: ['sfx/implode_charge.mp3'], gain: 0.8, send: 0.35 },
+    { files: ['sfx/implode_boom.mp3'], delay: 0.32, gain: 1, send: 0.5 },
+    { files: ['sfx/implode_debris.mp3'], delay: 0.5, gain: 0.5, send: 0.6 },
+  ],
+  explosion: [
+    {
+      files: ['sfx/explosion_a.mp3', 'sfx/explosion_b.mp3'],
+      gain: 0.9,
+      send: 0.45,
+      pitchVary: 0.1,
+    },
+  ],
+  playerHit: [{ files: ['sfx/player_hit.mp3'], gain: 0.9, send: 0.3, pitchVary: 0.05 }],
+
+  // --- the other modes, built from the same recordings ---
+  // Meteor Defense and Expression Builder fire the base cannon. Same hardware
+  // as Collapse's fraction gun, so it gets the same three layers.
+  laser: [
+    { files: ['sfx/gun_fraction_mech.mp3'], gain: 0.4, send: 0.05, pitchVary: 0.05 },
+    {
+      files: ['sfx/gun_fraction_a.mp3', 'sfx/gun_fraction_b.mp3', 'sfx/gun_fraction_c.mp3'],
+      gain: 0.85,
+      send: 0.2,
+      pitchVary: 0.07,
+    },
+    { files: ['sfx/gun_fraction_tail.mp3'], delay: 0.02, gain: 0.35, send: 0.6, pitchVary: 0.04 },
+  ],
+  // The spread cannon and Factor Storm's splitter: the heavier weapon.
+  laserSpread: [
+    { files: ['sfx/gun_percent_mech.mp3'], gain: 0.45, send: 0.05, pitchVary: 0.05 },
+    {
+      files: ['sfx/gun_percent_a.mp3', 'sfx/gun_percent_b.mp3', 'sfx/gun_percent_c.mp3'],
+      gain: 0.9,
+      send: 0.25,
+      pitchVary: 0.07,
+    },
+    { files: ['sfx/gun_percent_tail.mp3'], delay: 0.02, gain: 0.4, send: 0.65, pitchVary: 0.04 },
+  ],
+  // A fast kill should read as the same explosion taken at speed, not as a
+  // different event — pitched up, with the bright tail borrowed for shimmer.
+  fast: [
+    { files: ['sfx/explosion_a.mp3', 'sfx/explosion_b.mp3'], gain: 0.85, send: 0.4, rate: 1.3 },
+    { files: ['sfx/gun_fraction_tail.mp3'], delay: 0.03, gain: 0.4, send: 0.6, rate: 1.15 },
+  ],
+  // A meteor reaching the ground. The detonation slowed down and weighted.
+  land: [
+    { files: ['sfx/implode_boom.mp3'], gain: 0.85, send: 0.45, rate: 0.85 },
+    { files: ['sfx/player_hit.mp3'], gain: 0.5, send: 0.25, rate: 0.9 },
+  ],
+  // Boss chip damage: the bolt impact with the heavy gun's mechanism under it.
+  bossHit: [
+    { files: ['sfx/gun_percent_mech.mp3'], gain: 0.4, send: 0.1, pitchVary: 0.04 },
+    { files: ['sfx/bolt_hit_a.mp3', 'sfx/bolt_hit_b.mp3'], gain: 0.85, send: 0.4, rate: 0.9, pitchVary: 0.08 },
+  ],
+  // Boss death gets the full collapse: charge, detonation, debris.
+  bossDown: [
+    { files: ['sfx/implode_charge.mp3'], gain: 0.8, send: 0.35 },
+    { files: ['sfx/implode_boom.mp3'], delay: 0.32, gain: 1, send: 0.5, rate: 0.92 },
+    { files: ['sfx/implode_debris.mp3'], delay: 0.5, gain: 0.55, send: 0.6 },
+  ],
+  // Blocking an attack is a deflection, not a wound: same strike, pitched up
+  // and lighter so it reads as "stopped" rather than "hurt".
+  block: [
+    { files: ['sfx/bolt_hit_a.mp3', 'sfx/bolt_hit_b.mp3'], gain: 0.6, send: 0.5, rate: 1.3, pitchVary: 0.08 },
+  ],
+  // Incoming fire: the heavy gun heard from the wrong end. Down-pitched and
+  // quiet so it sits behind the player's own weapon in the mix.
+  enemyFire: [
+    { files: ['sfx/gun_percent_a.mp3'], gain: 0.45, send: 0.4, rate: 0.8, pitchVary: 0.06 },
+  ],
+};
+
+/** Continuously looping effects, held open while a condition is true. */
+export type LoopName = 'thruster';
+
+interface LoopSpec {
+  file: string;
+  gain: number;
+  send: number;
+  /** Seconds to ramp in and out — a hard cut on a loop clicks. */
+  fadeSeconds: number;
+}
+
+const LOOPS: Record<LoopName, LoopSpec> = {
+  thruster: { file: 'sfx/thruster_loop.mp3', gain: 0.5, send: 0.25, fadeSeconds: 0.09 },
+};
+
+/** A running loop, so it can be re-pitched and faded out later. */
+interface ActiveLoop {
+  source: AudioBufferSourceNode;
+  level: GainNode;
+  spec: LoopSpec;
+}
+
 const CROSSFADE_MS = 700;
 const FADE_STEP_MS = 40;
 
@@ -65,6 +224,13 @@ export class AudioManager {
   /** Shared reverb send. Voices dry-route to sfxGain and bleed here for tail. */
   private reverbSend: GainNode | null = null;
   private unlocked = false;
+
+  /** Decoded sample buffers by path. A path absent here has no sample. */
+  private buffers = new Map<string, AudioBuffer>();
+  private samplesPrimed = false;
+  private loops = new Map<LoopName, ActiveLoop>();
+  /** Synthesized loop bodies, built once and reused when no sample exists. */
+  private fallbackLoops = new Map<LoopName, AudioBuffer>();
 
   /** One element per track, created lazily and reused across scene changes. */
   private elements = new Map<MusicTrack, HTMLAudioElement>();
@@ -83,6 +249,7 @@ export class AudioManager {
       this.unlocked = true;
       this.ensureContext();
       void this.ctx?.resume();
+      void this.primeSamples();
       if (this.pending) this.playMusic(this.pending);
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
@@ -159,6 +326,185 @@ export class AudioManager {
   /** Random multiplier around 1 — per-shot variation so repeats never phase. */
   private vary(spread: number): number {
     return 1 + (Math.random() * 2 - 1) * spread;
+  }
+
+  // --- looping effects ---
+
+  /**
+   * Hold a looping effect open or let it go. Idempotent, so callers can drive
+   * it straight from a per-frame boolean without tracking edges themselves.
+   *
+   * `rate` re-pitches a running loop rather than restarting it, which is what
+   * lets reverse thrust sound like the same engine at a different throttle.
+   */
+  setLoop(name: LoopName, active: boolean, opts: { rate?: number; gain?: number } = {}): void {
+    const ctx = this.ensureContext();
+    if (!ctx || !this.sfxGain) return;
+    const running = this.loops.get(name);
+
+    if (!active) {
+      if (running) this.releaseLoop(ctx, name, running);
+      return;
+    }
+
+    if (running) {
+      // Glide rather than jump: a stepped pitch on a sustained tone reads as a
+      // glitch, not as a throttle change.
+      running.source.playbackRate.linearRampToValueAtTime(opts.rate ?? 1, ctx.currentTime + 0.08);
+      running.level.gain.linearRampToValueAtTime(
+        running.spec.gain * (opts.gain ?? 1),
+        ctx.currentTime + 0.08,
+      );
+      return;
+    }
+
+    const spec = LOOPS[name];
+    const buffer = this.buffers.get(spec.file) ?? this.fallbackLoop(ctx, name);
+    if (!buffer) return;
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.playbackRate.value = opts.rate ?? 1;
+
+    const level = ctx.createGain();
+    const target = spec.gain * (opts.gain ?? 1);
+    level.gain.setValueAtTime(0.0001, ctx.currentTime);
+    level.gain.linearRampToValueAtTime(target, ctx.currentTime + spec.fadeSeconds);
+
+    source.connect(level);
+    this.route(ctx, level, spec.send);
+    source.start();
+    this.loops.set(name, { source, level, spec });
+  }
+
+  private releaseLoop(ctx: AudioContext, name: LoopName, loop: ActiveLoop): void {
+    this.loops.delete(name);
+    const end = ctx.currentTime + loop.spec.fadeSeconds;
+    loop.level.gain.cancelScheduledValues(ctx.currentTime);
+    loop.level.gain.setValueAtTime(loop.level.gain.value, ctx.currentTime);
+    loop.level.gain.linearRampToValueAtTime(0.0001, end);
+    loop.source.stop(end + 0.02);
+  }
+
+  /** Cut every loop immediately. Scenes call this on shutdown. */
+  stopAllLoops(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    for (const [name, loop] of [...this.loops]) this.releaseLoop(ctx, name, loop);
+  }
+
+  /**
+   * Synthesized stand-in for a missing loop sample: filtered noise over a low
+   * rumble, rendered once into a buffer whose ends already match, so it loops
+   * without a seam. Good enough that thrust is never silent.
+   */
+  private fallbackLoop(ctx: AudioContext, name: LoopName): AudioBuffer | null {
+    const cached = this.fallbackLoops.get(name);
+    if (cached) return cached;
+    if (name !== 'thruster') return null;
+
+    const seconds = 2;
+    const rate = ctx.sampleRate;
+    const length = Math.floor(rate * seconds);
+    const buffer = ctx.createBuffer(2, length, rate);
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel);
+      let lp = 0;
+      let lp2 = 0;
+      for (let i = 0; i < length; i++) {
+        const white = Math.random() * 2 - 1;
+        lp += (white - lp) * 0.06; // body hiss
+        lp2 += (lp - lp2) * 0.12; // darkened further
+        // Two detuned low sines give the rumble a beat instead of a drone.
+        const t = i / rate;
+        const rumble = Math.sin(t * Math.PI * 2 * 58) * 0.22 + Math.sin(t * Math.PI * 2 * 87) * 0.1;
+        data[i] = lp2 * 2.6 + rumble;
+      }
+      // Crossfade the tail over the head so the seam is inaudible.
+      const blend = Math.floor(rate * 0.05);
+      for (let i = 0; i < blend; i++) {
+        const w = i / blend;
+        data[i] = data[i]! * w + data[length - blend + i]! * (1 - w);
+      }
+    }
+    this.fallbackLoops.set(name, buffer);
+    return buffer;
+  }
+
+  // --- samples ---
+
+  /**
+   * Fetch and decode every declared sample once, after the audio unlock.
+   * Failures are swallowed on purpose: a missing file just means that effect
+   * keeps using its synthesized version, so the folder can be empty or partial.
+   */
+  private async primeSamples(): Promise<void> {
+    if (this.samplesPrimed) return;
+    this.samplesPrimed = true;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const paths = new Set<string>();
+    for (const layers of Object.values(SAMPLES)) {
+      for (const layer of layers ?? []) for (const file of layer.files) paths.add(file);
+    }
+    for (const spec of Object.values(LOOPS)) paths.add(spec.file);
+    await Promise.all([...paths].map((path) => this.loadSample(ctx, path)));
+  }
+
+  private async loadSample(ctx: AudioContext, path: string): Promise<void> {
+    try {
+      const res = await fetch(path);
+      if (!res.ok) return;
+      // The dev server answers unknown paths with index.html and a 200, so an
+      // ok status is not proof the file exists. Reject markup before decoding
+      // it, or every absent sample costs a thrown decode.
+      if ((res.headers.get('content-type') ?? '').includes('text/html')) return;
+      this.buffers.set(path, await ctx.decodeAudioData(await res.arrayBuffer()));
+    } catch {
+      // No such file, or an undecodable one. Synthesis covers it.
+    }
+  }
+
+  /**
+   * Play the sampled version of an effect. Returns false when nothing loaded,
+   * which is the caller's signal to fall through to synthesis.
+   */
+  private playSample(ctx: AudioContext, name: SfxName, opts: SfxOptions): boolean {
+    const layers = SAMPLES[name];
+    if (!layers || !this.sfxGain) return false;
+
+    const t = ctx.currentTime;
+    const pitch = opts.pitch ?? 1;
+    const gain = opts.gain ?? 1;
+    // One pan position for the whole effect — layers of a single sound must
+    // share a location or the stack smears across the stereo field.
+    const pan = (Math.random() * 2 - 1) * 0.22;
+    let played = false;
+
+    for (const layer of layers) {
+      const choices = layer.files.filter((f) => this.buffers.has(f));
+      if (choices.length === 0) continue;
+      const buffer = this.buffers.get(choices[Math.floor(Math.random() * choices.length)]!);
+      if (!buffer) continue;
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = pitch * (layer.rate ?? 1) * this.vary(layer.pitchVary ?? 0);
+
+      const level = ctx.createGain();
+      level.gain.value = (layer.gain ?? 1) * gain;
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = pan;
+
+      source.connect(level);
+      level.connect(panner);
+      this.route(ctx, panner, layer.send ?? 0);
+      source.start(t + (layer.delay ?? 0));
+      played = true;
+    }
+    return played;
   }
 
   // --- music ---
@@ -239,6 +585,8 @@ export class AudioManager {
   play(name: SfxName, opts: SfxOptions = {}): void {
     const ctx = this.ensureContext();
     if (!ctx || !this.sfxGain) return;
+    // A loaded sample always beats the synthesized version.
+    if (this.playSample(ctx, name, opts)) return;
     const t = ctx.currentTime;
     const p = opts.pitch ?? 1;
     const g = opts.gain ?? 1;
@@ -351,21 +699,19 @@ export class AudioManager {
       case 'reload': {
         const v = this.vary(0.03);
         // Magazine release: dry, bright, mechanical.
-        this.click(ctx, t, 0.03, 0.3 * g, 0.15);
-        this.zap(ctx, t, 'square', 1100 * v, 420 * v, 0.045, 0.09 * g);
-        this.zap(ctx, t + 0.012, 'sawtooth', 700 * v, 260 * v, 0.05, 0.06 * g, 18);
-        // Carrier drawn back: filtered noise sliding open, metal scrape on top.
-        this.noiseBurst(ctx, t + 0.06, 0.115, 3400, 0.22 * g, 'bandpass', 0.25);
-        this.zap(ctx, t + 0.06, 'sawtooth', 300 * v, 680 * v, 0.1, 0.07 * g, -14);
-        this.tone(ctx, t + 0.1, 'triangle', 2600 * v, 0.04, 0.05 * g, 0, 0.4);
-        // Bolt home: the payoff. Clack over a low thunk with real bottom.
-        this.click(ctx, t + 0.185, 0.045, 0.44 * g, 0.4);
-        this.zap(ctx, t + 0.185, 'square', 700 * v, 140, 0.1, 0.22 * g, -12);
-        this.zap(ctx, t + 0.185, 'sine', 190, 52, 0.24, 0.46 * g, 0, 0.3);
-        this.noiseBurst(ctx, t + 0.185, 0.09, 900, 0.2 * g, 'lowpass', 0.2);
-        // Charged-and-ready chirp, wet so it rings off into the space.
-        this.tone(ctx, t + 0.25, 'triangle', 1240 * v * p, 0.075, 0.1 * g, 0, 0.55);
-        this.tone(ctx, t + 0.25, 'sine', 1860 * v * p, 0.06, 0.05 * g, 0, 0.55);
+        this.click(ctx, t, 0.022, 0.3 * g, 0.15);
+        this.zap(ctx, t, 'square', 1100 * v, 420 * v, 0.035, 0.09 * g);
+        // Carrier racked: a fast scrape, overlapped rather than sequenced.
+        this.noiseBurst(ctx, t + 0.028, 0.055, 3400, 0.22 * g, 'bandpass', 0.25);
+        this.zap(ctx, t + 0.028, 'sawtooth', 300 * v, 680 * v, 0.05, 0.07 * g, -14);
+        // Bolt home: the payoff, and the beat the lockout ends on.
+        this.click(ctx, t + 0.075, 0.035, 0.46 * g, 0.4);
+        this.zap(ctx, t + 0.075, 'square', 700 * v, 140, 0.07, 0.24 * g, -12);
+        this.zap(ctx, t + 0.075, 'sine', 190, 52, 0.17, 0.48 * g, 0, 0.3);
+        this.noiseBurst(ctx, t + 0.075, 0.06, 900, 0.2 * g, 'lowpass', 0.2);
+        // Ready chirp lands with the bolt rather than after it.
+        this.tone(ctx, t + 0.105, 'triangle', 1240 * v * p, 0.055, 0.1 * g, 0, 0.55);
+        this.tone(ctx, t + 0.105, 'sine', 1860 * v * p, 0.045, 0.05 * g, 0, 0.55);
         break;
       }
 
@@ -526,12 +872,12 @@ export class AudioManager {
   }
 
   /** Dry to the sfx bus, with an optional parallel bleed into the reverb. */
-  private route(ctx: AudioContext, gain: GainNode, send: number): void {
-    gain.connect(this.sfxGain!);
+  private route(ctx: AudioContext, node: AudioNode, send: number): void {
+    node.connect(this.sfxGain!);
     if (send <= 0 || !this.reverbSend) return;
     const tap = ctx.createGain();
     tap.gain.value = send;
-    gain.connect(tap);
+    node.connect(tap);
     tap.connect(this.reverbSend);
   }
 

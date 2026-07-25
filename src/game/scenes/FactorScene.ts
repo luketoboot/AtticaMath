@@ -90,7 +90,13 @@ export class FactorScene extends Phaser.Scene {
     getAudio(this)?.playMusic('drift');
     applyCrt(this);
     clearHitStop(this);
-    this.events.once('shutdown', () => clearHitStop(this));
+    // A loop outlives the scene that started it unless it is cut explicitly —
+    // otherwise the engine keeps roaring over the menu.
+    this.events.once('shutdown', () => {
+      clearHitStop(this);
+      getAudio(this)?.stopAllLoops();
+    });
+    this.events.on(Phaser.Scenes.Events.PAUSE, () => getAudio(this)?.stopAllLoops());
 
     this.rocks = [];
     this.phase = 'wave';
@@ -171,7 +177,14 @@ export class FactorScene extends Phaser.Scene {
     // The hull art points up, so the sprite trails the facing by a quarter turn.
     this.ship.setRotation(this.flight.facing + Math.PI / 2);
     this.ship.setAlpha(this.time.now < this.invulnUntil ? 0.45 : 1);
-    this.flame.setVisible(thrust && !reverse).setAlpha(Phaser.Math.FloatBetween(0.55, 1));
+    const burning = thrust && !reverse;
+    // Reverse runs the same engine at a lower throttle rather than a second
+    // sound — one source re-pitched reads as one ship.
+    getAudio(this)?.setLoop('thruster', thrust || reverse, {
+      rate: burning ? 1 : 0.82,
+      gain: burning ? 1 : 0.6,
+    });
+    this.flame.setVisible(burning).setAlpha(Phaser.Math.FloatBetween(0.55, 1));
   }
 
   private get shipX(): number {
@@ -659,6 +672,8 @@ export class FactorScene extends Phaser.Scene {
   private endRun(): void {
     this.phase = 'over';
     clearHitStop(this);
+    // The update loop stops driving the thruster from here, so cut it by hand.
+    getAudio(this)?.stopAllLoops();
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
     save.skills = this.session.skillTable;
