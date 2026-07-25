@@ -9,7 +9,9 @@ import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, impact, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
+import { onActionKey, sceneBindings } from '../input/KeyState';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
+import { codeMatches } from '../../core/input/bindings';
 
 type Phase = 'fight' | 'breather' | 'over';
 
@@ -92,13 +94,14 @@ export class BossScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.dealHand();
 
-    this.input.keyboard?.on('keydown-ESC', () => {
+    const bindings = sceneBindings(this);
+    onActionKey(this, bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Boss' });
       this.scene.pause();
     });
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
-      if (this.phase !== 'fight' || event.key === 'Escape') return;
+      if (this.phase !== 'fight' || codeMatches(bindings.pause, event.code)) return;
       // Incoming attacks take input priority for digits and backspace.
       if (this.attack) {
         if (event.key >= '0' && event.key <= '9') {

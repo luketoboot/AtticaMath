@@ -7,8 +7,10 @@ import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
+import type { KeyBindings } from '../../core/input/bindings';
 
 /** A rock on screen. The value and its arithmetic belong to the session. */
 interface LiveRock {
@@ -52,12 +54,8 @@ export class FactorScene extends Phaser.Scene {
   private shipVx = 0;
   private shipVy = 0;
   private invulnUntil = 0;
-  private moveKeys: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key[]> = {
-    up: [],
-    down: [],
-    left: [],
-    right: [],
-  };
+  private keys!: KeyState;
+  private bindings!: KeyBindings;
 
   /** Rock the typing applies to. Held while the buffer is non-empty. */
   private lockedId: number | null = null;
@@ -111,16 +109,11 @@ export class FactorScene extends Phaser.Scene {
       this.onBufferChanged(value);
     });
 
-    const kb = this.input.keyboard;
-    this.moveKeys = {
-      up: kb ? [kb.addKey('W'), kb.addKey('UP')] : [],
-      down: kb ? [kb.addKey('S'), kb.addKey('DOWN')] : [],
-      left: kb ? [kb.addKey('A'), kb.addKey('LEFT')] : [],
-      right: kb ? [kb.addKey('D'), kb.addKey('RIGHT')] : [],
-    };
-    kb?.addCapture('UP,DOWN,LEFT,RIGHT');
+    this.bindings = sceneBindings(this);
+    this.keys = new KeyState(this);
+    this.input.keyboard?.addCapture('UP,DOWN,LEFT,RIGHT,SPACE');
 
-    kb?.on('keydown-ESC', () => {
+    onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Factor' });
       this.scene.pause();
@@ -152,10 +145,10 @@ export class FactorScene extends Phaser.Scene {
     const f = CONFIG.factor;
     let ax = 0;
     let ay = 0;
-    if (this.moveKeys.left.some((k) => k.isDown)) ax -= 1;
-    if (this.moveKeys.right.some((k) => k.isDown)) ax += 1;
-    if (this.moveKeys.up.some((k) => k.isDown)) ay -= 1;
-    if (this.moveKeys.down.some((k) => k.isDown)) ay += 1;
+    if (this.keys.isDown(this.bindings.left)) ax -= 1;
+    if (this.keys.isDown(this.bindings.right)) ax += 1;
+    if (this.keys.isDown(this.bindings.up)) ay -= 1;
+    if (this.keys.isDown(this.bindings.down)) ay += 1;
 
     // Normalised so diagonals are not faster than the cardinals.
     const mag = Math.hypot(ax, ay);

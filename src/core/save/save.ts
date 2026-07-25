@@ -3,6 +3,7 @@
  * localStorage is one adapter; a server-sync adapter can slot in later
  * without touching game code.
  */
+import { defaultBindings, type KeyBindings } from '../input/bindings';
 import type { SkillTable } from '../skills/rating';
 
 export interface StorageAdapter {
@@ -12,7 +13,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 2;
+export const CURRENT_SAVE_VERSION = 3;
 
 export interface SaveV1 {
   version: 1;
@@ -38,7 +39,13 @@ export interface SaveV2 extends Omit<SaveV1, 'version'> {
   milestones: string[];
 }
 
-export type Save = SaveV2;
+export interface SaveV3 extends Omit<SaveV2, 'version'> {
+  version: 3;
+  /** Rebindable controls, keyed by KeyboardEvent.code. */
+  keybindings: KeyBindings;
+}
+
+export type Save = SaveV3;
 
 export function defaultSave(): Save {
   return {
@@ -52,6 +59,7 @@ export function defaultSave(): Save {
     settings: { crtEnabled: true, musicVolume: 0.8, sfxVolume: 0.9 },
     bestScore: 0,
     milestones: [],
+    keybindings: defaultBindings(),
   };
 }
 
@@ -61,18 +69,25 @@ export function migrate(raw: unknown): Save {
     return defaultSave();
   }
   const versioned = raw as { version: number };
-  switch (versioned.version) {
-    case 1: {
-      const v1 = raw as SaveV1;
-      // v1 auto-equipped everything owned; carry that into the explicit loadout.
-      return { ...v1, version: 2, loadout: [...v1.ownedUpgrades], milestones: [] };
-    }
-    case 2:
-      return raw as SaveV2;
-    default:
-      // Unknown/newer version: refuse to guess, start fresh.
-      return defaultSave();
+  if (versioned.version > CURRENT_SAVE_VERSION) {
+    // Newer than we understand: refuse to guess, start fresh.
+    return defaultSave();
   }
+
+  let save = raw as { version: number } & Record<string, unknown>;
+  if (save.version === 1) {
+    const v1 = save as unknown as SaveV1;
+    // v1 auto-equipped everything owned; carry that into the explicit loadout.
+    save = { ...v1, version: 2, loadout: [...v1.ownedUpgrades], milestones: [] };
+  }
+  if (save.version === 2) {
+    save = { ...save, version: 3, keybindings: defaultBindings() };
+  }
+  if (save.version === CURRENT_SAVE_VERSION) {
+    return save as unknown as Save;
+  }
+  // Anything unrecognised below the current version: start fresh.
+  return defaultSave();
 }
 
 export function loadSave(storage: StorageAdapter): Save {

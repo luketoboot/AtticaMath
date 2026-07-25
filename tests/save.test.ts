@@ -37,7 +37,7 @@ describe('migrate', () => {
     expect(migrate(save)).toEqual(save);
   });
 
-  it('migrates v1 to v2, equipping owned upgrades and adding milestones', () => {
+  it('migrates v1 through to current, equipping upgrades and adding milestones + keybindings', () => {
     const v1 = {
       version: 1,
       skills: { 'add.single': { rating: 700, attempts: 9, lastAttemptWave: 3 } },
@@ -50,11 +50,32 @@ describe('migrate', () => {
       bestScore: 9000,
     };
     const migrated = migrate(v1);
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(CURRENT_SAVE_VERSION);
     expect(migrated.milestones).toEqual([]);
     expect(migrated.loadout).toEqual(['upgrade.hp', 'upgrade.shield']);
     expect(migrated.skills).toEqual(v1.skills);
     expect(migrated.bestScore).toBe(9000);
+    expect(migrated.keybindings).toEqual(defaultSave().keybindings);
+  });
+
+  it('migrates v2 to current by adding default keybindings', () => {
+    const v2 = {
+      version: 2,
+      skills: {},
+      totalWaves: 3,
+      placementDone: true,
+      credits: 50,
+      ownedUpgrades: [],
+      loadout: [],
+      settings: { crtEnabled: true, musicVolume: 0.8, sfxVolume: 0.9 },
+      bestScore: 1200,
+      milestones: ['times.12'],
+    };
+    const migrated = migrate(v2);
+    expect(migrated.version).toBe(CURRENT_SAVE_VERSION);
+    expect(migrated.milestones).toEqual(['times.12']);
+    expect(migrated.bestScore).toBe(1200);
+    expect(migrated.keybindings).toEqual(defaultSave().keybindings);
   });
 
   it('resets unknown future versions', () => {

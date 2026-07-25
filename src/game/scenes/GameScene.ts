@@ -11,8 +11,10 @@ import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { isTouchDevice, Numpad } from '../../ui/Numpad';
+import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
+import type { KeyBindings } from '../../core/input/bindings';
 
 interface LiveMeteor {
   container: Phaser.GameObjects.Container;
@@ -75,10 +77,8 @@ export class GameScene extends Phaser.Scene {
   private cannonX = 0;
 
   private cannon!: Phaser.GameObjects.Container;
-  private moveKeys: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] } = {
-    left: [],
-    right: [],
-  };
+  private keys!: KeyState;
+  private bindings!: KeyBindings;
   /** Drag target for touch/mouse dodging; null when no drag is active. */
   private pointerTargetX: number | null = null;
   private invulnUntil = 0;
@@ -157,10 +157,11 @@ export class GameScene extends Phaser.Scene {
     padToggle.on('pointerdown', () => numpad.setVisible(!numpad.visible));
 
     this.setupDodgeInput();
-    // SPACE skips the breather; capture it so the page never scrolls instead.
-    this.input.keyboard?.addCapture('SPACE');
+    // The launch key skips the breather; capture arrows/space so bound keys
+    // never scroll the page instead.
+    this.input.keyboard?.addCapture('SPACE,LEFT,RIGHT');
 
-    this.input.keyboard?.on('keydown-ESC', () => {
+    onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Game' });
       this.scene.pause();
@@ -315,21 +316,22 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(0.85);
     lines.push(skipHint);
 
+    let unbindLaunch = (): void => {};
     const launch = (): void => {
       if (this.phase !== 'breather') return;
       this.breatherTimer?.remove();
       this.breatherTimer = undefined;
-      this.input.keyboard?.off('keydown-SPACE', launch);
+      unbindLaunch();
       for (const l of lines) l.destroy();
       this.startWave();
     };
     // Waiting out a breather you don't need is dead air; let the player set the
     // tempo. The timer is the floor on the rest, not the rule.
-    this.input.keyboard?.once('keydown-SPACE', launch);
+    unbindLaunch = onActionKey(this, this.bindings.launch, launch);
 
     this.breatherTimer = this.time.delayedCall(CONFIG.meteors.breatherSeconds * 1000, () => {
       this.breatherTimer = undefined;
-      this.input.keyboard?.off('keydown-SPACE', launch);
+      unbindLaunch();
       for (const l of lines) l.destroy();
       if (this.phase !== 'over') this.startWave();
     });
@@ -681,13 +683,11 @@ export class GameScene extends Phaser.Scene {
   // --- dodging & meteor gunfire ---
 
   private setupDodgeInput(): void {
-    const kb = this.input.keyboard;
-    // A/D is the primary scheme; arrows are the secondary. Neither collides with
-    // the digit buffer, so typing an answer and dodging can happen at once.
-    this.moveKeys = {
-      left: kb ? [kb.addKey('A'), kb.addKey('LEFT')] : [],
-      right: kb ? [kb.addKey('D'), kb.addKey('RIGHT')] : [],
-    };
+    // A/D is the primary scheme; arrows are the secondary (both rebindable).
+    // Neither collides with the digit buffer, so typing an answer and dodging
+    // can happen at once.
+    this.bindings = sceneBindings(this);
+    this.keys = new KeyState(this);
 
     // Touch/mouse: drag anywhere in the field and the cannon tracks your finger.
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
@@ -707,8 +707,8 @@ export class GameScene extends Phaser.Scene {
     const { width } = this.scale;
 
     let dir = 0;
-    if (this.moveKeys.left.some((k) => k.isDown)) dir -= 1;
-    if (this.moveKeys.right.some((k) => k.isDown)) dir += 1;
+    if (this.keys.isDown(this.bindings.left)) dir -= 1;
+    if (this.keys.isDown(this.bindings.right)) dir += 1;
 
     let x = this.cannonX;
     if (dir !== 0) {

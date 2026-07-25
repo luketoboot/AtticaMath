@@ -75,8 +75,25 @@ export class SettingsScene extends Phaser.Scene {
     };
     crt.on('pointerdown', toggleCrt);
 
+    const controls = this.add
+      .text(width / 2, height * 0.66, '[ CONTROLS ]', {
+        fontFamily: FONT,
+        fontSize: '28px',
+        fontStyle: 'bold',
+        color: CSS.cyan,
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    controls.on('pointerover', () => controls.setColor(CSS.magentaHot));
+    controls.on('pointerout', () => controls.setColor(CSS.cyan));
+    const openControls = (): void => {
+      getAudio(this)?.play('ui');
+      this.scene.start('Controls');
+    };
+    controls.on('pointerdown', openControls);
+
     const reset = this.add
-      .text(width / 2, height * 0.72, '[ RESET SAVE ]', {
+      .text(width / 2, height * 0.78, '[ RESET SAVE ]', {
         fontFamily: FONT,
         fontSize: '22px',
         fontStyle: 'bold',
@@ -115,6 +132,7 @@ export class SettingsScene extends Phaser.Scene {
       [sfx],
       [music],
       [{ target: crt, onSelect: toggleCrt, onAdjust: toggleCrt }],
+      [{ target: controls, onSelect: openControls }],
       [{ target: reset, onSelect: resetSave }],
       [{ target: back, onSelect: goBack }],
     ]);

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
+import { onActionKey, sceneBindings } from '../input/KeyState';
 
 interface PauseData {
   /** Scene key to resume when unpausing. */
@@ -38,7 +39,8 @@ export class PauseScene extends Phaser.Scene {
     new MenuNav(this, [[resume], [quit]]);
     navHint(this, height * 0.72);
 
-    this.input.keyboard?.on('keydown-ESC', () => this.resumeTarget(data.target));
+    // Resume on the same key that paused, whatever it is bound to.
+    onActionKey(this, sceneBindings(this).pause, () => this.resumeTarget(data.target));
   }
 
   private resumeTarget(target: string): void {

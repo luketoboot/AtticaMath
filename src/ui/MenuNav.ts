@@ -48,6 +48,7 @@ export class MenuNav {
   /** Last column visited per row, so leaving and returning lands where you were. */
   private readonly cols: number[];
   private row = 0;
+  private enabled = true;
 
   constructor(scene: Phaser.Scene, rows: readonly (readonly MenuItem[])[]) {
     this.scene = scene;
@@ -105,9 +106,19 @@ export class MenuNav {
     this.render();
   }
 
+  /**
+   * Suspend navigation without tearing it down. Used while a screen grabs the
+   * next raw keypress (key rebinding) so nav keys don't double as movement.
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    this.cursor.setVisible(enabled && this.current() !== undefined);
+  }
+
   // --- internals ---
 
   private handleKey(event: KeyboardEvent): void {
+    if (!this.enabled) return;
     // Auto-repeat is discarded: a held ENTER from the previous screen would
     // otherwise land on whatever this screen opened focused on.
     if (event.repeat) return;

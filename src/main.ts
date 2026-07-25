@@ -3,6 +3,7 @@ import { PALETTE } from './fx/palette';
 import { BootScene } from './game/scenes/BootScene';
 import { BossScene } from './game/scenes/BossScene';
 import { BrainScanScene } from './game/scenes/BrainScanScene';
+import { ControlsScene } from './game/scenes/ControlsScene';
 import { DebriefScene } from './game/scenes/DebriefScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
 import { FactorScene } from './game/scenes/FactorScene';
@@ -37,6 +38,7 @@ const game = new Phaser.Game({
     ShopScene,
     BrainScanScene,
     SettingsScene,
+    ControlsScene,
     PauseScene,
   ],
 });
