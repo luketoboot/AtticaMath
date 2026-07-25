@@ -47,6 +47,58 @@ export function findFalloffTier(attempts: readonly PlacementAttempt[], cfg: Game
   return maxTier() + 1;
 }
 
+/**
+ * Patch a table from before the taxonomy grew. Skills added to the game after
+ * a profile finished placement are not keys in its table, and composeWave only
+ * buckets what the table contains — so without this, a new skill is unreachable
+ * for every existing profile, forever, and its Brain Scan row reads NO SIGNAL.
+ *
+ * The falloff tier is re-inferred from the ratings already in the table (the
+ * profile IS a placement result, just an older one), and only the missing ids
+ * are written. Idempotent: a table that already covers the taxonomy is
+ * returned unchanged.
+ */
+export function reconcileTable(table: SkillTable, cfg: GameConfig): SkillTable {
+  const missing = SKILLS.filter((s) => table[s.id] === undefined);
+  if (missing.length === 0) return table;
+
+  // Mean rating-vs-base gap per tier, over everything the table knows.
+  const gaps = new Map<number, { total: number; n: number }>();
+  for (const [id, state] of Object.entries(table)) {
+    const skill = SKILLS.find((s) => s.id === id);
+    if (!skill) continue; // a skill retired from the taxonomy rates nothing
+    const cur = gaps.get(skill.tier) ?? { total: 0, n: 0 };
+    cur.total += state.rating - skill.baseDifficulty;
+    cur.n += 1;
+    gaps.set(skill.tier, cur);
+  }
+
+  // First tier the profile sits below par in; an empty table pins it to 0 so a
+  // profile with no signal seeds everything at or under base, never fluent.
+  let falloff = gaps.size === 0 ? 0 : maxTier() + 1;
+  for (let t = 0; t <= maxTier(); t++) {
+    const g = gaps.get(t);
+    if (g !== undefined && g.total / g.n < 0) {
+      falloff = t;
+      break;
+    }
+  }
+
+  const next: SkillTable = { ...table };
+  for (const skill of missing) {
+    let rating: number;
+    if (skill.tier < falloff) {
+      rating = skill.baseDifficulty + cfg.waves.fluentMargin;
+    } else if (skill.tier === falloff) {
+      rating = skill.baseDifficulty;
+    } else {
+      rating = Math.max(cfg.rating.minRating, skill.baseDifficulty - cfg.waves.fluentMargin);
+    }
+    next[skill.id] = { rating, attempts: 0, lastAttemptWave: -1 };
+  }
+  return next;
+}
+
 /** Seed unattempted skills based on the falloff tier. Attempted skills keep their earned ratings. */
 export function seedFromPlacement(
   table: SkillTable,

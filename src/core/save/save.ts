@@ -3,6 +3,7 @@
  * localStorage is one adapter; a server-sync adapter can slot in later
  * without touching game code.
  */
+import { CONFIG, type GameConfig } from '../config';
 import { defaultEquipped, type Equipped } from '../cosmetics/cosmetics';
 import { defaultBindings, type KeyBindings } from '../input/bindings';
 import {
@@ -10,6 +11,7 @@ import {
   sanitizeVideoSettings,
   type VideoSettings,
 } from '../settings/video';
+import { reconcileTable } from '../skills/placement';
 import type { SkillTable } from '../skills/rating';
 
 export interface StorageAdapter {
@@ -157,14 +159,22 @@ export function migrate(raw: unknown): Save {
   return defaultSave();
 }
 
-export function loadSave(storage: StorageAdapter): Save {
+export function loadSave(storage: StorageAdapter, cfg: GameConfig = CONFIG): Save {
   const raw = storage.read(SAVE_KEY);
   if (raw === null) return defaultSave();
+  let save: Save;
   try {
-    return migrate(JSON.parse(raw));
+    save = migrate(JSON.parse(raw));
   } catch {
     return defaultSave();
   }
+  // Skills added to the taxonomy after this profile placed would otherwise be
+  // unreachable forever (composeWave only buckets what the table contains).
+  // Before placement there is nothing to patch: the sweep seeds every skill.
+  if (save.placementDone) {
+    return { ...save, skills: reconcileTable(save.skills, cfg) };
+  }
+  return save;
 }
 
 export function writeSave(storage: StorageAdapter, save: Save): void {
