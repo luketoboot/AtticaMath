@@ -57,6 +57,7 @@ export class MenuScene extends Phaser.Scene {
     const entries: readonly [string, string][] = [
       ['METEOR DEFENSE', 'ModeSelect'],
       ['EXPRESSION BUILDER', 'Expression'],
+      ['FACTOR STORM', 'Factor'],
       ['BOSS RUSH', 'Boss'],
       ['ARMORY', 'Shop'],
       ['BRAIN SCAN', 'BrainScan'],

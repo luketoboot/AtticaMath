@@ -218,6 +218,42 @@ export interface ExpressionConfig {
   scrapPenaltySeconds: number;
 }
 
+/** Factor Storm: the free-flight arena. See core/factor/. */
+export interface FactorConfig {
+  /** Rocks at the start of wave 1, and how many more each wave adds. */
+  baseRocks: number;
+  rocksPerWave: number;
+  maxRocks: number;
+  /** Factors multiplied together to build a rock; grows with the wave. */
+  baseFactorParts: number;
+  maxFactorParts: number;
+  minRockValue: number;
+  maxRockValue: number;
+  /** Drift speed (px/sec) of the biggest and smallest rocks. */
+  slowestDrift: number;
+  fastestDrift: number;
+  /** Radius mapping: rocks scale with the digit count of their value. */
+  minRadius: number;
+  maxRadius: number;
+  /** Ship handling: acceleration, drag per second, and a speed ceiling. */
+  shipAccel: number;
+  shipDrag: number;
+  shipMaxSpeed: number;
+  shipRadius: number;
+  /** Invulnerability after a collision. */
+  invulnSeconds: number;
+  /** Push applied to ship and rock when they collide. */
+  collisionKnockback: number;
+  /** Scoring. */
+  destroyBase: number;
+  splitBase: number;
+  scorePerValue: number;
+  primeMultiplier: number;
+  balancedMultiplier: number;
+  /** Speed given to the two halves of a split, pushing them apart. */
+  splitSpeed: number;
+}
+
 export interface BossConfig {
   /** First boss HP; later bosses multiply. */
   baseHp: number;
@@ -294,6 +330,7 @@ export interface GameConfig {
   combo: ComboConfig;
   drops: DropConfig;
   expression: ExpressionConfig;
+  factor: FactorConfig;
   boss: BossConfig;
   hazard: HazardConfig;
   score: ScoreConfig;
@@ -403,6 +440,31 @@ export const CONFIG: GameConfig = {
     fourChipRating: 850,
     misfireLockSeconds: 1.2,
     scrapPenaltySeconds: 1.5,
+  },
+  factor: {
+    baseRocks: 3,
+    rocksPerWave: 1,
+    maxRocks: 8,
+    baseFactorParts: 2,
+    maxFactorParts: 3,
+    minRockValue: 12,
+    maxRockValue: 240,
+    slowestDrift: 22,
+    fastestDrift: 95,
+    minRadius: 26,
+    maxRadius: 62,
+    shipAccel: 1500,
+    shipDrag: 2.6,
+    shipMaxSpeed: 460,
+    shipRadius: 18,
+    invulnSeconds: 1.4,
+    collisionKnockback: 260,
+    destroyBase: 120,
+    splitBase: 60,
+    scorePerValue: 1.5,
+    primeMultiplier: 2.5,
+    balancedMultiplier: 2,
+    splitSpeed: 90,
   },
   boss: {
     baseHp: 250,

@@ -5,6 +5,7 @@ import { BossScene } from './game/scenes/BossScene';
 import { BrainScanScene } from './game/scenes/BrainScanScene';
 import { DebriefScene } from './game/scenes/DebriefScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
+import { FactorScene } from './game/scenes/FactorScene';
 import { GameScene } from './game/scenes/GameScene';
 import { MenuScene } from './game/scenes/MenuScene';
 import { ModeSelectScene } from './game/scenes/ModeSelectScene';
@@ -28,6 +29,7 @@ const game = new Phaser.Game({
     ModeSelectScene,
     GameScene,
     ExpressionScene,
+    FactorScene,
     BossScene,
     DebriefScene,
     ShopScene,

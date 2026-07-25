@@ -268,7 +268,14 @@ already exist per family in the taxonomy, so this needs no new skill ids.
 **New core module.** `core/factor/` — factorisation, split legality, scoring,
 arena composition. Pure and testable, same as everything else in `core/`.
 
-Drops from §2 work unchanged here, collected by flying into them.
+**Targeting, as shipped.** Typing applies to the *nearest* rock, ringed in gold,
+and the lock is held while a buffer is being typed so drift cannot steal a shot
+halfway through a number. Flying is therefore both the dodge and the selection.
+A digit that no legal shot starts with clears the buffer and costs combo clock,
+exactly as in meteor mode; a buffer that is still going somewhere is held, so a
+rock of 63 lets you reach 21 without the 2 going off on the way.
+
+Drops from §2 would work here, collected by flying into them — not built yet.
 
 ---
 
