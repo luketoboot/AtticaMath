@@ -426,10 +426,67 @@ export interface CrtConfig {
   vignette: number;
 }
 
+export type DifficultyId = 'euclid' | 'gauss' | 'euler';
+
+/**
+ * A pacing tier for Meteor Defense, named for a mathematician rather than
+ * graded like homework. Difficulty here is pressure only — what the problems
+ * ARE stays with the adaptive skill model, which these knobs never touch.
+ */
+export interface DifficultyLevel {
+  id: DifficultyId;
+  label: string;
+  /** One word of what you are signing up for, shown under the selector. */
+  tagline: string;
+  /** Scales base and minimum fall times. Smaller is faster. */
+  fallTimeMult: number;
+  /** Scales base and minimum spawn gaps. Smaller means meteors stack up. */
+  spawnGapMult: number;
+  /** Exponent on the per-wave ramp factors — higher compounds the squeeze faster. */
+  rampPower: number;
+  /** Extra problems in every wave from the first. */
+  extraProblemsPerWave: number;
+  /** Problems added per wave (replaces waves.problemsPerWaveGrowth). */
+  problemGrowth: number;
+  /** Headroom added to the per-wave problem cap. */
+  maxProblemsBonus: number;
+}
+
+export interface DifficultyConfig {
+  /** Level preselected in the menu. */
+  fallback: DifficultyId;
+  levels: readonly DifficultyLevel[];
+}
+
+/** The tuned config for one difficulty: same game, pressure dialled. */
+export function applyDifficulty(cfg: GameConfig, id: DifficultyId): GameConfig {
+  const d = cfg.difficulty.levels.find((l) => l.id === id) ?? cfg.difficulty.levels[0];
+  if (!d) return cfg;
+  return {
+    ...cfg,
+    meteors: {
+      ...cfg.meteors,
+      baseFallSeconds: cfg.meteors.baseFallSeconds * d.fallTimeMult,
+      minFallSeconds: cfg.meteors.minFallSeconds * d.fallTimeMult,
+      fallSpeedupPerWave: Math.pow(cfg.meteors.fallSpeedupPerWave, d.rampPower),
+      baseSpawnGapSeconds: cfg.meteors.baseSpawnGapSeconds * d.spawnGapMult,
+      minSpawnGapSeconds: cfg.meteors.minSpawnGapSeconds * d.spawnGapMult,
+      spawnGapShrinkPerWave: Math.pow(cfg.meteors.spawnGapShrinkPerWave, d.rampPower),
+    },
+    waves: {
+      ...cfg.waves,
+      baseProblemsPerWave: cfg.waves.baseProblemsPerWave + d.extraProblemsPerWave,
+      problemsPerWaveGrowth: d.problemGrowth,
+      maxProblemsPerWave: cfg.waves.maxProblemsPerWave + d.maxProblemsBonus,
+    },
+  };
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
   meteors: MeteorConfig;
+  difficulty: DifficultyConfig;
   combo: ComboConfig;
   drops: DropConfig;
   expression: ExpressionConfig;
@@ -480,6 +537,45 @@ export const CONFIG: GameConfig = {
     placementWaves: 3,
     placementProblems: 8,
     coachedSkillWeight: 3,
+  },
+  difficulty: {
+    fallback: 'gauss',
+    levels: [
+      // Euclid is today's pacing exactly: every multiplier is the identity.
+      {
+        id: 'euclid',
+        label: 'EUCLID',
+        tagline: 'STEADY',
+        fallTimeMult: 1,
+        spawnGapMult: 1,
+        rampPower: 1,
+        extraProblemsPerWave: 0,
+        problemGrowth: 1,
+        maxProblemsBonus: 0,
+      },
+      {
+        id: 'gauss',
+        label: 'GAUSS',
+        tagline: 'BRISK',
+        fallTimeMult: 0.85,
+        spawnGapMult: 0.8,
+        rampPower: 1.6,
+        extraProblemsPerWave: 1,
+        problemGrowth: 2,
+        maxProblemsBonus: 2,
+      },
+      {
+        id: 'euler',
+        label: 'EULER',
+        tagline: 'RELENTLESS',
+        fallTimeMult: 0.7,
+        spawnGapMult: 0.62,
+        rampPower: 2.3,
+        extraProblemsPerWave: 3,
+        problemGrowth: 2,
+        maxProblemsBonus: 4,
+      },
+    ],
   },
   meteors: {
     baseFallSeconds: 10,

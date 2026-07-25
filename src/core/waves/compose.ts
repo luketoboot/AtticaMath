@@ -15,8 +15,8 @@ import {
   type SkillId,
 } from '../skills/taxonomy';
 
-/** The unrestricted default: every family, up to four digits. */
-export const OPEN_FILTER: SkillFilter = { op: 'all', maxDigits: 4 };
+/** The unrestricted default: every family, up to four digits, fractions in. */
+export const OPEN_FILTER: SkillFilter = { op: 'all', maxDigits: 4, fractions: true };
 
 /** Skills admitted by a filter that also have generator recipes. */
 function poolFor(filter: SkillFilter): SkillId[] {

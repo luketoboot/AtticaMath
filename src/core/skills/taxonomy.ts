@@ -111,18 +111,30 @@ export function skillsInTier(tier: number): SkillDef[] {
   return SKILLS.filter((s) => s.tier === tier);
 }
 
-/** Practice-mode filter: operation family plus a digit ceiling. */
+/** Practice-mode filter: operation family, a digit ceiling, and a fraction gate. */
 export interface SkillFilter {
   /** 'all' admits every family (including mixed order-of-operations). */
   op: SkillOp | 'all';
-  /** Problems range from 1 digit up to this cap. */
+  /** Integer problems range from 1 digit up to this cap. */
   maxDigits: 1 | 2 | 3 | 4;
+  /**
+   * Admit the fraction/percent family. Its own switch, not a digit tier:
+   * "two digits" describing 3/4 = ?% surprised everyone who asked for
+   * two-digit arithmetic, so digits now speak only for integers and this
+   * speaks for fractions.
+   */
+  fractions: boolean;
+}
+
+/** The fraction/percent family, which the digit cap deliberately ignores. */
+export function isFractionSkill(id: SkillId): boolean {
+  return id.startsWith('frac.') || id.startsWith('pct.');
 }
 
 export function skillMatchesFilter(def: SkillDef, filter: SkillFilter): boolean {
-  if (def.digits > filter.maxDigits) return false;
-  if (filter.op === 'all') return true;
-  return def.op === filter.op;
+  const opOk = filter.op === 'all' || def.op === filter.op;
+  if (isFractionSkill(def.id)) return filter.fractions && opOk;
+  return opOk && def.digits <= filter.maxDigits;
 }
 
 export function filteredSkillIds(filter: SkillFilter): SkillId[] {

@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
-import { CONFIG } from '../../core/config';
+import { applyDifficulty, CONFIG, type DifficultyId } from '../../core/config';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import type { Problem } from '../../core/generator/problem';
 import { RunSession } from '../../core/session';
+import type { SkillFilter } from '../../core/skills/taxonomy';
 import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs } from '../../core/skills/rating';
@@ -123,14 +124,16 @@ export class GameScene extends Phaser.Scene {
     this.cannonX = width / 2;
 
     const save = this.saves.save;
-    const filter = this.registry.get('meteorFilter') as
-      | { op: 'add' | 'sub' | 'mul' | 'div' | 'all'; maxDigits: 1 | 2 | 3 | 4 }
-      | undefined;
+    const filter = this.registry.get('meteorFilter') as SkillFilter | undefined;
+    // The pace level is a derived config, not session state: the session just
+    // reads whatever pacing numbers it is handed.
+    const level = this.registry.get('meteorDifficulty') as DifficultyId | undefined;
     this.session = new RunSession({
       seed: Date.now() >>> 0,
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
       placementDone: save.placementDone,
+      config: applyDifficulty(CONFIG, level ?? CONFIG.difficulty.fallback),
       ...(filter ? { filter } : {}),
     });
 
