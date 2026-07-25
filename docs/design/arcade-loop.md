@@ -176,12 +176,25 @@ want the explicit gamble.
 ### Proposed rule set
 
 **The hand is the wave's resource, not the target's.** Deal 6 chips at wave
-start. A successful hit consumes the chips used and draws 2 fresh ones; a miss
-draws 1. Now efficiency compounds — wasting `9 × 8` on a target that `17 + 1`
-would have cleared costs you the 9 and the 8 for the rest of the wave. This one
-change turns a quiz into a game, because the resource has a future.
+start. A successful hit consumes the chips used and refills the hand to six. So
+what changes is *which* chips you hold: spend the 25 on a target the 8 and 3
+would have cleared and the 25 is gone, replaced by whatever comes.
 
-Add `SCRAP`: discard a chip, draw a chip, costs 2 seconds of falling.
+*Shipped as refill-to-full rather than the drafted draw-2/draw-1.* Draw-2 shrank
+the hand over a wave, and a shrinking shared hand cannot keep two targets
+solvable at once without stranding one of them. Refilling keeps the guarantee
+cheap and moves the pressure onto chip quality, which is the more interesting
+axis anyway.
+
+Add `SCRAP`: discard a chip, draw a chip, costs combo clock (Q on the chip under
+the cursor).
+
+**Every live target stays solvable.** Spending chips can put a *different*
+falling target out of reach. When that happens the stranded target re-rolls to a
+number the new hand can make, signposted with a RECALIBRATED flash. The promise
+is that nothing falling at you is impossible; the alternative — letting a target
+become unanswerable through no fault of the player — is the one outcome this
+mode cannot survive.
 
 **Generate from the hand, not the other way round.** This requires a real
 solver — `core/expression/solve.ts`, pure, seeded, unit-tested. The search space

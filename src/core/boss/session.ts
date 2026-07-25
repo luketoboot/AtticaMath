@@ -10,8 +10,8 @@
 import { CONFIG, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
 import { creditsForRun, type RunStats } from '../economy/economy';
-import { evaluateTokens, type Op, type Token } from '../expression/expression';
-import { skillForOp } from '../expression/generate';
+import { evaluateTokens, type Token } from '../expression/expression';
+import { skillsForTokens } from '../expression/generate';
 import type { Problem } from '../generator/problem';
 import { createRng, type Rng } from '../rng';
 import { applyAttempt, targetLatencyMs, type SkillTable } from '../skills/rating';
@@ -94,19 +94,6 @@ export class BossSession {
     return this.attackQueue.shift()!;
   }
 
-  /** Skills exercised by a fired expression's surface operations. */
-  private tagTokens(tokens: readonly Token[]): SkillId[] {
-    const ids: SkillId[] = [];
-    for (let i = 1; i < tokens.length; i += 2) {
-      const o = (tokens[i] as { kind: 'op'; op: Op }).op;
-      const a = (tokens[i - 1] as { kind: 'num'; value: number }).value;
-      const b = (tokens[i + 1] as { kind: 'num'; value: number }).value;
-      const id = skillForOp(o, a, b);
-      if (!ids.includes(id)) ids.push(id);
-    }
-    return ids;
-  }
-
   /** Fire an expression at the boss. Any valid expression lands; value = damage. */
   fireExpression(tokens: readonly Token[], responseMs: number): DamageOutcome {
     const result = evaluateTokens(tokens);
@@ -115,7 +102,9 @@ export class BossSession {
       return { result: 'invalid', reason: result.reason };
     }
 
-    const skillIds = this.tagTokens(tokens);
+    // The operations as performed, not the adjacent pairs: in 5 + 3 × 4 the
+    // player does 3 × 4 and then 5 + 12, and the rating has to hear that.
+    const skillIds = skillsForTokens(tokens);
     if (skillIds.length > 0) {
       const difficulty = Math.max(
         ...skillIds.map((id) => {

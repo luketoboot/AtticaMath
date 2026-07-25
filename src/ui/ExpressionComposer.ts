@@ -33,6 +33,12 @@ export interface ComposerOptions {
   opsY: number;
   /** Called when the player fires (Enter/=/FIRE) with a non-empty expression. */
   onFire: (tokens: readonly Token[]) => void;
+  /**
+   * Called when the player scraps the chip at `index`. Omit to disable
+   * scrapping (boss mode deals a fresh hand per phase and has nothing to fish
+   * for). Return false to refuse.
+   */
+  onScrap?: (index: number) => boolean;
   /** Show the control hint line under the ops row. */
   showHint?: boolean;
 }
@@ -53,6 +59,7 @@ export class ExpressionComposer {
   private selVisible = false;
   private selRow = 0;
   private selCol = 0;
+  private locked = false;
   /** Row pinned by SPACE. Null lets the row follow what the expression needs next. */
   private homeRowOverride: HomeRow | null = null;
 
@@ -136,7 +143,9 @@ export class ExpressionComposer {
         .text(
           width / 2,
           scene.scale.height - 13,
-          'TYPE THE NUMBERS  ·  A S D F PICK THE LIT ROW  ·  SPACE SWITCHES ROW  ·  ENTER FIRE  ·  BACKSPACE UNDO',
+          opts.onScrap
+            ? 'TYPE NUMBERS  ·  ASDF PICKS THE LIT ROW  ·  SPACE SWITCHES ROW  ·  ENTER FIRE  ·  BACKSPACE UNDO  ·  ARROWS + Q SCRAP'
+            : 'TYPE THE NUMBERS  ·  A S D F PICK THE LIT ROW  ·  SPACE SWITCHES ROW  ·  ENTER FIRE  ·  BACKSPACE UNDO',
           { fontFamily: FONT, fontSize: '13px', color: CSS.cyanDim },
         )
         .setOrigin(0.5);
@@ -150,9 +159,24 @@ export class ExpressionComposer {
     return this.tokens;
   }
 
+  /**
+   * Freeze input. Used for the misfire lockout: firing at nothing costs time
+   * and nothing else, and the lock is what makes that time real.
+   */
+  setLocked(locked: boolean): void {
+    this.locked = locked;
+    this.exprText.setAlpha(locked ? 0.35 : 1);
+    for (const chip of this.chips) chip.container.setAlpha(locked ? 0.3 : chip.used ? 0.35 : 1);
+  }
+
   /** Route a keydown event into the composer. Returns true if consumed. */
   handleKey(event: KeyboardEvent): boolean {
+    if (this.locked) return true;
     const key = event.key;
+    if (key === 'q' || key === 'Q') {
+      this.scrapSelected();
+      return true;
+    }
     if (key === 'Enter' || key === '=') {
       this.fire();
       return true;
@@ -411,6 +435,24 @@ export class ExpressionComposer {
     const rowLen = this.selRow === 0 ? this.chips.length : this.opButtons.length;
     this.selCol = Phaser.Math.Wrap(this.selCol, 0, Math.max(1, rowLen));
     this.updateSelectionHighlight();
+  }
+
+  /**
+   * Throw away the chip under the cursor for a fresh one. Costs no resource —
+   * the price is the combo clock and the targets still falling while you fish.
+   */
+  private scrapSelected(): void {
+    const index = this.selVisible && this.selRow === 0 ? this.selCol : -1;
+    const chip = this.chips[index];
+    if (!this.opts.onScrap || !chip || chip.used) {
+      this.errorCue();
+      return;
+    }
+    if (!this.opts.onScrap(index)) {
+      this.errorCue();
+      return;
+    }
+    getAudio(this.scene)?.play('ui');
   }
 
   private activateSelection(): void {

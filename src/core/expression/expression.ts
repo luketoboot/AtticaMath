@@ -22,13 +22,37 @@ export type EvalResult =
   | { ok: true; value: number }
   | { ok: false; reason: 'malformed' | 'negative' | 'fractional' };
 
+/**
+ * One operation as actually carried out, with the operands it actually had.
+ *
+ * These are not the adjacent pairs in the token list: in `5 + 3 × 4` the player
+ * performs 3 × 4 and then 5 + 12, never 5 + 3. Rating updates have to be told
+ * the real steps or they credit skills the player never used.
+ */
+export interface EvalStep {
+  op: Op;
+  lhs: number;
+  rhs: number;
+  result: number;
+}
+
 /** Evaluate a token list. Returns ok:false for structural or rule violations. */
 export function evaluateTokens(tokens: readonly Token[]): EvalResult {
+  const detailed = evaluateSteps(tokens);
+  return detailed.ok ? { ok: true, value: detailed.value } : { ok: false, reason: detailed.reason };
+}
+
+/** As `evaluateTokens`, but also reports every operation performed, in order. */
+export function evaluateSteps(
+  tokens: readonly Token[],
+): { ok: true; value: number; steps: EvalStep[] } | { ok: false; reason: 'malformed' | 'negative' | 'fractional' } {
   if (tokens.length === 0 || tokens.length % 2 === 0) return { ok: false, reason: 'malformed' };
   for (let i = 0; i < tokens.length; i++) {
     const expectNum = i % 2 === 0;
     if (expectNum !== (tokens[i]!.kind === 'num')) return { ok: false, reason: 'malformed' };
   }
+
+  const steps: EvalStep[] = [];
 
   // Pass 1: resolve × and ÷ left to right.
   const values: number[] = [(tokens[0] as { kind: 'num'; value: number }).value];
@@ -44,6 +68,7 @@ export function evaluateTokens(tokens: readonly Token[]): EvalResult {
       } else {
         values.push(lhs * rhs);
       }
+      steps.push({ op: o, lhs, rhs, result: values[values.length - 1]! });
     } else {
       pendingOps.push(o);
       values.push(rhs);
@@ -54,10 +79,13 @@ export function evaluateTokens(tokens: readonly Token[]): EvalResult {
   let acc = values[0]!;
   for (let i = 0; i < pendingOps.length; i++) {
     const rhs = values[i + 1]!;
-    acc = pendingOps[i] === '+' ? acc + rhs : acc - rhs;
+    const o = pendingOps[i]!;
+    const lhs = acc;
+    acc = o === '+' ? acc + rhs : acc - rhs;
     if (acc < 0) return { ok: false, reason: 'negative' };
+    steps.push({ op: o, lhs, rhs, result: acc });
   }
-  return { ok: true, value: acc };
+  return { ok: true, value: acc, steps };
 }
 
 /** Render tokens for display, e.g. "4 × 7 + 3". */

@@ -1,24 +1,28 @@
 /**
- * Expression target generation. Builds a random expression from weighted
- * operators, keeps it if the evaluator accepts it, and hands the player the
- * canonical chips plus decoys. Solvability is guaranteed by construction.
+ * Expression target generation.
+ *
+ * Targets are generated *from the hand the player is holding*, using the solver,
+ * so a target is never unreachable and the game always knows par. The old
+ * approach — build a random expression, then deal its chips back as the hand —
+ * made every puzzle a "use everything" exercise with exactly one intended
+ * route, which is neither Countdown nor a game.
  */
 import type { ExpressionConfig } from '../config';
 import type { Rng } from '../rng';
 import { getSkill, type SkillId } from '../skills/taxonomy';
-import { evaluateTokens, num, op, OPS, type Op, type Token } from './expression';
+import { evaluateSteps, type Op, type Token } from './expression';
+import { reachableTargets, type TargetInfo } from './solve';
 
 export interface ExpressionProblem {
   id: number;
   target: number;
-  /** Number chips available to the player (canonical chips + decoys, shuffled). */
-  hand: number[];
-  /** One known solution (never shown to the player). */
-  canonical: Token[];
+  /** Fewest chips that can make it from the hand it was generated against. */
+  par: number;
+  /** How many distinct expressions could make it at generation time. */
+  solutionCount: number;
+  /** Skills the par route exercises — the estimate, used for pacing and misses. */
   skillIds: SkillId[];
   difficulty: number;
-  /** Chips the canonical solution consumes. */
-  chipCount: number;
 }
 
 let nextId = 1;
@@ -46,25 +50,27 @@ export function skillForOp(o: Op, a: number, b: number): SkillId {
   }
 }
 
-function numberForOp(o: Op, rng: Rng): number {
-  switch (o) {
-    case '×':
-    case '÷':
-      return rng.int(2, 12);
-    case '+':
-    case '-':
-      return rng.chance(0.6) ? rng.int(2, 9) : rng.int(10, 25);
+/**
+ * The skills an expression actually exercises, from the operations as
+ * performed. This is what rating updates must be given: two players who reach
+ * 48 by `6 × 8` and by `50 − 2` did not practise the same thing.
+ */
+export function skillsForTokens(tokens: readonly Token[]): SkillId[] {
+  const result = evaluateSteps(tokens);
+  if (!result.ok) return [];
+  const skills: SkillId[] = [];
+  for (const step of result.steps) {
+    const id = skillForOp(step.op, step.lhs, step.rhs);
+    if (!skills.includes(id)) skills.push(id);
   }
+  return skills;
 }
 
-function pickOp(weights: Readonly<Record<Op, number>>, rng: Rng): Op {
-  const total = OPS.reduce((s, o) => s + weights[o], 0);
-  let roll = rng.next() * total;
-  for (const o of OPS) {
-    roll -= weights[o];
-    if (roll <= 0) return o;
-  }
-  return OPS[OPS.length - 1]!;
+/** Operators an expression uses, in order of first appearance. */
+function opsUsed(tokens: readonly Token[]): Op[] {
+  const ops: Op[] = [];
+  for (const t of tokens) if (t.kind === 'op' && !ops.includes(t.op)) ops.push(t.op);
+  return ops;
 }
 
 /**
@@ -75,73 +81,86 @@ export function opWeightsFromUsage(
   usage: Readonly<Record<Op, number>>,
   cfg: ExpressionConfig,
 ): Record<Op, number> {
-  const total = OPS.reduce((s, o) => s + usage[o], 0);
+  const ops: Op[] = ['+', '-', '×', '÷'];
+  const total = ops.reduce((s, o) => s + usage[o], 0);
   const weights = { '+': 1, '-': 1, '×': 1, '÷': 1 } as Record<Op, number>;
   if (total < 8) return weights; // not enough signal yet
-  for (const o of OPS) {
-    const share = usage[o] / total;
-    if (share < 0.15) weights[o] = cfg.avoidedOpWeight;
+  for (const o of ops) {
+    if (usage[o] / total < 0.15) weights[o] = cfg.avoidedOpWeight;
   }
   return weights;
 }
 
-function tryBuild(chipCount: number, weights: Readonly<Record<Op, number>>, rng: Rng): Token[] | null {
-  const tokens: Token[] = [];
-  let firstOp: Op = pickOp(weights, rng);
-  tokens.push(num(numberForOp(firstOp, rng)));
-  for (let i = 1; i < chipCount; i++) {
-    const o = i === 1 ? firstOp : pickOp(weights, rng);
-    tokens.push(op(o));
-    tokens.push(num(numberForOp(o, rng)));
-  }
-  const result = evaluateTokens(tokens);
-  if (!result.ok) return null;
-  if (result.value < 3 || result.value > 999) return null;
-  // Reject targets the hand trivially contains.
-  if (tokens.some((t) => t.kind === 'num' && t.value === result.value)) return null;
-  return tokens;
+export interface TargetOptions {
+  /** Chips the player should need — the generator aims here and settles nearby. */
+  desiredPar: number;
+  /** Hard ceiling on chips per expression. */
+  maxChips: number;
+  /** Operator weights, so avoided operators get pulled back into play. */
+  weights: Readonly<Record<Op, number>>;
 }
 
-export function generateExpressionProblem(
-  chipCount: number,
-  weights: Readonly<Record<Op, number>>,
+/** Difficulty of a route: hardest component skill, plus a premium for length. */
+function difficultyOf(tokens: readonly Token[], par: number): number {
+  const skills = skillsForTokens(tokens);
+  if (skills.length === 0) return 0;
+  return Math.max(...skills.map((s) => getSkill(s).baseDifficulty)) + 60 * (par - 2);
+}
+
+/**
+ * Pick a target the given hand can make. Returns null only if the hand cannot
+ * form any legal expression at all, which the caller must handle by redealing.
+ */
+export function generateTargetFromHand(
+  hand: readonly number[],
+  opts: TargetOptions,
   cfg: ExpressionConfig,
   rng: Rng,
-): ExpressionProblem {
-  let canonical: Token[] | null = null;
-  for (let attempt = 0; attempt < 300 && !canonical; attempt++) {
-    canonical = tryBuild(chipCount, weights, rng);
-  }
-  if (!canonical) {
-    // Guaranteed fallback: simple bridging addition.
-    const a = rng.int(5, 9);
-    const b = rng.int(11 - a, 9);
-    canonical = [num(a), op('+'), num(b)];
-  }
+  /** Precomputed reachable set for this hand; recomputed if omitted. Callers
+   * that generate several targets per hand should pass it — the walk is the
+   * expensive part and the answer only changes when the hand does. */
+  precomputed?: ReadonlyMap<number, TargetInfo>,
+): ExpressionProblem | null {
+  const reach = precomputed ?? reachableTargets(hand, opts.maxChips);
+  const candidates: { value: number; info: TargetInfo; weight: number }[] = [];
 
-  const evalResult = evaluateTokens(canonical);
-  if (!evalResult.ok) throw new Error('canonical expression must evaluate');
-  const target = evalResult.value;
+  for (const [value, info] of reach) {
+    if (value < cfg.minTarget || value > cfg.maxTarget) continue;
+    // A target sitting in the hand is a non-puzzle: the player would just fire it.
+    if (hand.includes(value)) continue;
 
-  const chips = canonical.filter((t): t is { kind: 'num'; value: number } => t.kind === 'num').map((t) => t.value);
-  const decoys: number[] = [];
-  while (decoys.length < cfg.handDecoys) {
-    const d = rng.int(2, 12);
-    if (d !== target) decoys.push(d);
-  }
-  const hand = rng.shuffle([...chips, ...decoys]);
+    // Aim for the wanted size; nearby sizes stay eligible at a discount so a
+    // hand that cannot reach the ideal still produces something to shoot.
+    const distance = Math.abs(info.par - opts.desiredPar);
+    if (distance > 1) continue;
+    let weight = distance === 0 ? 4 : 1;
 
-  const skillIds: SkillId[] = [];
-  for (let i = 1; i < canonical.length; i += 2) {
-    const o = (canonical[i] as { kind: 'op'; op: Op }).op;
-    const a = (canonical[i - 1] as { kind: 'num'; value: number }).value;
-    const b = (canonical[i + 1] as { kind: 'num'; value: number }).value;
-    const skill = skillForOp(o, a, b);
-    if (!skillIds.includes(skill)) skillIds.push(skill);
+    // Nudge toward routes using operators the player has been avoiding.
+    const ops = opsUsed(info.example);
+    weight *= Math.max(...ops.map((o) => opts.weights[o]));
+
+    candidates.push({ value, info, weight });
   }
 
-  const difficulty =
-    Math.max(...skillIds.map((s) => getSkill(s).baseDifficulty)) + 60 * (chips.length - 2);
+  if (candidates.length === 0) return null;
 
-  return { id: nextId++, target, hand, canonical, skillIds, difficulty, chipCount: chips.length };
+  const total = candidates.reduce((s, c) => s + c.weight, 0);
+  let roll = rng.next() * total;
+  let chosen = candidates[candidates.length - 1]!;
+  for (const c of candidates) {
+    roll -= c.weight;
+    if (roll <= 0) {
+      chosen = c;
+      break;
+    }
+  }
+
+  return {
+    id: nextId++,
+    target: chosen.value,
+    par: chosen.info.par,
+    solutionCount: chosen.info.count,
+    skillIds: skillsForTokens(chosen.info.example),
+    difficulty: difficultyOf(chosen.info.example, chosen.info.par),
+  };
 }

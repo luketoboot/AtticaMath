@@ -183,23 +183,39 @@ export interface ExpressionConfig {
   baseTargetsPerWave: number;
   targetsPerWaveGrowth: number;
   maxTargetsPerWave: number;
-  /** Decoy number chips added to the hand beyond the canonical solution's chips. */
-  handDecoys: number;
+  /** Chips held at once. Refilled to this after every successful fire. */
+  handSize: number;
+  /** Targets falling at the same time. */
+  targetsOnScreen: number;
+  /** Hard ceiling on chips per expression — also the solver's search depth. */
+  maxChips: number;
+  /** Chips are drawn from this range, with an occasional big one mixed in. */
+  chipMin: number;
+  chipMax: number;
+  bigChips: readonly number[];
+  bigChipChance: number;
+  /** Legal target range. */
+  minTarget: number;
+  maxTarget: number;
   /** Seconds a target takes to fall at wave 1. */
   baseFallSeconds: number;
   fallSpeedupPerWave: number;
   minFallSeconds: number;
-  /** Extra fall seconds per canonical chip beyond two (bigger puzzles get more time). */
+  /** Extra fall seconds per chip of par beyond two (bigger puzzles get more time). */
   extraSecondsPerChip: number;
-  /** Score bonus per unused number chip on a successful fire. */
-  efficiencyBonusPerChip: number;
+  /** Score bonus for solving a target in par chips. */
+  parBonus: number;
   /** Score bonus per distinct operator in the fired expression. */
   varietyBonusPerOperator: number;
   /** Weight multiplier for operators the player has been avoiding. */
   avoidedOpWeight: number;
-  /** Overall rating thresholds that unlock 3-chip and 4-chip puzzles. */
+  /** Overall rating thresholds that raise the target size to 3 and 4 chips. */
   threeChipRating: number;
   fourChipRating: number;
+  /** Composer lockout after firing an expression no live target wanted. */
+  misfireLockSeconds: number;
+  /** Combo clock a scrapped chip costs. */
+  scrapPenaltySeconds: number;
 }
 
 export interface BossConfig {
@@ -367,16 +383,26 @@ export const CONFIG: GameConfig = {
     baseTargetsPerWave: 5,
     targetsPerWaveGrowth: 1,
     maxTargetsPerWave: 9,
-    handDecoys: 2,
-    baseFallSeconds: 25,
+    handSize: 6,
+    targetsOnScreen: 2,
+    maxChips: 4,
+    chipMin: 2,
+    chipMax: 12,
+    bigChips: [15, 20, 25, 50],
+    bigChipChance: 0.15,
+    minTarget: 3,
+    maxTarget: 999,
+    baseFallSeconds: 18,
     fallSpeedupPerWave: 0.95,
-    minFallSeconds: 12,
-    extraSecondsPerChip: 6,
-    efficiencyBonusPerChip: 40,
+    minFallSeconds: 9,
+    extraSecondsPerChip: 5,
+    parBonus: 150,
     varietyBonusPerOperator: 60,
     avoidedOpWeight: 2.5,
     threeChipRating: 550,
     fourChipRating: 850,
+    misfireLockSeconds: 1.2,
+    scrapPenaltySeconds: 1.5,
   },
   boss: {
     baseHp: 250,
