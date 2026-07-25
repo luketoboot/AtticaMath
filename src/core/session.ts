@@ -28,6 +28,7 @@ import {
   descentFrozen,
   dropMultiplier,
   rollDrop,
+  shieldActive,
   tickDrops,
   type DropKind,
   type DropState,
@@ -52,8 +53,6 @@ export interface RunSessionInit {
   /** Lifetime wave counter from the save (recency/decay baseline). */
   totalWavesBefore: number;
   placementDone: boolean;
-  ownedUpgrades: readonly string[];
-  loadout: readonly string[];
   config?: GameConfig;
   /** Practice-mode restriction; omitted = full adaptive mix. */
   filter?: SkillFilter;
@@ -86,8 +85,6 @@ export class RunSession {
   /** Meteor shots that connected — HP lost to dodging, not to math. */
   shotsTaken = 0;
   hp: number;
-  readonly loadout: readonly string[];
-  private shieldUsed = false;
   private combo: ComboState = createCombo();
   /** Landings this wave; a clean wave carries the combo through the breather. */
   private missesThisWave = 0;
@@ -102,8 +99,7 @@ export class RunSession {
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.placementDone = init.placementDone;
-    this.loadout = init.loadout.filter((u) => init.ownedUpgrades.includes(u));
-    this.hp = this.cfg.meteors.baseHp + (this.loadout.includes('upgrade.hp') ? 2 : 0);
+    this.hp = this.cfg.meteors.baseHp;
     this.maxHp = this.hp; // repair tops up to where the run started, never past it
     this.filter = init.filter ?? OPEN_FILTER;
   }
@@ -282,10 +278,8 @@ export class RunSession {
     this.misses += 1;
     this.missesThisWave += 1;
     this.combo = comboBreak(this.combo);
-    if (this.loadout.includes('upgrade.shield') && !this.shieldUsed) {
-      this.shieldUsed = true;
-      return;
-    }
+    // A shield pickup eats the damage; the landing still breaks the combo.
+    if (shieldActive(this.drops)) return;
     this.hp -= 1;
   }
 
@@ -332,7 +326,6 @@ export class RunSession {
     const m = this.cfg.meteors;
     let secs = m.baseFallSeconds * Math.pow(m.fallSpeedupPerWave, this.waveInRun - 1);
     secs += (difficulty * m.difficultySlowdownMs) / 1000;
-    if (this.loadout.includes('upgrade.slowfield')) secs *= 1.15;
     secs /= paceFallMultiplier(this.combo, this.cfg.combo);
     return Math.max(m.minFallSeconds, secs);
   }
@@ -368,9 +361,12 @@ export class RunSession {
    * the miss shield stays reserved for problems the player failed to answer.
    */
   takeDamage(): void {
-    this.hp -= 1;
     this.shotsTaken += 1;
     this.combo = comboDamaged(this.combo, this.cfg.combo);
+    // The shield covers everything that hurts, not just landings. A player who
+    // just caught one should not still be losing HP to something on screen.
+    if (shieldActive(this.drops)) return;
+    this.hp -= 1;
   }
 
   /** Spawn gap in seconds for the current wave. */

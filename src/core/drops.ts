@@ -12,9 +12,16 @@
 import type { DropConfig } from './config';
 import type { Rng } from './rng';
 
-export type DropKind = 'freeze' | 'nuke' | 'repair' | 'double' | 'chain';
+export type DropKind = 'freeze' | 'nuke' | 'repair' | 'double' | 'chain' | 'shield';
 
-export const DROP_KINDS: readonly DropKind[] = ['freeze', 'nuke', 'repair', 'double', 'chain'];
+export const DROP_KINDS: readonly DropKind[] = [
+  'freeze',
+  'nuke',
+  'repair',
+  'double',
+  'chain',
+  'shield',
+];
 
 /** Short label printed on the falling pickup. */
 export const DROP_LABEL: Readonly<Record<DropKind, string>> = {
@@ -23,6 +30,7 @@ export const DROP_LABEL: Readonly<Record<DropKind, string>> = {
   repair: 'REPAIR',
   double: 'x2',
   chain: 'CHAIN',
+  shield: 'SHIELD',
 };
 
 export interface DropState {
@@ -32,18 +40,21 @@ export interface DropState {
   doubleLeft: number;
   /** Kills still covered by the chain shot. */
   chainLeft: number;
+  /** Seconds of damage immunity remaining. */
+  shieldLeft: number;
 }
 
 export function createDrops(): DropState {
-  return { freezeLeft: 0, doubleLeft: 0, chainLeft: 0 };
+  return { freezeLeft: 0, doubleLeft: 0, chainLeft: 0, shieldLeft: 0 };
 }
 
 export function tickDrops(state: DropState, dtSeconds: number): DropState {
-  if (state.freezeLeft <= 0 && state.doubleLeft <= 0) return state;
+  if (state.freezeLeft <= 0 && state.doubleLeft <= 0 && state.shieldLeft <= 0) return state;
   return {
     freezeLeft: Math.max(0, state.freezeLeft - dtSeconds),
     doubleLeft: Math.max(0, state.doubleLeft - dtSeconds),
     chainLeft: state.chainLeft,
+    shieldLeft: Math.max(0, state.shieldLeft - dtSeconds),
   };
 }
 
@@ -61,6 +72,8 @@ export function applyDrop(state: DropState, kind: DropKind, cfg: DropConfig): Dr
       return { ...state, doubleLeft: Math.max(state.doubleLeft, cfg.doubleSeconds) };
     case 'chain':
       return { ...state, chainLeft: state.chainLeft + cfg.chainKills };
+    case 'shield':
+      return { ...state, shieldLeft: Math.max(state.shieldLeft, cfg.shieldSeconds) };
     case 'nuke':
     case 'repair':
       return state;
@@ -69,6 +82,11 @@ export function applyDrop(state: DropState, kind: DropKind, cfg: DropConfig): Dr
 
 export function descentFrozen(state: DropState): boolean {
   return state.freezeLeft > 0;
+}
+
+/** Damage is being absorbed. The hit still happens — it just costs nothing. */
+export function shieldActive(state: DropState): boolean {
+  return state.shieldLeft > 0;
 }
 
 export function dropMultiplier(state: DropState, cfg: DropConfig): number {

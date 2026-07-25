@@ -130,8 +130,6 @@ export class GameScene extends Phaser.Scene {
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
       placementDone: save.placementDone,
-      ownedUpgrades: save.ownedUpgrades,
-      loadout: save.loadout,
       ...(filter ? { filter } : {}),
     });
 
@@ -237,10 +235,6 @@ export class GameScene extends Phaser.Scene {
     this.banner(`WAVE ${plan.wave}`, CSS.magenta);
     const audio = getAudio(this);
     audio?.play('wave');
-    // Slow field spins up audibly at the top of every wave.
-    if (this.session.loadout.includes('upgrade.slowfield')) {
-      this.time.delayedCall(220, () => audio?.play('slowfield'));
-    }
     glowPulse(this, CONFIG.juice.glowPulseKill);
 
     // The wave meteors start shooting is the one the player has to be told about.
@@ -491,10 +485,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Closest to the ground first; spread cannon and chain pickups hit all matches.
+    // Closest to the ground first; a live chain pickup widens the shot to every
+    // meteor sharing the answer.
     matches.sort((a, b) => b.container.y - a.container.y);
-    const wide = this.session.loadout.includes('upgrade.spread') || this.session.chainReady;
-    const targets = wide ? matches : [matches[0]!];
+    const targets = this.session.chainReady ? matches : [matches[0]!];
     // The chain pickup is spent per shot, not per meteor it happens to catch.
     if (this.session.chainReady) this.session.useChain();
 
@@ -636,6 +630,10 @@ export class GameScene extends Phaser.Scene {
       case 'freeze':
         audio?.play('slowfield');
         this.cameras.main.flash(160, 0, 220, 255);
+        break;
+      case 'shield':
+        audio?.play('shield');
+        this.cameras.main.flash(220, 255, 230, 77);
         break;
       default:
         audio?.play('purchase');
@@ -1093,6 +1091,7 @@ export class GameScene extends Phaser.Scene {
     if (d.freezeLeft > 0) parts.push(`FREEZE ${d.freezeLeft.toFixed(1)}`);
     if (d.doubleLeft > 0) parts.push(`x2 ${d.doubleLeft.toFixed(1)}`);
     if (d.chainLeft > 0) parts.push(`CHAIN ${d.chainLeft}`);
+    if (d.shieldLeft > 0) parts.push(`SHIELD ${d.shieldLeft.toFixed(1)}`);
     return parts.join('  ·  ');
   }
 

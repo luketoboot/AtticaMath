@@ -101,10 +101,14 @@ export interface DropConfig {
   doubleMultiplier: number;
   /** Kills covered by one chain pickup. */
   chainKills: number;
+  /** Seconds of damage immunity from a shield pickup. */
+  shieldSeconds: number;
   /** HP at or below which repair takes its boosted weight. */
   lowHpAt: number;
   lowHpRepairWeight: number;
-  weights: Readonly<Record<'freeze' | 'nuke' | 'repair' | 'double' | 'chain', number>>;
+  weights: Readonly<
+    Record<'freeze' | 'nuke' | 'repair' | 'double' | 'chain' | 'shield', number>
+  >;
 }
 
 /**
@@ -279,8 +283,6 @@ export interface EconomyConfig {
   creditsPerScore: number;
   /** Flat bonus per wave survived. */
   creditsPerWave: number;
-  /** Purchasable upgrade prices keyed by upgrade id. */
-  prices: Readonly<Record<string, number>>;
 }
 
 /**
@@ -480,9 +482,10 @@ export const CONFIG: GameConfig = {
     doubleSeconds: 8,
     doubleMultiplier: 2,
     chainKills: 3,
+    shieldSeconds: 8,
     lowHpAt: 2,
     lowHpRepairWeight: 6,
-    weights: { freeze: 3, nuke: 2, repair: 2, double: 3, chain: 3 },
+    weights: { freeze: 3, nuke: 2, repair: 2, double: 3, chain: 3, shield: 3 },
   },
   combo: {
     baseWindowSeconds: 4.5,
@@ -638,12 +641,6 @@ export const CONFIG: GameConfig = {
   economy: {
     creditsPerScore: 0.01,
     creditsPerWave: 15,
-    prices: {
-      'upgrade.hp': 200,
-      'upgrade.slowfield': 350,
-      'upgrade.shield': 400,
-      'upgrade.spread': 500,
-    },
   },
   juice: {
     killShakeMs: 160,

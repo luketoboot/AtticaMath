@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
+import { hullFor, trailFor } from '../../core/cosmetics/cosmetics';
 import { isCompleteShot, isPrime, isViablePrefix } from '../../core/factor/factor';
 import { FactorSession, type Rock } from '../../core/factor/session';
 import {
@@ -16,6 +17,7 @@ import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
+import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -111,8 +113,6 @@ export class FactorScene extends Phaser.Scene {
       seed: Date.now() >>> 0,
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
-      ownedUpgrades: save.ownedUpgrades,
-      loadout: save.loadout,
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
@@ -583,21 +583,14 @@ export class FactorScene extends Phaser.Scene {
   }
 
   private drawShip(): void {
+    const save = this.saves.save;
     const g = this.add.graphics();
-    g.fillStyle(PALETTE.cyan, 1);
-    g.fillTriangle(0, -20, -14, 16, 14, 16);
-    g.fillStyle(PALETTE.black, 1);
-    g.fillTriangle(0, -8, -7, 10, 7, 10);
-    g.fillStyle(PALETTE.magenta, 1);
-    g.fillRect(-14, 14, 28, 4);
+    drawHull(g, hullFor(save.equipped.hull), PALETTE.cyan, CONFIG.flight.shipRadius);
 
     // Exhaust behind the hull. With rotate-and-thrust the nose no longer
     // follows the velocity, so the player needs to see where thrust is going.
     this.flame = this.add.graphics();
-    this.flame.fillStyle(PALETTE.yellow, 1);
-    this.flame.fillTriangle(-8, 18, 8, 18, 0, 38);
-    this.flame.fillStyle(PALETTE.magentaHot, 1);
-    this.flame.fillTriangle(-4, 18, 4, 18, 0, 29);
+    drawFlame(this.flame, trailFor(save.equipped.trail), CONFIG.flight.shipRadius);
     this.flame.setVisible(false);
 
     this.ship = this.add.container(this.shipX, this.shipY, [this.flame, g]).setDepth(5);

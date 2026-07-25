@@ -14,7 +14,8 @@ describe('save round trip', () => {
     const storage = memoryAdapter();
     const save = defaultSave();
     save.credits = 420;
-    save.ownedUpgrades = ['upgrade.hp'];
+    save.ownedCosmetics = ['hull.wedge'];
+    save.equipped = { hull: 'hull.wedge', trail: 'trail.ember' };
     save.skills['add.single'] = { rating: 777, attempts: 12, lastAttemptWave: 4 };
     writeSave(storage, save);
     expect(loadSave(storage)).toEqual(save);
@@ -37,7 +38,7 @@ describe('migrate', () => {
     expect(migrate(save)).toEqual(save);
   });
 
-  it('migrates v1 through to current, equipping upgrades and adding milestones + keybindings', () => {
+  it('migrates v1 all the way to current, refunding the retired upgrades', () => {
     const v1 = {
       version: 1,
       skills: { 'add.single': { rating: 700, attempts: 9, lastAttemptWave: 3 } },
@@ -52,7 +53,11 @@ describe('migrate', () => {
     const migrated = migrate(v1);
     expect(migrated.version).toBe(CURRENT_SAVE_VERSION);
     expect(migrated.milestones).toEqual([]);
-    expect(migrated.loadout).toEqual(['upgrade.hp', 'upgrade.shield']);
+    // upgrade.hp (200) + upgrade.shield (400) come back as credits, since the
+    // gear itself no longer exists to be carried forward.
+    expect(migrated.credits).toBe(300 + 200 + 400);
+    expect(migrated.ownedCosmetics).toEqual([]);
+    expect(migrated.equipped).toEqual(defaultSave().equipped);
     expect(migrated.skills).toEqual(v1.skills);
     expect(migrated.bestScore).toBe(9000);
     expect(migrated.keybindings).toEqual(defaultSave().keybindings);

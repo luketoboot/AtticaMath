@@ -3,6 +3,7 @@
  * localStorage is one adapter; a server-sync adapter can slot in later
  * without touching game code.
  */
+import { defaultEquipped, type Equipped } from '../cosmetics/cosmetics';
 import { defaultBindings, type KeyBindings } from '../input/bindings';
 import type { SkillTable } from '../skills/rating';
 
@@ -13,7 +14,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 3;
+export const CURRENT_SAVE_VERSION = 4;
 
 export interface SaveV1 {
   version: 1;
@@ -45,7 +46,14 @@ export interface SaveV3 extends Omit<SaveV2, 'version'> {
   keybindings: KeyBindings;
 }
 
-export type Save = SaveV3;
+/** Stat upgrades are gone; credits buy cosmetics that change nothing. */
+export interface SaveV4 extends Omit<SaveV3, 'version' | 'ownedUpgrades' | 'loadout'> {
+  version: 4;
+  ownedCosmetics: string[];
+  equipped: Equipped;
+}
+
+export type Save = SaveV4;
 
 export function defaultSave(): Save {
   return {
@@ -54,14 +62,29 @@ export function defaultSave(): Save {
     totalWaves: 0,
     placementDone: false,
     credits: 0,
-    ownedUpgrades: [],
-    loadout: [],
+    ownedCosmetics: [],
+    equipped: defaultEquipped(),
     settings: { crtEnabled: true, musicVolume: 0.8, sfxVolume: 0.9 },
     bestScore: 0,
     milestones: [],
     keybindings: defaultBindings(),
   };
 }
+
+/**
+ * What the retired upgrades cost, kept here so v3 saves can be refunded.
+ *
+ * A migration is the one place it is right to hard-code a price list that no
+ * longer exists anywhere else: the config has moved on, and a player who spent
+ * 1450 credits on gear the game no longer sells should get it back rather than
+ * discover it silently deleted.
+ */
+const RETIRED_UPGRADE_PRICES: Readonly<Record<string, number>> = {
+  'upgrade.hp': 200,
+  'upgrade.slowfield': 350,
+  'upgrade.shield': 400,
+  'upgrade.spread': 500,
+};
 
 /** Migrate any historical save shape to the current version. */
 export function migrate(raw: unknown): Save {
@@ -82,6 +105,21 @@ export function migrate(raw: unknown): Save {
   }
   if (save.version === 2) {
     save = { ...save, version: 3, keybindings: defaultBindings() };
+  }
+  if (save.version === 3) {
+    const v3 = save as unknown as SaveV3;
+    const refund = v3.ownedUpgrades.reduce(
+      (sum, id) => sum + (RETIRED_UPGRADE_PRICES[id] ?? 0),
+      0,
+    );
+    const { ownedUpgrades: _owned, loadout: _loadout, ...rest } = v3;
+    save = {
+      ...rest,
+      version: 4,
+      credits: v3.credits + refund,
+      ownedCosmetics: [],
+      equipped: defaultEquipped(),
+    };
   }
   if (save.version === CURRENT_SAVE_VERSION) {
     return save as unknown as Save;

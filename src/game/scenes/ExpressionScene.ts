@@ -76,8 +76,6 @@ export class ExpressionScene extends Phaser.Scene {
       seed: Date.now() >>> 0,
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
-      ownedUpgrades: save.ownedUpgrades,
-      loadout: save.loadout,
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);

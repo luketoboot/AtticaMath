@@ -21,6 +21,12 @@ import {
 } from '../../core/collapse/chain';
 import { opposite, resolveShot, type GunKind, type TokenRef } from '../../core/collapse/targeting';
 import { CONFIG } from '../../core/config';
+import {
+  hullFor,
+  trailFor,
+  DEFAULT_HULL,
+  DEFAULT_TRAIL,
+} from '../../core/cosmetics/cosmetics';
 import { creditsForRun, type RunStats } from '../../core/economy/economy';
 import {
   newFlightState,
@@ -34,6 +40,7 @@ import { applyCrt } from '../../fx/applyCrt';
 import { cameraPunch, clearHitStop, glowPulse, impact, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
+import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import type { KeyBindings } from '../../core/input/bindings';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -159,6 +166,8 @@ export class CollapseScene extends Phaser.Scene {
 
   private keys!: KeyState;
   private bindings!: KeyBindings;
+  private hullDef = hullFor(DEFAULT_HULL);
+  private trail = trailFor(DEFAULT_TRAIL);
   private shapeRng = createRng(1);
 
   private hpText!: Phaser.GameObjects.Text;
@@ -208,6 +217,8 @@ export class CollapseScene extends Phaser.Scene {
     this.bestChain = 0;
     this.nearMissed.clear();
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    this.hullDef = hullFor(this.saves.save.equipped.hull);
+    this.trail = trailFor(this.saves.save.equipped.trail);
     this.starLayers = [];
     this.shapeRng = createRng(Date.now() >>> 0);
     this.flight = newFlightState(width / 2, height / 2);
@@ -1066,12 +1077,10 @@ export class CollapseScene extends Phaser.Scene {
 
     // Exhaust behind the hull. With rotate-and-thrust the nose no longer
     // follows the velocity, so the player needs to see where thrust is going.
-    // Kept yellow/white in both loadouts so it never reads as weapon colour.
+    // The burn wears the equipped trail colour; the hull cannot, because it is
+    // already saying which gun is loaded.
     this.flame = this.add.graphics();
-    this.flame.fillStyle(PALETTE.yellow, 1);
-    this.flame.fillTriangle(-8, 18, 8, 18, 0, 38);
-    this.flame.fillStyle(PALETTE.white, 1);
-    this.flame.fillTriangle(-4, 18, 4, 18, 0, 29);
+    drawFlame(this.flame, this.trail, CONFIG.flight.shipRadius);
     this.flame.setVisible(false);
 
     this.ship = this.add.container(this.shipX, this.shipY, [this.flame, this.hull]).setDepth(5);
@@ -1083,7 +1092,7 @@ export class CollapseScene extends Phaser.Scene {
       lifespan: { min: 180, max: 420 },
       scale: { start: 0.8, end: 0 },
       alpha: { start: 0.75, end: 0 },
-      tint: [PALETTE.yellow, PALETTE.magentaHot],
+      tint: [this.trail.flame, this.trail.spark],
       frequency: 22,
       quantity: 1,
       emitting: false,
@@ -1105,15 +1114,7 @@ export class CollapseScene extends Phaser.Scene {
    * the thing you are looking at beats making you glance away mid-fight.
    */
   private paintShip(): void {
-    this.hull.clear();
-    this.hull.fillStyle(GUN_COLOR[this.gun], 1);
-    this.hull.fillTriangle(0, -20, -14, 16, 14, 16);
-    this.hull.fillStyle(PALETTE.black, 1);
-    this.hull.fillTriangle(0, -8, -7, 10, 7, 10);
-    // White stripe rather than a second hue: the hull is already saying which
-    // gun is up, and a competing colour would blunt that.
-    this.hull.fillStyle(PALETTE.white, 1);
-    this.hull.fillRect(-14, 14, 28, 4);
+    drawHull(this.hull, this.hullDef, GUN_COLOR[this.gun], CONFIG.flight.shipRadius);
   }
 
   private createHud(): void {

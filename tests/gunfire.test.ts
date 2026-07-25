@@ -75,8 +75,6 @@ describe('session gunfire integration', () => {
       skills: {},
       totalWavesBefore: 0,
       placementDone: true,
-      ownedUpgrades: [],
-      loadout: [],
     });
     for (let w = 0; w < H.firstArmedWave; w++) s.nextWave();
     return s;
@@ -88,8 +86,6 @@ describe('session gunfire integration', () => {
       skills: {},
       totalWavesBefore: 0,
       placementDone: false,
-      ownedUpgrades: [],
-      loadout: [],
     });
     s.nextWave();
     expect(s.meteorsArmed).toBe(false);
@@ -97,14 +93,12 @@ describe('session gunfire integration', () => {
     expect(armedSession().meteorsArmed).toBe(true);
   });
 
-  it('a shot costs hp and half the combo, but leaves the shield alone', () => {
+  it('a shot costs hp and half the combo', () => {
     const s = new RunSession({
       seed: 42,
       skills: {},
       totalWavesBefore: 0,
       placementDone: true,
-      ownedUpgrades: ['upgrade.shield'],
-      loadout: ['upgrade.shield'],
     });
     const plan = s.nextWave();
     for (let i = 0; i < 6; i++) s.recordHit(plan.problems[i]!, 1200);
@@ -112,15 +106,29 @@ describe('session gunfire integration', () => {
     const streak = s.streak;
 
     s.takeDamage();
-    expect(s.hp).toBe(hp - 1); // the miss shield is for math, not for dodging
+    expect(s.hp).toBe(hp - 1);
     // Halved, not cleared: dodging is a reflex test, not a math failure.
     expect(s.streak).toBe(Math.floor(streak * CONFIG.combo.damageKeepFraction));
     expect(s.streak).toBeGreaterThan(0);
     expect(s.shotsTaken).toBe(1);
+  });
 
-    // ...and the shield is still there for the first meteor that lands.
-    s.recordMiss(plan.problems[1]!, 12000);
-    expect(s.hp).toBe(hp - 1);
+  it('a live shield covers gunfire too, but the combo still takes the hit', () => {
+    const s = new RunSession({
+      seed: 42,
+      skills: {},
+      totalWavesBefore: 0,
+      placementDone: true,
+    });
+    const plan = s.nextWave();
+    for (let i = 0; i < 6; i++) s.recordHit(plan.problems[i]!, 1200);
+    const hp = s.hp;
+
+    s.collectDrop('shield');
+    s.takeDamage();
+    expect(s.hp).toBe(hp);
+    // Still counted, because the HUD and the debrief should say it happened.
+    expect(s.shotsTaken).toBe(1);
   });
 
   it('shots can end the run', () => {

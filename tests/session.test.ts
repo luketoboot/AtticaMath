@@ -10,8 +10,6 @@ function freshSession(overrides: Partial<ConstructorParameters<typeof RunSession
     skills: {},
     totalWavesBefore: 0,
     placementDone: false,
-    ownedUpgrades: [],
-    loadout: [],
     ...overrides,
   });
 }
@@ -89,25 +87,27 @@ describe('run flow', () => {
     expect(s.gameOver).toBe(true);
   });
 
-  it('shield absorbs the first landing', () => {
-    const s = freshSession({ ownedUpgrades: ['upgrade.shield'], loadout: ['upgrade.shield'] });
+  it('a collected shield absorbs landings until it lapses', () => {
+    const s = freshSession();
     throughPlacement(s);
     const plan = s.nextWave();
     const hp = s.hp;
+
+    s.collectDrop('shield');
     s.recordMiss(plan.problems[0]!, 12000);
     expect(s.hp).toBe(hp); // absorbed
+
+    // Unlike the old purchased shield, this one is a timer, not one free hit.
     s.recordMiss(plan.problems[1]!, 12000);
-    expect(s.hp).toBe(hp - 1); // second one lands
+    expect(s.hp).toBe(hp);
+
+    s.tick(CONFIG.drops.shieldSeconds + 0.1);
+    s.recordMiss(plan.problems[2]!, 12000);
+    expect(s.hp).toBe(hp - 1);
   });
 
-  it('hp upgrade raises starting hp', () => {
-    const s = freshSession({ ownedUpgrades: ['upgrade.hp'], loadout: ['upgrade.hp'] });
-    expect(s.hp).toBe(CONFIG.meteors.baseHp + 2);
-  });
-
-  it('loadout only honors owned upgrades', () => {
-    const s = freshSession({ ownedUpgrades: [], loadout: ['upgrade.hp'] });
-    expect(s.hp).toBe(CONFIG.meteors.baseHp);
+  it('every run starts on the same hp — nothing buyable changes it', () => {
+    expect(freshSession().hp).toBe(CONFIG.meteors.baseHp);
   });
 
   it('offers a coach tip after normal waves and overweights that skill', () => {

@@ -168,8 +168,6 @@ describe('FactorSession', () => {
       seed: 42,
       skills,
       totalWavesBefore: 0,
-      ownedUpgrades: [],
-      loadout: [],
     });
   }
 
@@ -275,8 +273,6 @@ describe('FactorSession', () => {
       seed: 5,
       skills,
       totalWavesBefore: 0,
-      ownedUpgrades: [],
-      loadout: [],
     });
     let sevens = 0;
     let elevens = 0;

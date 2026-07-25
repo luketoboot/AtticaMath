@@ -79,8 +79,6 @@ describe('filtered wave composition', () => {
       skills: {},
       totalWavesBefore: 0,
       placementDone: false,
-      ownedUpgrades: [],
-      loadout: [],
       filter,
     });
     for (let w = 0; w < 6; w++) {

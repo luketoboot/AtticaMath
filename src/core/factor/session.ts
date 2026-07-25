@@ -30,8 +30,6 @@ export interface FactorSessionInit {
   seed: number;
   skills: SkillTable;
   totalWavesBefore: number;
-  ownedUpgrades: readonly string[];
-  loadout: readonly string[];
   config?: GameConfig;
 }
 
@@ -68,15 +66,13 @@ export class FactorSession {
   destroyed = 0;
   misfires = 0;
   hp: number;
-  readonly loadout: readonly string[];
 
   constructor(init: FactorSessionInit) {
     this.cfg = init.config ?? CONFIG;
     this.rng = createRng(init.seed);
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
-    this.loadout = init.loadout.filter((u) => init.ownedUpgrades.includes(u));
-    this.hp = this.cfg.meteors.baseHp + (this.loadout.includes('upgrade.hp') ? 2 : 0);
+    this.hp = this.cfg.meteors.baseHp;
   }
 
   get globalWave(): number {

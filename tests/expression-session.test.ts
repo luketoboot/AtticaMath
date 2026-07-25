@@ -12,8 +12,6 @@ function freshSession(
     seed: 7,
     skills: {},
     totalWavesBefore: 0,
-    ownedUpgrades: [],
-    loadout: [],
     ...overrides,
   });
 }

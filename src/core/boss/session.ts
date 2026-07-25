@@ -22,8 +22,6 @@ export interface BossSessionInit {
   seed: number;
   skills: SkillTable;
   totalWavesBefore: number;
-  ownedUpgrades: readonly string[];
-  loadout: readonly string[];
   config?: GameConfig;
 }
 
@@ -50,16 +48,13 @@ export class BossSession {
   misses = 0;
   misfires = 0;
   hp: number;
-  readonly loadout: readonly string[];
-  private shieldUsed = false;
 
   constructor(init: BossSessionInit) {
     this.cfg = init.config ?? CONFIG;
     this.rng = createRng(init.seed);
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
-    this.loadout = init.loadout.filter((u) => init.ownedUpgrades.includes(u));
-    this.hp = this.cfg.meteors.baseHp + (this.loadout.includes('upgrade.hp') ? 2 : 0);
+    this.hp = this.cfg.meteors.baseHp;
     this.bossMaxHp = this.cfg.boss.baseHp;
     this.bossHp = this.bossMaxHp;
   }
@@ -163,10 +158,6 @@ export class BossSession {
     );
     this.misses += 1;
     this.streak = 0;
-    if (this.loadout.includes('upgrade.shield') && !this.shieldUsed) {
-      this.shieldUsed = true;
-      return;
-    }
     this.hp -= 1;
   }
 
@@ -187,8 +178,8 @@ export class BossSession {
   /** Seconds an attack takes to reach the player for the current boss. */
   attackTravelSeconds(): number {
     const b = this.cfg.boss;
-    let secs = b.attackTravelSeconds * Math.pow(b.attackTravelShrinkPerBoss, this.bossNumber - 1);
-    if (this.loadout.includes('upgrade.slowfield')) secs *= 1.15;
+    const secs =
+      b.attackTravelSeconds * Math.pow(b.attackTravelShrinkPerBoss, this.bossNumber - 1);
     return Math.max(b.minAttackTravelSeconds, secs);
   }
 

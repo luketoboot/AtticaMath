@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/core/config';
-import {
-  creditsForRun,
-  killScore,
-  purchase,
-  streakMultiplier,
-  UPGRADES,
-} from '../src/core/economy/economy';
+import { creditsForRun, killScore, streakMultiplier } from '../src/core/economy/economy';
 
 const eco = CONFIG.economy;
 const score = CONFIG.score;
@@ -23,40 +17,6 @@ describe('creditsForRun', () => {
   it('returns whole numbers', () => {
     const credits = creditsForRun({ score: 333, wavesCleared: 1, kills: 3, misses: 0, bestStreak: 3 }, eco);
     expect(Number.isInteger(credits)).toBe(true);
-  });
-});
-
-describe('purchase', () => {
-  it('deducts price and grants the upgrade', () => {
-    const res = purchase('upgrade.hp', 500, [], eco);
-    expect(res.ok).toBe(true);
-    expect(res.credits).toBe(500 - eco.prices['upgrade.hp']!);
-    expect(res.owned).toContain('upgrade.hp');
-  });
-
-  it('rejects when broke', () => {
-    const res = purchase('upgrade.spread', 10, [], eco);
-    expect(res.ok).toBe(false);
-    expect(res.reason).toBe('insufficient');
-    expect(res.credits).toBe(10);
-  });
-
-  it('rejects duplicate one-time purchases', () => {
-    const res = purchase('upgrade.shield', 9999, ['upgrade.shield'], eco);
-    expect(res.ok).toBe(false);
-    expect(res.reason).toBe('already-owned');
-  });
-
-  it('rejects unknown upgrades', () => {
-    const res = purchase('upgrade.nope', 9999, [], eco);
-    expect(res.ok).toBe(false);
-    expect(res.reason).toBe('unknown-upgrade');
-  });
-
-  it('every defined upgrade has a price', () => {
-    for (const u of UPGRADES) {
-      expect(eco.prices[u.id], `no price for ${u.id}`).toBeGreaterThan(0);
-    }
   });
 });
 

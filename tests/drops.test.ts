@@ -20,7 +20,7 @@ const cfg = CONFIG.drops;
 /** Roll `n` drops from one seeded stream and tally the kinds. */
 function tally(n: number, hp: number): Record<DropKind, number> {
   const rng = createRng(1234);
-  const counts = { freeze: 0, nuke: 0, repair: 0, double: 0, chain: 0 };
+  const counts = { freeze: 0, nuke: 0, repair: 0, double: 0, chain: 0, shield: 0 };
   for (let i = 0; i < n; i++) counts[rollDrop(rng, hp, cfg)] += 1;
   return counts;
 }

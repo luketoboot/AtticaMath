@@ -41,8 +41,6 @@ export interface ExpressionSessionInit {
   seed: number;
   skills: SkillTable;
   totalWavesBefore: number;
-  ownedUpgrades: readonly string[];
-  loadout: readonly string[];
   config?: GameConfig;
 }
 
@@ -97,16 +95,13 @@ export class ExpressionSession {
   misses = 0;
   misfires = 0;
   hp: number;
-  readonly loadout: readonly string[];
-  private shieldUsed = false;
 
   constructor(init: ExpressionSessionInit) {
     this.cfg = init.config ?? CONFIG;
     this.rng = createRng(init.seed);
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
-    this.loadout = init.loadout.filter((u) => init.ownedUpgrades.includes(u));
-    this.hp = this.cfg.meteors.baseHp + (this.loadout.includes('upgrade.hp') ? 2 : 0);
+    this.hp = this.cfg.meteors.baseHp;
   }
 
   get globalWave(): number {
@@ -390,10 +385,6 @@ export class ExpressionSession {
     this.missesThisWave += 1;
     this.combo = comboBreak(this.combo);
     this.live = this.live.filter((t) => t.id !== problem.id);
-    if (this.loadout.includes('upgrade.shield') && !this.shieldUsed) {
-      this.shieldUsed = true;
-      return;
-    }
     this.hp -= 1;
   }
 
@@ -426,7 +417,6 @@ export class ExpressionSession {
     const e = this.cfg.expression;
     let secs = e.baseFallSeconds * Math.pow(e.fallSpeedupPerWave, this.waveInRun - 1);
     secs += e.extraSecondsPerChip * (problem.par - 2);
-    if (this.loadout.includes('upgrade.slowfield')) secs *= 1.15;
     return Math.max(e.minFallSeconds, secs);
   }
 

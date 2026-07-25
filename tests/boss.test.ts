@@ -8,8 +8,6 @@ function freshSession(overrides: Partial<ConstructorParameters<typeof BossSessio
     seed: 21,
     skills: {},
     totalWavesBefore: 0,
-    ownedUpgrades: [],
-    loadout: [],
     ...overrides,
   });
 }
@@ -82,14 +80,6 @@ describe('BossSession', () => {
     s.attackLands(p2, 10000);
     expect(s.hp).toBe(CONFIG.meteors.baseHp - 1);
     expect(s.streak).toBe(0);
-  });
-
-  it('shield absorbs the first landed attack', () => {
-    const s = freshSession({ ownedUpgrades: ['upgrade.shield'], loadout: ['upgrade.shield'] });
-    s.attackLands(s.nextAttackProblem(), 9000);
-    expect(s.hp).toBe(CONFIG.meteors.baseHp);
-    s.attackLands(s.nextAttackProblem(), 9000);
-    expect(s.hp).toBe(CONFIG.meteors.baseHp - 1);
   });
 
   it('attacks speed up on later bosses', () => {
