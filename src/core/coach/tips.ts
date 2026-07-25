@@ -11,8 +11,10 @@ export interface Tip {
 
 export const TIPS: readonly Tip[] = [
   { skillId: 'add.single', text: 'Small sums. Stop counting. See 4+3 as one shape: 7. Burn the pairs in.' },
+  { skillId: 'add.complement10', text: 'What gets you to ten. 6 wants 4, 7 wants 3, 8 wants 2. These nine pairs sit under half the tricks here — know them cold and everything above gets cheaper.' },
   { skillId: 'add.bridge', text: 'Crossing ten: break it. 8+7 → 8+2 is 10, 5 left over. 15. Always route through ten.' },
   { skillId: 'add.double', text: 'Big number first, tens then ones. 47+38 → 47+30 is 77, +8 is 85. Two hops, done.' },
+  { skillId: 'add.complement100', text: 'To a hundred: the tens go to nine, the ones go to ten. 43 → 50 and 7 → 57. Never count up twice.' },
   { skillId: 'add.triple', text: 'Same drill, bigger numbers. Hundreds, tens, ones. Left to right. Keep the running total hot.' },
   { skillId: 'add.quad', text: 'Four digits is just three digits with a bigger hat. Thousands first, keep the total rolling.' },
   { skillId: 'sub.single', text: 'Subtraction is a gap. 9−6: what jumps 6 up to 9? Three. Count up, not down.' },
@@ -20,6 +22,7 @@ export const TIPS: readonly Tip[] = [
   { skillId: 'sub.quad', text: 'Same machine at scale. Overshoot to a clean thousand, then repay the difference.' },
   { skillId: 'sub.double', text: 'Peel tens first. 76−32 → 76−30 is 46, minus 2. Never chew the whole thing at once.' },
   { skillId: 'sub.borrow', text: 'Borrowing is slow. Overshoot instead: 62−38 → 62−40 is 22, give 2 back. 24.' },
+  { skillId: 'sub.zeros', text: 'Nothing to borrow from. Drop to the number below: 500−137 → 499−137 is 362, add the 1 back. 363. No zeros left to fight.' },
   { skillId: 'mul.table.2', text: 'Twos are doubles. Double is add-to-itself. You already know addition. Use it.' },
   { skillId: 'mul.table.3', text: 'Threes: double it, add one more. 3×7 → 14+7. 21. Two moves you already own.' },
   { skillId: 'mul.table.4', text: 'Fours: double twice. 4×7 → 14 → 28. Doubling is free. Spend it.' },
@@ -49,7 +52,8 @@ export const TIPS: readonly Tip[] = [
   { skillId: 'frac.add.same', text: 'Same denominator, add the tops and leave the bottom alone. Three eighths plus one eighth is four eighths. The slice size never changed.' },
   { skillId: 'frac.lcd', text: 'Smallest number both denominators divide. Walk the bigger one up: 4 and 6 → 6, 12. Twelve. Not always the product — 4×6 is 24 and that is twice the work.' },
   { skillId: 'frac.add.unlike', text: 'Different slices do not add. Convert both to the common denominator first, then it is the easy case. 1/2+1/3 → 3/6+2/6 → 5/6.' },
-  { skillId: 'pct.of', text: 'Find 10%, then build. 15% of 60 → 10% is 6, half of that is 3 → 9. Every percentage is made of tenths and halves.' },
+  { skillId: 'pct.of', text: 'Find 10% and build: 15% of 60 → 6, plus half of 6 → 9. When the number fights back, reduce the percent instead. 60% is 3/5 → 35÷5 is 7, ×3 → 21.' },
+  { skillId: 'pct.what', text: 'Backwards: part over whole, reduced, scaled to a hundred. 24 of 40 → 24/40 → 3/5 → 60%. Reduce first and the scaling is usually already done.' },
 ] as const;
 
 const tipsBySkill = new Map<SkillId, Tip>(TIPS.map((t) => [t.skillId, t]));

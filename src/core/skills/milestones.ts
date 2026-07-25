@@ -14,12 +14,15 @@ export interface Milestone {
 
 const MASTERY_LABELS: Readonly<Record<string, string>> = {
   'add.single': 'QUICK SUMS MASTERED',
+  'add.complement10': 'NUMBER BONDS MASTERED',
   'add.bridge': 'TEN-BRIDGING MASTERED',
   'add.double': 'BIG ADDITION MASTERED',
+  'add.complement100': 'MAKING CHANGE MASTERED',
   'add.triple': 'TRIPLE-DIGIT ADDITION MASTERED',
   'sub.single': 'QUICK GAPS MASTERED',
   'sub.double': 'BIG SUBTRACTION MASTERED',
   'sub.borrow': 'BORROWING MASTERED',
+  'sub.zeros': 'BORROWING ACROSS ZEROS MASTERED',
   'mul.table.2': '2s MASTERED',
   'mul.table.3': '3s MASTERED',
   'mul.table.4': '4s MASTERED',
@@ -48,6 +51,7 @@ const MASTERY_LABELS: Readonly<Record<string, string>> = {
   'frac.lcd': 'COMMON DENOMINATORS MASTERED',
   'frac.add.unlike': 'UNLIKE FRACTIONS MASTERED',
   'pct.of': 'PERCENTAGES MASTERED',
+  'pct.what': 'REVERSE PERCENTAGES MASTERED',
 };
 
 /** All milestones currently earned by the skill table. */

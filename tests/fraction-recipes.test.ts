@@ -65,6 +65,38 @@ describe('fraction recipes', () => {
     }
   });
 
+  it('pct.of asks for quantities that are not all multiples of twenty', () => {
+    // The regression this guards: keying the quantity to 20 kept every answer
+    // whole, but made "60% of 140" answerable by pattern instead of by method.
+    const seen = new Set<number>();
+    for (let i = 0; i < 400; i++) {
+      seen.add(Number(generateProblem('pct.of', rng).prompt.split(' ').pop()));
+    }
+    const awkward = [...seen].filter((whole) => whole % 20 !== 0);
+    expect(awkward.length).toBeGreaterThan(0);
+    // Not just a token few, either — most of the range should be reachable.
+    expect(awkward.length).toBeGreaterThan(seen.size / 3);
+  });
+
+  it('pct.of reaches the percentages between the benchmarks', () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 400; i++) {
+      seen.add(Number(generateProblem('pct.of', rng).prompt.split('%')[0]));
+    }
+    for (const pct of [35, 45, 55, 65, 85, 95]) expect(seen).toContain(pct);
+  });
+
+  it('pct.what names the true percentage the part is of the whole', () => {
+    for (let i = 0; i < 300; i++) {
+      const p = generateProblem('pct.what', rng);
+      const [part, whole] = p.prompt.match(/^(\d+) IS \?% OF (\d+)$/)!.slice(1).map(Number);
+      expect(p.answer).toMatch(/^\d+$/);
+      expect((part! / whole!) * 100).toBeCloseTo(Number(p.answer), 9);
+      expect(Number(p.answer)).toBeGreaterThan(0);
+      expect(Number(p.answer)).toBeLessThan(100);
+    }
+  });
+
   it('frac.add.same keeps the sum a proper fraction', () => {
     for (let i = 0; i < 200; i++) {
       const p = generateProblem('frac.add.same', rng);

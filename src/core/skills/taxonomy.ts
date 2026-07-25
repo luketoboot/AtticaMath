@@ -22,10 +22,14 @@ export interface SkillDef {
 }
 
 export const SKILLS: readonly SkillDef[] = [
-  // Addition
+  // Addition. The complements are their own skills because they are the
+  // prerequisite the strategy tips keep spending: bridging ten, subtracting by
+  // overshooting and building a percentage all assume the bond is instant.
   { id: 'add.single', label: 'Single digit addition', baseDifficulty: 150, tier: 0, op: 'add', digits: 1 },
+  { id: 'add.complement10', label: 'Complements to ten', baseDifficulty: 240, tier: 1, op: 'add', digits: 1 },
   { id: 'add.bridge', label: 'Addition bridging ten', baseDifficulty: 320, tier: 1, op: 'add', digits: 1 },
   { id: 'add.double', label: 'Two digit addition', baseDifficulty: 500, tier: 2, op: 'add', digits: 2 },
+  { id: 'add.complement100', label: 'Complements to a hundred', baseDifficulty: 520, tier: 2, op: 'add', digits: 2 },
   { id: 'add.triple', label: 'Three digit addition', baseDifficulty: 800, tier: 4, op: 'add', digits: 3 },
   { id: 'add.quad', label: 'Four digit addition', baseDifficulty: 1050, tier: 6, op: 'add', digits: 4 },
 
@@ -33,6 +37,7 @@ export const SKILLS: readonly SkillDef[] = [
   { id: 'sub.single', label: 'Single digit subtraction', baseDifficulty: 200, tier: 0, op: 'sub', digits: 1 },
   { id: 'sub.double', label: 'Two digit subtraction', baseDifficulty: 480, tier: 2, op: 'sub', digits: 2 },
   { id: 'sub.borrow', label: 'Subtraction with borrowing', baseDifficulty: 550, tier: 2, op: 'sub', digits: 2 },
+  { id: 'sub.zeros', label: 'Subtracting across zeros', baseDifficulty: 700, tier: 3, op: 'sub', digits: 3 },
   { id: 'sub.triple', label: 'Three digit subtraction', baseDifficulty: 850, tier: 5, op: 'sub', digits: 3 },
   { id: 'sub.quad', label: 'Four digit subtraction', baseDifficulty: 1100, tier: 6, op: 'sub', digits: 4 },
 
@@ -80,6 +85,9 @@ export const SKILLS: readonly SkillDef[] = [
   { id: 'frac.add.same', label: 'Adding like fractions', baseDifficulty: 680, tier: 3, op: 'add', digits: 2 },
   { id: 'frac.lcd', label: 'Common denominator', baseDifficulty: 820, tier: 4, op: 'mixed', digits: 2 },
   { id: 'pct.of', label: 'Percent of a quantity', baseDifficulty: 880, tier: 4, op: 'mul', digits: 3 },
+  // The inverse of pct.of, and the form most percentages arrive in outside a
+  // classroom: two numbers, and the question of what one is of the other.
+  { id: 'pct.what', label: 'One number as a percent of another', baseDifficulty: 980, tier: 5, op: 'div', digits: 3 },
   { id: 'frac.add.unlike', label: 'Adding unlike fractions', baseDifficulty: 1020, tier: 5, op: 'add', digits: 2 },
 ] as const;
 

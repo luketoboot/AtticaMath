@@ -37,8 +37,39 @@ const PRIMES_TO_120: readonly number[] = [
 /** Denominators small enough to hold in your head while you work. */
 const FRIENDLY_DENS: readonly number[] = [2, 3, 4, 5, 6, 8, 10, 12];
 
+/** Every whole multiple of five short of the whole thing. */
+const PERCENT_STEPS: readonly number[] = [
+  5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95,
+];
+
 function lcm(a: number, b: number): number {
   return (a * b) / gcd(a, b);
+}
+
+/** A percentage in reduced-fraction form: 60% → 3/5. */
+function percentAsFraction(pct: number): { num: number; den: number } {
+  const d = gcd(pct, 100);
+  return { num: pct / d, den: 100 / d };
+}
+
+/**
+ * A quantity the percentage divides exactly. Keying this to the *reduced*
+ * denominator is the whole point: 60% is 3/5, so it can be taken of 35 or 90,
+ * not only of the multiples of twenty that every percentage happens to divide.
+ * Asking only the tidy ones lets a player pattern-match their way through
+ * without ever running the method.
+ */
+function percentQuantity(rng: Rng, den: number): number {
+  return den * rng.int(Math.ceil(15 / den), Math.floor(200 / den));
+}
+
+/**
+ * Twentieths need the 10%-and-build route; fifths and quarters are one
+ * division. An untidy quantity costs extra on top of whichever route.
+ */
+function percentAdjust(den: number, whole: number): number {
+  const byDenominator = den <= 4 ? -60 : den <= 10 ? 0 : 60;
+  return byDenominator + (whole % 10 === 0 ? 0 : 40);
 }
 
 function timesTableRecipe(family: number): Recipe {
@@ -62,6 +93,12 @@ const RECIPES: Record<SkillId, Recipe> = {
     const b = rng.int(1, 9 - a);
     return { skillIds: ['add.single'], prompt: `${a} + ${b}`, answer: String(a + b), difficultyAdjust: 0 };
   },
+  'add.complement10': (rng) => {
+    // The bond itself, asked directly. Everything from bridging ten to building
+    // a percentage spends this, so it is worth a rating of its own.
+    const a = rng.int(1, 9);
+    return { skillIds: ['add.complement10'], prompt: `${a} + ? = 10`, answer: String(10 - a), difficultyAdjust: 0 };
+  },
   'add.bridge': (rng) => {
     // Single digit sums crossing 10, e.g. 7 + 8.
     const a = rng.int(5, 9);
@@ -72,6 +109,12 @@ const RECIPES: Record<SkillId, Recipe> = {
     const a = rng.int(12, 89);
     const b = rng.int(11, 99 - a > 11 ? 99 - a : 11);
     return { skillIds: ['add.double'], prompt: `${a} + ${b}`, answer: String(a + b), difficultyAdjust: (a + b > 99 ? 60 : 0) };
+  },
+  'add.complement100': (rng) => {
+    // Nonzero ones digit throughout: "70 + ? = 100" is the ten-bond wearing a
+    // zero, and this skill is the two-part version that is actually making change.
+    const a = rng.int(1, 9) * 10 + rng.int(1, 9);
+    return { skillIds: ['add.complement100'], prompt: `${a} + ? = 100`, answer: String(100 - a), difficultyAdjust: 0 };
   },
   'add.triple': (rng) => {
     const a = rng.int(110, 899);
@@ -107,6 +150,22 @@ const RECIPES: Record<SkillId, Recipe> = {
     const a = aTens * 10 + aOnes;
     const b = bTens * 10 + bOnes;
     return { skillIds: ['sub.borrow'], prompt: `${a} ${MINUS} ${b}`, answer: String(a - b), difficultyAdjust: 0 };
+  },
+  'sub.zeros': (rng) => {
+    // A round minuend, and a subtrahend whose ones digit is never zero, so the
+    // borrow has to walk the whole way through to the hundreds. sub.borrow can
+    // never generate this: it builds both operands with nonzero tens digits, so
+    // change from a round hundred — the case people actually stall on — was
+    // unreachable.
+    const hundreds = rng.int(1, 9);
+    const minuend = hundreds * 100;
+    const subtrahend = rng.int(1, hundreds * 10 - 2) * 10 + rng.int(1, 9);
+    return {
+      skillIds: ['sub.zeros'],
+      prompt: `${minuend} ${MINUS} ${subtrahend}`,
+      answer: String(minuend - subtrahend),
+      difficultyAdjust: (hundreds - 3) * 15,
+    };
   },
   'sub.triple': (rng) => {
     const a = rng.int(200, 999);
@@ -318,16 +377,30 @@ const RECIPES: Record<SkillId, Recipe> = {
     };
   },
   'pct.of': (rng) => {
-    // Every percent is a multiple of 5 and every quantity a multiple of 20, so
-    // the answer is always whole without narrowing the drill to halves and
-    // quarters.
-    const pct = rng.pick([5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 80, 90]);
-    const whole = 20 * rng.int(1, 10);
+    // Reducing the percentage first is what keeps the answer whole, so the
+    // quantity no longer has to be a multiple of twenty to guarantee it.
+    const pct = rng.pick([...PERCENT_STEPS]);
+    const { num, den } = percentAsFraction(pct);
+    const whole = percentQuantity(rng, den);
     return {
       skillIds: ['pct.of'],
       prompt: `${pct}% OF ${whole}`,
-      answer: String((pct * whole) / 100),
-      difficultyAdjust: pct % 25 === 0 ? -60 : 40,
+      answer: String((whole / den) * num),
+      difficultyAdjust: percentAdjust(den, whole),
+    };
+  },
+  'pct.what': (rng) => {
+    // Same construction read backwards, so the part is whole and the percentage
+    // it asks for is a multiple of five — typeable, and never ambiguous, since
+    // part over whole fixes exactly one answer.
+    const pct = rng.pick([...PERCENT_STEPS]);
+    const { num, den } = percentAsFraction(pct);
+    const whole = percentQuantity(rng, den);
+    return {
+      skillIds: ['pct.what'],
+      prompt: `${(whole / den) * num} IS ?% OF ${whole}`,
+      answer: String(pct),
+      difficultyAdjust: percentAdjust(den, whole),
     };
   },
 };

@@ -54,6 +54,40 @@ describe('recipe correctness', () => {
     }
   });
 
+  it('add.complement10 and add.complement100 complete the stated target', () => {
+    for (const [id, target] of [
+      ['add.complement10', 10],
+      ['add.complement100', 100],
+    ] as const) {
+      for (let i = 0; i < 200; i++) {
+        const p = generateProblem(id, rng);
+        const shown = Number(p.prompt.match(/^(\d+) \+ \? = (\d+)$/)![1]);
+        expect(Number(p.prompt.match(/= (\d+)$/)![1])).toBe(target);
+        expect(shown + Number(p.answer)).toBe(target);
+        expect(Number(p.answer)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('add.complement100 never degenerates into the ten-bond with a zero on it', () => {
+    for (let i = 0; i < 200; i++) {
+      const p = generateProblem('add.complement100', rng);
+      expect(Number(p.prompt.split(' ')[0]) % 10).not.toBe(0);
+    }
+  });
+
+  it('sub.zeros subtracts from a round hundred and borrows through the zeros', () => {
+    for (let i = 0; i < 300; i++) {
+      const p = generateProblem('sub.zeros', rng);
+      const [a, b] = p.prompt.split(' − ').map(Number);
+      expect(a! % 100).toBe(0);
+      // Nonzero ones digit against a zero: the borrow has nowhere local to go.
+      expect(b! % 10).toBeGreaterThan(0);
+      expect(a! - b!).toBe(Number(p.answer));
+      expect(Number(p.answer)).toBeGreaterThan(0);
+    }
+  });
+
   it('sub.borrow requires a borrow and stays positive', () => {
     for (let i = 0; i < 200; i++) {
       const p = generateProblem('sub.borrow', rng);

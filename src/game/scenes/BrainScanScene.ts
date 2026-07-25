@@ -28,7 +28,7 @@ const GROUPS: readonly { title: string; prefixes: readonly string[] }[] = [
   { title: 'FRACTIONS & PERCENT', prefixes: ['frac.', 'pct.'] },
 ];
 
-/** Column split, by group index. Three columns so 40 skills fit one screen. */
+/** Column split, by group index. Three columns so 44 skills fit one screen. */
 const COLUMNS: readonly (readonly number[])[] = [[0, 1, 2], [3], [4, 5, 6]];
 
 /** Read-only visualization of the adaptive skill table. */
