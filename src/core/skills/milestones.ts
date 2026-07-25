@@ -38,6 +38,16 @@ const MASTERY_LABELS: Readonly<Record<string, string>> = {
   'div.exact': 'DIVISION MASTERED',
   'div.remainder': 'REMAINDERS MASTERED',
   'ooo.basic': 'OPERATOR PRIORITY MASTERED',
+  'factor.smallest': 'HIDDEN FACTORS MASTERED',
+  'factor.prime': 'PRIMES MASTERED',
+  'factor.deep': 'DEEP FACTORING MASTERED',
+  'frac.percent': 'FRACTION TO PERCENT MASTERED',
+  'frac.reduce': 'EQUIVALENCE MASTERED',
+  'frac.of': 'FRACTIONS OF MASTERED',
+  'frac.add.same': 'LIKE FRACTIONS MASTERED',
+  'frac.lcd': 'COMMON DENOMINATORS MASTERED',
+  'frac.add.unlike': 'UNLIKE FRACTIONS MASTERED',
+  'pct.of': 'PERCENTAGES MASTERED',
 };
 
 /** All milestones currently earned by the skill table. */

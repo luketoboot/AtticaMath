@@ -11,13 +11,25 @@ import { MenuNav, navHint } from '../../ui/MenuNav';
 import { neonButton } from '../../ui/panels';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
-const GROUPS: readonly { title: string; ops: readonly string[] }[] = [
-  { title: 'ADDITION', ops: ['add'] },
-  { title: 'SUBTRACTION', ops: ['sub'] },
-  { title: 'DIVISION', ops: ['div'] },
-  { title: 'MIXED', ops: ['mixed'] },
-  { title: 'MULTIPLICATION', ops: ['mul'] },
+/**
+ * Grouped by id prefix rather than by `op`, because a skill's operation family
+ * stopped partitioning the taxonomy once fractions arrived: adding unlike
+ * fractions is an `add`, taking a percentage is a `mul`, and filing either of
+ * them under the whole-number columns would tell the player they are worse at
+ * addition than they are.
+ */
+const GROUPS: readonly { title: string; prefixes: readonly string[] }[] = [
+  { title: 'ADDITION', prefixes: ['add.'] },
+  { title: 'SUBTRACTION', prefixes: ['sub.'] },
+  { title: 'MIXED', prefixes: ['ooo.'] },
+  { title: 'MULTIPLICATION', prefixes: ['mul.'] },
+  { title: 'DIVISION', prefixes: ['div.'] },
+  { title: 'FACTORS', prefixes: ['factor.'] },
+  { title: 'FRACTIONS & PERCENT', prefixes: ['frac.', 'pct.'] },
 ];
+
+/** Column split, by group index. Three columns so 40 skills fit one screen. */
+const COLUMNS: readonly (readonly number[])[] = [[0, 1, 2], [3], [4, 5, 6]];
 
 /** Read-only visualization of the adaptive skill table. */
 export class BrainScanScene extends Phaser.Scene {
@@ -50,17 +62,24 @@ export class BrainScanScene extends Phaser.Scene {
 
     const mastered = new Set(earnedMilestones(saves.save.skills, CONFIG).map((m) => m.id));
 
-    // Left column: add/sub/div/mixed. Right column: multiplication.
-    const leftGroups = GROUPS.slice(0, 4);
-    const rightGroups = GROUPS.slice(4);
-    this.renderColumn(leftGroups, width * 0.06, width * 0.44, saves, mastered);
-    this.renderColumn(rightGroups, width * 0.56, width * 0.94, saves, mastered);
+    const margin = width * 0.035;
+    const span = (width - margin * 2) / COLUMNS.length;
+    COLUMNS.forEach((indices, i) => {
+      const x0 = margin + span * i;
+      this.renderColumn(
+        indices.map((g) => GROUPS[g]!),
+        x0,
+        x0 + span - 26, // gutter between columns
+        saves,
+        mastered,
+      );
+    });
 
     const goBack = (): void => {
       this.scene.start('Menu');
     };
     // Sits a line higher than the other screens' BACK to leave room for the
-    // hint below it; the skill columns bottom out around y=640.
+    // hint below it; the longest column bottoms out around y=580.
     const back = neonButton(this, width / 2, height - 52, 'BACK', goBack, {
       width: 200,
       height: 44,
@@ -73,19 +92,19 @@ export class BrainScanScene extends Phaser.Scene {
   }
 
   private renderColumn(
-    groups: readonly { title: string; ops: readonly string[] }[],
+    groups: readonly { title: string; prefixes: readonly string[] }[],
     x0: number,
     x1: number,
     saves: SaveManager,
     mastered: ReadonlySet<string>,
   ): void {
-    let y = 116;
+    let y = 112;
     for (const group of groups) {
       this.add.text(x0, y, group.title, { fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: CSS.magentaHot });
       y += 24;
-      for (const skill of SKILLS.filter((s) => group.ops.includes(s.op))) {
+      for (const skill of SKILLS.filter((s) => group.prefixes.some((p) => s.id.startsWith(p)))) {
         this.renderRow(skill, y, x0, x1, saves, mastered);
-        y += 27;
+        y += 26;
       }
       y += 10;
     }
@@ -101,17 +120,19 @@ export class BrainScanScene extends Phaser.Scene {
   ): void {
     const state = saves.save.skills[skill.id];
     const isMastered = mastered.has(`mastery.${skill.id}`);
-    const barX = x0 + 220;
-    const barW = x1 - barX - 60;
+    // Proportional rather than a fixed 220px label gutter: three columns are
+    // narrower than two, and a fixed offset left the bars too short to read.
+    const barX = x0 + (x1 - x0) * 0.56;
+    const barW = x1 - barX - 44;
 
     this.add.text(x0, y, skill.label.toUpperCase(), {
       fontFamily: FONT,
-      fontSize: '13px',
+      fontSize: '12px',
       color: state ? CSS.white : CSS.cyanDim,
     });
 
     if (!state || state.attempts === 0) {
-      this.add.text(barX, y, 'NO SIGNAL', { fontFamily: FONT, fontSize: '13px', color: CSS.cyanDim });
+      this.add.text(barX, y, 'NO SIGNAL', { fontFamily: FONT, fontSize: '12px', color: CSS.cyanDim });
       return;
     }
 

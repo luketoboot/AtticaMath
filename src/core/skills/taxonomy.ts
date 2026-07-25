@@ -63,6 +63,24 @@ export const SKILLS: readonly SkillDef[] = [
 
   // Order of operations
   { id: 'ooo.basic', label: 'Order of operations', baseDifficulty: 950, tier: 5, op: 'mixed', digits: 1 },
+
+  // Factorisation. Factor Storm drills these directly; the recipes ask for the
+  // one factor a number has that is hard to see, since a meteor can only carry
+  // a single answer and "name any factor" has many.
+  { id: 'factor.smallest', label: 'Smallest factor', baseDifficulty: 620, tier: 3, op: 'div', digits: 2 },
+  { id: 'factor.prime', label: 'Prime recognition', baseDifficulty: 780, tier: 4, op: 'div', digits: 2 },
+  { id: 'factor.deep', label: 'Factoring three digits', baseDifficulty: 1010, tier: 5, op: 'div', digits: 3 },
+
+  // Fractions and percent. Every answer here is a whole number by construction
+  // — the input buffer takes digits only — so the prompts ask for a numerator
+  // over a printed denominator, a missing term, or a quantity.
+  { id: 'frac.percent', label: 'Fraction to percent', baseDifficulty: 430, tier: 2, op: 'mixed', digits: 2 },
+  { id: 'frac.reduce', label: 'Equivalent fractions', baseDifficulty: 560, tier: 3, op: 'mixed', digits: 2 },
+  { id: 'frac.of', label: 'Fraction of a quantity', baseDifficulty: 640, tier: 3, op: 'mul', digits: 2 },
+  { id: 'frac.add.same', label: 'Adding like fractions', baseDifficulty: 680, tier: 3, op: 'add', digits: 2 },
+  { id: 'frac.lcd', label: 'Common denominator', baseDifficulty: 820, tier: 4, op: 'mixed', digits: 2 },
+  { id: 'pct.of', label: 'Percent of a quantity', baseDifficulty: 880, tier: 4, op: 'mul', digits: 3 },
+  { id: 'frac.add.unlike', label: 'Adding unlike fractions', baseDifficulty: 1020, tier: 5, op: 'add', digits: 2 },
 ] as const;
 
 const byId = new Map<SkillId, SkillDef>(SKILLS.map((s) => [s.id, s]));

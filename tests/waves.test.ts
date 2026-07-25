@@ -85,8 +85,11 @@ describe('composeWave', () => {
         totalProblems += 1;
       }
     }
-    // Uncoached expectation would be ~1/25 of draws; coached should be well above.
-    expect(coachedCount / totalProblems).toBeGreaterThan(2 / 25);
+    // Derived from the taxonomy rather than hard-coded: an even spread would
+    // give each skill 1/n of the draws, and coaching should be well clear of
+    // that however many skills the taxonomy grows to.
+    const evenShare = 1 / allSkillIds().length;
+    expect(coachedCount / totalProblems).toBeGreaterThan(2 * evenShare);
   });
 
   it('never returns an empty wave even with an empty table', () => {

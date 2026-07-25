@@ -22,7 +22,15 @@ export interface CollapsePair {
   percent: number;
 }
 
-interface PoolEntry extends CollapsePair {
+/** A pair as fielded in a wave: which band it came from, and how it is written. */
+export interface WavePair extends CollapsePair {
+  /** Pool tier of the underlying pair, not of the wave that fielded it. */
+  tier: number;
+  /** True when the fraction was scaled up, e.g. 2/4 standing in for 1/2. */
+  unreduced: boolean;
+}
+
+export interface PoolEntry extends CollapsePair {
   /** 1 = benchmark, 2 = common, 3 = awkward. Difficulty band. */
   tier: number;
 }
@@ -68,6 +76,25 @@ const POOL: readonly PoolEntry[] = [
 
 /** Every pool value is a terminating decimal, so exact compare needs only slack for float noise. */
 const EPSILON = 1e-9;
+
+/**
+ * The pairs, for anything that needs them outside this mode.
+ *
+ * Meteor Defense generates fraction→percent problems from the same list rather
+ * than keeping a second one: two pools would drift, and a player drilled on one
+ * set in one mode and rated on another set in another mode is being told
+ * something untrue about what they know.
+ */
+export const EQUIV_POOL: readonly PoolEntry[] = POOL;
+
+/**
+ * Pairs whose percentage is a whole number. The input buffer takes digits only,
+ * so eighths and sixteenths — 12.5%, 6.25% — can be *recognised* in Collapse
+ * but cannot be *typed* as a meteor answer.
+ */
+export function wholePercentPairs(maxTier = 3): PoolEntry[] {
+  return POOL.filter((e) => e.tier <= maxTier && Number.isInteger(e.percent));
+}
 
 export function fractionValue(f: Fraction): number {
   return f.num / f.den;
@@ -130,7 +157,7 @@ export interface WaveOptions {
  * has exactly one home and a mis-push is unambiguously the player's read of the
  * maths rather than a coin flip between two valid targets.
  */
-export function generateWave(rng: Rng, opts: WaveOptions): CollapsePair[] {
+export function generateWave(rng: Rng, opts: WaveOptions): WavePair[] {
   const eligible = POOL.filter((entry) => entry.tier <= opts.maxTier);
   const count = Math.min(opts.pairs, eligible.length);
   const chosen = rng.shuffle(eligible).slice(0, count);
@@ -140,6 +167,10 @@ export function generateWave(rng: Rng, opts: WaveOptions): CollapsePair[] {
     return {
       fraction: scaleFraction(entry.fraction, scale),
       percent: entry.percent,
+      // The pair's own band, which is what a rating update should be told
+      // about. The wave's tier cap says what was *allowed*, not what was dealt.
+      tier: entry.tier,
+      unreduced: scale > 1,
     };
   });
 }

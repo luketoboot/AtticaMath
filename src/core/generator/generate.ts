@@ -3,6 +3,7 @@
  * Difficulty is derived from the skill's base difficulty plus operand size.
  * Deterministic given an Rng.
  */
+import { gcd, wholePercentPairs } from '../collapse/equiv';
 import type { Rng } from '../rng';
 import { getSkill, type SkillId } from '../skills/taxonomy';
 import type { Problem } from './problem';
@@ -12,6 +13,33 @@ type Recipe = (rng: Rng) => Omit<Problem, 'id' | 'difficulty'> & { difficultyAdj
 const TIMES = '×';
 const DIVIDE = '÷';
 const MINUS = '−';
+
+/**
+ * Semiprimes whose smaller factor is not 2 or 3 — numbers that look prime and
+ * are not. A composite with an obvious factor teaches nothing: the skill is
+ * having somewhere to look after 2, 3 and 5 have all failed.
+ */
+const SNEAKY_TWO_DIGIT: readonly [number, number][] = [
+  [3, 17], [3, 19], [3, 23], [3, 29], [3, 31],
+  [7, 7], [7, 11], [7, 13],
+];
+const SNEAKY_THREE_DIGIT: readonly [number, number][] = [
+  [7, 17], [7, 19], [7, 23], [7, 29], [7, 31], [7, 37],
+  [11, 11], [11, 13], [11, 17], [11, 19], [11, 23],
+  [13, 13], [13, 17], [13, 19], [17, 17], [17, 19],
+];
+
+const PRIMES_TO_120: readonly number[] = [
+  2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97,
+  101, 103, 107, 109, 113, 127,
+];
+
+/** Denominators small enough to hold in your head while you work. */
+const FRIENDLY_DENS: readonly number[] = [2, 3, 4, 5, 6, 8, 10, 12];
+
+function lcm(a: number, b: number): number {
+  return (a * b) / gcd(a, b);
+}
 
 function timesTableRecipe(family: number): Recipe {
   return (rng) => {
@@ -180,6 +208,127 @@ const RECIPES: Record<SkillId, Recipe> = {
     // Keep the result non-negative: c never exceeds the product.
     const c = rng.int(2, Math.min(9, a * b - 1));
     return { skillIds: ['ooo.basic'], prompt: `${a} ${TIMES} ${b} ${MINUS} ${c}`, answer: String(a * b - c), difficultyAdjust: 0 };
+  },
+
+  // --- factorisation ---
+
+  'factor.smallest': (rng) => {
+    const [small, big] = rng.pick([...SNEAKY_TWO_DIGIT]);
+    return {
+      skillIds: ['factor.smallest'],
+      prompt: `LEAST FACTOR OF ${small * big}`,
+      answer: String(small),
+      difficultyAdjust: (small - 5) * 12,
+    };
+  },
+  'factor.prime': (rng) => {
+    // "Next prime after n" is primality recognition with one right answer,
+    // which a yes/no question could never be on a digits-only buffer.
+    const n = rng.int(4, 90);
+    const next = PRIMES_TO_120.find((p) => p > n)!;
+    return {
+      skillIds: ['factor.prime'],
+      prompt: `NEXT PRIME AFTER ${n}`,
+      answer: String(next),
+      difficultyAdjust: Math.floor((next - n - 1) * 18),
+    };
+  },
+  'factor.deep': (rng) => {
+    const [small, big] = rng.pick([...SNEAKY_THREE_DIGIT]);
+    return {
+      skillIds: ['factor.deep'],
+      prompt: `LEAST FACTOR OF ${small * big}`,
+      answer: String(small),
+      difficultyAdjust: (small - 10) * 10,
+    };
+  },
+
+  // --- fractions and percent ---
+
+  'frac.percent': (rng) => {
+    const entry = rng.pick(wholePercentPairs());
+    const { num, den } = entry.fraction;
+    return {
+      skillIds: ['frac.percent'],
+      prompt: `${num}/${den} = ?%`,
+      answer: String(entry.percent),
+      difficultyAdjust: (entry.tier - 1) * 90,
+    };
+  },
+  'frac.reduce': (rng) => {
+    const entry = rng.pick(wholePercentPairs(2));
+    const { num, den } = entry.fraction;
+    const scale = rng.int(2, 4);
+    // Show the scaled form and one term of the reduced one; the missing term is
+    // the answer, so seeing the scale factor is the whole job.
+    return {
+      skillIds: ['frac.reduce'],
+      prompt: `${num * scale}/${den * scale} = ${num}/?`,
+      answer: String(den),
+      difficultyAdjust: (scale - 2) * 40,
+    };
+  },
+  'frac.of': (rng) => {
+    const den = rng.pick([...FRIENDLY_DENS]);
+    const num = rng.int(1, den - 1);
+    const whole = den * rng.int(2, 12);
+    return {
+      skillIds: ['frac.of'],
+      prompt: `${num}/${den} OF ${whole}`,
+      answer: String((whole / den) * num),
+      difficultyAdjust: (den - 5) * 12,
+    };
+  },
+  'frac.add.same': (rng) => {
+    const den = rng.pick(FRIENDLY_DENS.filter((d) => d >= 4));
+    const a = rng.int(1, den - 2);
+    const b = rng.int(1, den - 1 - a);
+    // Answered as a numerator over the printed denominator: the sum is the
+    // skill, and reducing it is frac.reduce's job.
+    return {
+      skillIds: ['frac.add.same'],
+      prompt: `${a}/${den} + ${b}/${den} = ?/${den}`,
+      answer: String(a + b),
+      difficultyAdjust: (den - 6) * 10,
+    };
+  },
+  'frac.lcd': (rng) => {
+    const d1 = rng.pick([...FRIENDLY_DENS]);
+    const d2 = rng.pick(FRIENDLY_DENS.filter((d) => d !== d1));
+    return {
+      skillIds: ['frac.lcd'],
+      prompt: `1/${d1} + 1/${d2} → ?ths`,
+      answer: String(lcm(d1, d2)),
+      difficultyAdjust: gcd(d1, d2) === 1 ? 60 : 0,
+    };
+  },
+  'frac.add.unlike': (rng) => {
+    const d1 = rng.pick([...FRIENDLY_DENS]);
+    const d2 = rng.pick(FRIENDLY_DENS.filter((d) => d !== d1));
+    const common = lcm(d1, d2);
+    const a = rng.int(1, d1 - 1);
+    const b = rng.int(1, d2 - 1);
+    // The denominator is printed, so the player converts and adds rather than
+    // also having to find the LCD — that half is frac.lcd, rated separately.
+    return {
+      skillIds: ['frac.add.unlike'],
+      prompt: `${a}/${d1} + ${b}/${d2} = ?/${common}`,
+      answer: String(a * (common / d1) + b * (common / d2)),
+      difficultyAdjust: (common - 8) * 6,
+    };
+  },
+  'pct.of': (rng) => {
+    // Every percent is a multiple of 5 and every quantity a multiple of 20, so
+    // the answer is always whole without narrowing the drill to halves and
+    // quarters.
+    const pct = rng.pick([5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 80, 90]);
+    const whole = 20 * rng.int(1, 10);
+    return {
+      skillIds: ['pct.of'],
+      prompt: `${pct}% OF ${whole}`,
+      answer: String((pct * whole) / 100),
+      difficultyAdjust: pct % 25 === 0 ? -60 : 40,
+    };
   },
 };
 

@@ -40,6 +40,16 @@ export const TIPS: readonly Tip[] = [
   { skillId: 'div.long', text: 'Long division, no paper: peel place by place. 738÷6 → 600÷6 is 100, 138÷6 is 23. 123.' },
   { skillId: 'div.big', text: 'Four digits divide the same way — biggest clean chunk first, then work the remainder down.' },
   { skillId: 'ooo.basic', text: 'Multiplication fires first. 3+4×5 is 3+20. Scan for ×, resolve it, then sweep the rest.' },
+  { skillId: 'factor.smallest', text: 'Run the gate: 2, 3, 5, 7, 11, 13. Stop when one bites. 91 survives to 7 — 7×13. Nothing above the square root can be first.' },
+  { skillId: 'factor.prime', text: 'A number is prime once every prime up to its square root has missed. For two digits that is 2, 3, 5, 7 — four checks, then stop.' },
+  { skillId: 'factor.deep', text: 'Three digits, same gate, longer walk. 187: not even, digits sum to 16 so not 3, no 5 — 11 splits it. 11×17.' },
+  { skillId: 'frac.percent', text: 'Percent means per hundred. Scale the denominator to 100 and read the top. 3/20 → ×5 → 15/100 → 15%.' },
+  { skillId: 'frac.reduce', text: 'Same cut, different slices. 6/8 is 3/4 wearing a disguise — divide both ends by what they share.' },
+  { skillId: 'frac.of', text: 'Of means times. Divide by the bottom, multiply by the top. 3/4 of 20 → 20/4 is 5 → 5×3 → 15. Always divide first, the numbers stay small.' },
+  { skillId: 'frac.add.same', text: 'Same denominator, add the tops and leave the bottom alone. Three eighths plus one eighth is four eighths. The slice size never changed.' },
+  { skillId: 'frac.lcd', text: 'Smallest number both denominators divide. Walk the bigger one up: 4 and 6 → 6, 12. Twelve. Not always the product — 4×6 is 24 and that is twice the work.' },
+  { skillId: 'frac.add.unlike', text: 'Different slices do not add. Convert both to the common denominator first, then it is the easy case. 1/2+1/3 → 3/6+2/6 → 5/6.' },
+  { skillId: 'pct.of', text: 'Find 10%, then build. 15% of 60 → 10% is 6, half of that is 3 → 9. Every percentage is made of tenths and halves.' },
 ] as const;
 
 const tipsBySkill = new Map<SkillId, Tip>(TIPS.map((t) => [t.skillId, t]));
