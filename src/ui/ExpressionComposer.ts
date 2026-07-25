@@ -6,12 +6,23 @@ import { CSS, FONT, PALETTE } from '../fx/palette';
 interface Chip {
   container: Phaser.GameObjects.Container;
   bg: Phaser.GameObjects.Rectangle;
+  /** The home-row key printed on this chip, so the binding is never memorised. */
+  keyLabel: Phaser.GameObjects.Text;
   value: number;
   used: boolean;
 }
 
 const OP_KEYS: Record<string, Op> = { '+': '+', '-': '-', '*': '×', x: '×', X: '×', '/': '÷' };
 const OPS: readonly Op[] = ['+', '-', '×', '÷'];
+
+/**
+ * Home-row picks, left to right. ASDF covers the four operators and a typical
+ * hand; G and H only ever light up when the hand runs to five or six chips.
+ */
+const HOME_KEYS = ['A', 'S', 'D', 'F', 'G', 'H'] as const;
+
+/** Which row the home keys currently address. */
+type HomeRow = 0 | 1;
 
 export interface ComposerOptions {
   /** Y of the expression readout line. */
@@ -42,9 +53,12 @@ export class ExpressionComposer {
   private selVisible = false;
   private selRow = 0;
   private selCol = 0;
+  /** Row pinned by SPACE. Null lets the row follow what the expression needs next. */
+  private homeRowOverride: HomeRow | null = null;
 
   private exprText: Phaser.GameObjects.Text;
   private opButtons: Phaser.GameObjects.Text[] = [];
+  private opKeyLabels: Phaser.GameObjects.Text[] = [];
   private selHighlight: Phaser.GameObjects.Rectangle;
 
   constructor(scene: Phaser.Scene, opts: ComposerOptions) {
@@ -75,6 +89,18 @@ export class ExpressionComposer {
         .setInteractive({ useHandCursor: true });
       btn.on('pointerdown', () => this.typeOp(o));
       this.opButtons.push(btn);
+
+      // Corner hotkey badge, on the button itself — the binding is read, not recalled.
+      this.opKeyLabels.push(
+        scene.add
+          .text(x + 24, opts.opsY - 16, HOME_KEYS[i]!, {
+            fontFamily: FONT,
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: CSS.cyanDim,
+          })
+          .setOrigin(0.5),
+      );
     });
 
     const fire = scene.add
@@ -109,14 +135,15 @@ export class ExpressionComposer {
       scene.add
         .text(
           width / 2,
-          scene.scale.height - 14,
-          'TYPE THE NUMBERS  ·  + − × ÷  ·  ENTER FIRE  ·  BACKSPACE UNDO  ·  ARROWS + SPACE',
+          scene.scale.height - 13,
+          'TYPE THE NUMBERS  ·  A S D F PICK THE LIT ROW  ·  SPACE SWITCHES ROW  ·  ENTER FIRE  ·  BACKSPACE UNDO',
           { fontFamily: FONT, fontSize: '13px', color: CSS.cyanDim },
         )
         .setOrigin(0.5);
     }
 
     scene.input.keyboard?.addCapture('SPACE,UP,DOWN,LEFT,RIGHT');
+    this.refreshHomeKeys();
   }
 
   get currentTokens(): readonly Token[] {
@@ -147,7 +174,15 @@ export class ExpressionComposer {
       return true;
     }
     if (key === ' ') {
-      this.activateSelection();
+      // Space keeps its arrow-scheme meaning once a cursor is up; otherwise it
+      // flips which row the home keys address.
+      if (this.selVisible) this.activateSelection();
+      else this.toggleHomeRow();
+      return true;
+    }
+    const slot = HOME_KEYS.indexOf(key.toUpperCase() as (typeof HOME_KEYS)[number]);
+    if (slot >= 0) {
+      this.activateHome(slot);
       return true;
     }
     return false;
@@ -164,12 +199,20 @@ export class ExpressionComposer {
       const label = this.scene.add
         .text(0, 0, String(value), { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: CSS.white })
         .setOrigin(0.5);
-      const container = this.scene.add.container(x, this.opts.chipsY, [bg, label]);
+      const keyLabel = this.scene.add
+        .text(30, -19, HOME_KEYS[i] ?? '', {
+          fontFamily: FONT,
+          fontSize: '13px',
+          fontStyle: 'bold',
+          color: CSS.cyanDim,
+        })
+        .setOrigin(0.5);
+      const container = this.scene.add.container(x, this.opts.chipsY, [bg, label, keyLabel]);
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerdown', () => {
         if (!this.pushChip(i)) this.errorCue();
       });
-      this.chips.push({ container, bg, value, used: false });
+      this.chips.push({ container, bg, keyLabel, value, used: false });
     });
     this.selCol = 0;
     this.updateSelectionHighlight();
@@ -181,6 +224,7 @@ export class ExpressionComposer {
     this.tokens = [];
     this.tokenChipIndices = [];
     this.pending = '';
+    this.homeRowOverride = null;
     for (const chip of this.chips) {
       chip.used = false;
       chip.bg.setFillStyle(PALETTE.deepPurple).setStrokeStyle(2, PALETTE.cyan);
@@ -303,11 +347,55 @@ export class ExpressionComposer {
     return true;
   }
 
-  private pushOp(o: Op): boolean {
-    if (this.expectingNumber()) return false;
+  /** `undefined` covers G/H, which address chips only — there is no fifth operator. */
+  private pushOp(o: Op | undefined): boolean {
+    if (!o || this.expectingNumber()) return false;
     this.tokens.push(op(o));
     this.renderExpression();
     return true;
+  }
+
+  // --- home-row (ASDF) scheme ---
+
+  /**
+   * Row the home keys address: chips when the expression wants a number, the
+   * operators when it wants an operator, unless SPACE has pinned one.
+   */
+  private get homeRow(): HomeRow {
+    return this.homeRowOverride ?? (this.expectingNumber() ? 0 : 1);
+  }
+
+  private toggleHomeRow(): void {
+    this.homeRowOverride = this.homeRow === 0 ? 1 : 0;
+    getAudio(this.scene)?.play('ui');
+    this.refreshHomeKeys();
+  }
+
+  private activateHome(slot: number): void {
+    if (this.pending !== '' && !this.commitPending()) {
+      this.errorCue();
+      return;
+    }
+    const ok = this.homeRow === 0 ? this.pushChip(slot) : this.pushOp(OPS[slot] as Op | undefined);
+    if (!ok) {
+      this.errorCue();
+      return;
+    }
+    // A successful pick hands the row back to whatever comes next.
+    this.homeRowOverride = null;
+    this.refreshHomeKeys();
+  }
+
+  /** Light the row the home keys currently drive; dim everything else. */
+  private refreshHomeKeys(): void {
+    const row = this.homeRow;
+    for (const [i, chip] of this.chips.entries()) {
+      const live = row === 0 && !chip.used && i < HOME_KEYS.length;
+      chip.keyLabel.setColor(live ? CSS.yellow : CSS.cyanDim).setAlpha(live ? 1 : 0.3);
+    }
+    for (const label of this.opKeyLabels) {
+      label.setColor(row === 1 ? CSS.yellow : CSS.cyanDim).setAlpha(row === 1 ? 1 : 0.3);
+    }
   }
 
   private moveSelection(key: string): void {
@@ -357,5 +445,7 @@ export class ExpressionComposer {
     if (this.tokens.length > 0) parts.push(formatTokens(this.tokens));
     if (this.pending !== '') parts.push(`${this.pending}▌`);
     this.exprText.setText(parts.length > 0 ? parts.join(' ') : '. . .');
+    // Every mutation lands here, so this is the one place the lit row can't drift.
+    this.refreshHomeKeys();
   }
 }

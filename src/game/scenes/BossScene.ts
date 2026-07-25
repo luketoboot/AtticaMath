@@ -84,7 +84,7 @@ export class BossScene extends Phaser.Scene {
       showHint: false,
     });
     this.add
-      .text(width / 2, height - 14, 'EXPRESSION VALUE = DAMAGE  ·  TYPE ATTACK ANSWERS TO BLOCK', {
+      .text(width / 2, height - 14, 'EXPRESSION VALUE = DAMAGE  ·  A S D F PICK THE LIT ROW  ·  TYPE ATTACK ANSWERS TO BLOCK', {
         fontFamily: FONT,
         fontSize: '13px',
         color: CSS.cyanDim,
