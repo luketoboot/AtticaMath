@@ -65,7 +65,9 @@ export class MenuScene extends Phaser.Scene {
     getAudio(this)?.playMusic('menu');
     applyCrt(this);
 
-    drawBackdrop(this);
+    // The utility row sits over the sun's upper half, so the sun comes down to
+    // atmosphere here — still synthwave, no longer a second thing to read.
+    drawBackdrop(this, { sunAlpha: 0.45 });
 
     titleLogo(this, width / 2, 86, 'METEOR MATH', {
       fontSize: 66,

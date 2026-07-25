@@ -14,6 +14,12 @@ export interface BackdropOptions {
   horizon?: number;
   /** Draw the sun. Off for screens with content low on the glass. */
   sun?: boolean;
+  /**
+   * How present the sun is, 0 to 1. Screens that put content over the sun's
+   * upper half dial this down so it reads as atmosphere rather than a second
+   * subject. VIDEO leaves it at 1, where it doubles as a CRT test pattern.
+   */
+  sunAlpha?: number;
   /** Twinkling points above the horizon. */
   stars?: boolean;
 }
@@ -25,7 +31,9 @@ export function drawBackdrop(scene: Phaser.Scene, opts: BackdropOptions = {}): v
   scene.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0).setDepth(-100);
 
   if (opts.stars !== false) drawStars(scene, horizon);
-  if (opts.sun !== false) drawSun(scene, width / 2, horizon + 30, Math.min(210, height * 0.3));
+  if (opts.sun !== false) {
+    drawSun(scene, width / 2, horizon + 30, Math.min(210, height * 0.3), opts.sunAlpha ?? 1);
+  }
   drawGrid(scene, horizon);
 }
 
@@ -33,13 +41,16 @@ export function drawBackdrop(scene: Phaser.Scene, opts: BackdropOptions = {}): v
  * A disc cut by widening horizontal gaps. Drawn as one scanline row per pixel
  * pair, with the colour walking yellow → magenta down the face.
  */
-function drawSun(scene: Phaser.Scene, cx: number, cy: number, r: number): void {
-  const g = scene.add.graphics().setDepth(-90).setAlpha(0.75);
+function drawSun(scene: Phaser.Scene, cx: number, cy: number, r: number, intensity: number): void {
+  const g = scene.add.graphics().setDepth(-90).setAlpha(0.75 * intensity);
+  // Dialling the sun back also starts the striping higher up its face, so what
+  // dims is a stack of bands rather than a solid plate gone grey.
+  const gapStart = 0.45 * intensity;
   for (let dy = -r; dy < r; dy += 2) {
     const t = (dy + r) / (2 * r);
     // Gaps start below the equator and grow, so the sun appears to sink.
-    if (t > 0.45) {
-      const band = (t - 0.45) * 26;
+    if (t > gapStart) {
+      const band = (t - gapStart) * 26;
       if ((dy + r) % Math.max(4, Math.round(14 - band)) < Math.min(6, 1 + band * 0.5)) continue;
     }
     const halfW = Math.sqrt(Math.max(0, r * r - dy * dy));
