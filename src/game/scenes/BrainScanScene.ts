@@ -5,6 +5,7 @@ import { earnedMilestones } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { MenuNav, navHint } from '../../ui/MenuNav';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 const GROUPS: readonly { title: string; ops: readonly string[] }[] = [
@@ -48,16 +49,22 @@ export class BrainScanScene extends Phaser.Scene {
     this.renderColumn(rightGroups, width * 0.56, width * 0.94, saves, mastered);
 
     const back = this.add
-      .text(width / 2, height - 28, '[ BACK ]', { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: CSS.cyan })
+      // Sits a line higher than the other screens' BACK to leave room for the
+      // hint below it; the skill columns bottom out around y=640.
+      .text(width / 2, height - 52, '[ BACK ]', { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: CSS.cyan })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     back.on('pointerover', () => back.setColor(CSS.magentaHot));
     back.on('pointerout', () => back.setColor(CSS.cyan));
-    back.on('pointerdown', () => {
+    const goBack = (): void => {
       getAudio(this)?.play('ui');
       this.scene.start('Menu');
-    });
+    };
+    back.on('pointerdown', goBack);
     this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+
+    new MenuNav(this, [[{ target: back, onSelect: goBack }]]);
+    navHint(this);
   }
 
   private renderColumn(

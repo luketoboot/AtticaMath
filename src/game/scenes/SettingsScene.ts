@@ -4,6 +4,7 @@ import { getAudio } from '../../audio/getAudio';
 import { applyCrt } from '../../fx/applyCrt';
 import { defaultSave } from '../../core/save/save';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 export class SettingsScene extends Phaser.Scene {
@@ -36,7 +37,7 @@ export class SettingsScene extends Phaser.Scene {
       saves.persist();
     };
 
-    this.makeStepper(
+    const sfx = this.makeStepper(
       height * 0.3,
       'SFX VOLUME',
       () => saves.save.settings.sfxVolume,
@@ -47,7 +48,7 @@ export class SettingsScene extends Phaser.Scene {
       },
     );
 
-    this.makeStepper(
+    const music = this.makeStepper(
       height * 0.42,
       'MUSIC VOLUME',
       () => saves.save.settings.musicVolume,
@@ -65,13 +66,14 @@ export class SettingsScene extends Phaser.Scene {
       crt.setText(`[ CRT SHADER ${saves.save.settings.crtEnabled ? 'ON' : 'OFF'} ]`);
     };
     renderCrt();
-    crt.on('pointerdown', () => {
+    const toggleCrt = (): void => {
       getAudio(this)?.play('ui');
       saves.save.settings.crtEnabled = !saves.save.settings.crtEnabled;
       saves.persist();
       renderCrt();
       applyCrt(this);
-    });
+    };
+    crt.on('pointerdown', toggleCrt);
 
     const reset = this.add
       .text(width / 2, height * 0.72, '[ RESET SAVE ]', {
@@ -82,18 +84,19 @@ export class SettingsScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
-    reset.on('pointerdown', () => {
+    const resetSave = (): void => {
       if (!this.resetArmed) {
         this.resetArmed = true;
         getAudio(this)?.play('error');
-        reset.setText('[ CLICK AGAIN TO WIPE EVERYTHING ]');
+        reset.setText('[ CONFIRM AGAIN TO WIPE EVERYTHING ]');
         return;
       }
       saves.save = defaultSave();
       saves.persist();
       getAudio(this)?.play('land');
       this.scene.start('Menu');
-    });
+    };
+    reset.on('pointerdown', resetSave);
 
     const back = this.add
       .text(width / 2, height * 0.88, '[ BACK ]', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.cyan })
@@ -101,20 +104,30 @@ export class SettingsScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     back.on('pointerover', () => back.setColor(CSS.magentaHot));
     back.on('pointerout', () => back.setColor(CSS.cyan));
-    back.on('pointerdown', () => {
+    const goBack = (): void => {
       getAudio(this)?.play('ui');
       this.scene.start('Menu');
-    });
+    };
+    back.on('pointerdown', goBack);
     this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+
+    new MenuNav(this, [
+      [sfx],
+      [music],
+      [{ target: crt, onSelect: toggleCrt, onAdjust: toggleCrt }],
+      [{ target: reset, onSelect: resetSave }],
+      [{ target: back, onSelect: goBack }],
+    ]);
+    navHint(this, height * 0.96);
   }
 
-  /** [ - ] ████████░░ 80% [ + ] volume row. */
+  /** [ - ] ████████░░ 80% [ + ] volume row. Focused as one item; left/right adjusts. */
   private makeStepper(
     y: number,
     label: string,
     get: () => number,
     set: (v: number) => void,
-  ): void {
+  ): MenuItem {
     const { width } = this.scale;
     this.add
       .text(width * 0.24, y, label, { fontFamily: FONT, fontSize: '22px', color: CSS.cyanDim })
@@ -130,22 +143,26 @@ export class SettingsScene extends Phaser.Scene {
     };
     render();
 
+    const step = (dir: -1 | 1): void => {
+      set(Phaser.Math.Clamp(Math.round((get() + dir * 0.1) * 10) / 10, 0, 1));
+      render();
+    };
+
     const minus = this.add
       .text(width * 0.44, y, '[ − ]', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.magentaHot })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
-    minus.on('pointerdown', () => {
-      set(Math.max(0, Math.round((get() - 0.1) * 10) / 10));
-      render();
-    });
+    minus.on('pointerdown', () => step(-1));
 
     const plus = this.add
       .text(width * 0.8, y, '[ + ]', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.magentaHot })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
-    plus.on('pointerdown', () => {
-      set(Math.min(1, Math.round((get() + 0.1) * 10) / 10));
-      render();
-    });
+    plus.on('pointerdown', () => step(1));
+
+    // Unfilled rect spanning label→[+], so the cursor frames the whole row
+    // rather than one of the two buttons. Purely a bounds source, never drawn.
+    const bounds = this.add.rectangle(width * 0.535, y, width * 0.62, 46);
+    return { target: bounds, onAdjust: step };
   }
 }

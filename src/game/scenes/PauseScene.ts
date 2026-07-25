@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
 
 interface PauseData {
   /** Scene key to resume when unpausing. */
@@ -26,11 +27,16 @@ export class PauseScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.makeButton(width / 2, height * 0.5, 'RESUME', () => this.resumeTarget(data.target));
-    this.makeButton(width / 2, height * 0.6, 'QUIT TO MENU', () => {
+    const resume = this.makeButton(width / 2, height * 0.5, 'RESUME', () =>
+      this.resumeTarget(data.target),
+    );
+    const quit = this.makeButton(width / 2, height * 0.6, 'QUIT TO MENU', () => {
       this.scene.stop(data.target);
       this.scene.start('Menu');
     });
+
+    new MenuNav(this, [[resume], [quit]]);
+    navHint(this, height * 0.72);
 
     this.input.keyboard?.on('keydown-ESC', () => this.resumeTarget(data.target));
   }
@@ -41,16 +47,18 @@ export class PauseScene extends Phaser.Scene {
     this.scene.stop();
   }
 
-  private makeButton(x: number, y: number, label: string, onClick: () => void): void {
+  private makeButton(x: number, y: number, label: string, onClick: () => void): MenuItem {
     const text = this.add
       .text(x, y, `[ ${label} ]`, { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: CSS.cyan })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     text.on('pointerover', () => text.setColor(CSS.magentaHot));
     text.on('pointerout', () => text.setColor(CSS.cyan));
-    text.on('pointerdown', () => {
+    const select = (): void => {
       getAudio(this)?.play('ui');
       onClick();
-    });
+    };
+    text.on('pointerdown', select);
+    return { target: text, onSelect: select };
   }
 }

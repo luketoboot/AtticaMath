@@ -3,6 +3,7 @@ import { getAudio } from '../../audio/getAudio';
 import type { RunStats } from '../../core/economy/economy';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
 
 interface DebriefData {
   stats: RunStats;
@@ -84,14 +85,18 @@ export class DebriefScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const relaunchScene = data.mode ?? 'Game';
-    this.makeButton(width / 2, height * 0.74, 'RELAUNCH', () => this.scene.start(relaunchScene));
-    this.makeButton(width / 2, height * 0.82, 'ARMORY', () => this.scene.start('Shop'));
-    this.makeButton(width / 2, height * 0.9, 'MENU', () => this.scene.start('Menu'));
+    const relaunch = this.makeButton(width / 2, height * 0.74, 'RELAUNCH', () =>
+      this.scene.start(relaunchScene),
+    );
+    const armory = this.makeButton(width / 2, height * 0.82, 'ARMORY', () => this.scene.start('Shop'));
+    const menu = this.makeButton(width / 2, height * 0.9, 'MENU', () => this.scene.start('Menu'));
 
-    this.input.keyboard?.once('keydown-ENTER', () => this.scene.start(relaunchScene));
+    // Opens on RELAUNCH, so ENTER still means "go again" as it always has.
+    new MenuNav(this, [[relaunch], [armory], [menu]]);
+    navHint(this);
   }
 
-  private makeButton(x: number, y: number, label: string, onClick: () => void): void {
+  private makeButton(x: number, y: number, label: string, onClick: () => void): MenuItem {
     const text = this.add
       .text(x, y, `[ ${label} ]`, { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.cyan })
       .setOrigin(0.5)
@@ -99,5 +104,6 @@ export class DebriefScene extends Phaser.Scene {
     text.on('pointerover', () => text.setColor(CSS.magentaHot));
     text.on('pointerout', () => text.setColor(CSS.cyan));
     text.on('pointerdown', onClick);
+    return { target: text, onSelect: onClick };
   }
 }

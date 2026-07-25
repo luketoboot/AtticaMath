@@ -4,6 +4,7 @@ import { CONFIG } from '../../core/config';
 import { purchase, UPGRADES } from '../../core/economy/economy';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 export class ShopScene extends Phaser.Scene {
@@ -42,6 +43,8 @@ export class ShopScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    const rows: MenuItem[][] = [];
+
     UPGRADES.forEach((u, i) => {
       const y = height * 0.29 + i * 88;
       const price = CONFIG.economy.prices[u.id] ?? 0;
@@ -79,7 +82,7 @@ export class ShopScene extends Phaser.Scene {
       };
       render();
 
-      action.on('pointerdown', () => {
+      const act = (): void => {
         const audio = getAudio(this);
         const owned = saves.save.ownedUpgrades.includes(u.id);
         if (!owned) {
@@ -105,7 +108,9 @@ export class ShopScene extends Phaser.Scene {
           audio?.play('ui');
         }
         render();
-      });
+      };
+      action.on('pointerdown', act);
+      rows.push([{ target: action, onSelect: act }]);
     });
 
     const back = this.add
@@ -119,11 +124,16 @@ export class ShopScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     back.on('pointerover', () => back.setColor(CSS.magentaHot));
     back.on('pointerout', () => back.setColor(CSS.cyan));
-    back.on('pointerdown', () => {
+    const goBack = (): void => {
       getAudio(this)?.play('ui');
       this.scene.start('Menu');
-    });
+    };
+    back.on('pointerdown', goBack);
     this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+
+    rows.push([{ target: back, onSelect: goBack }]);
+    new MenuNav(this, rows);
+    navHint(this, height * 0.97);
   }
 
   private refreshCredits(saves: SaveManager): void {
