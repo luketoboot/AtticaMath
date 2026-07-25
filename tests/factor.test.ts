@@ -305,6 +305,59 @@ describe('FactorSession', () => {
     expect(rocks.length).toBeGreaterThan(0);
   });
 
+  it('rates a rock that reaches the ship as unanswered', () => {
+    const s = session();
+    const rock = s.nextWave()[0]!;
+    s.takeDamage(rock.id, 9000);
+
+    // div.exact is credited by every shot, so it is the one skill guaranteed to
+    // be in the attempt whatever the rock turned out to be.
+    const state = s.skillTable['div.exact']!;
+    expect(state.attempts).toBe(1);
+    expect(state.rating).toBeLessThan(CONFIG.rating.initialRating);
+  });
+
+  it('counts one unanswered number however many times the rock catches you', () => {
+    const s = session();
+    const rock = s.nextWave()[0]!;
+    s.takeDamage(rock.id, 9000);
+    const after = s.skillTable['div.exact']!.rating;
+    s.takeDamage(rock.id, 9000);
+    s.takeDamage(rock.id, 9000);
+    expect(s.skillTable['div.exact']!.attempts).toBe(1);
+    expect(s.skillTable['div.exact']!.rating).toBe(after);
+    expect(s.stats().misses).toBe(1);
+  });
+
+  it('still costs hp and combo when the rock is already accounted for', () => {
+    const s = session();
+    const rock = s.nextWave()[0]!;
+    s.takeDamage(rock.id, 1000);
+    s.takeDamage(rock.id, 1000);
+    expect(s.hp).toBe(CONFIG.meteors.baseHp - 2);
+  });
+
+  it('rates fragments separately from the rock they came from', () => {
+    const s = session();
+    const wave = s.nextWave();
+    const parent = wave.find((r) => properFactors(r.value).length > 0)!;
+    const outcome = s.shoot(parent.id, properFactors(parent.value)[0]!, 1000);
+    expect(outcome.result).toBe('split');
+    if (outcome.result !== 'split') return;
+
+    s.takeDamage(parent.id, 5000); // gone from the board; nothing to rate
+    const before = s.stats().misses;
+    s.takeDamage(outcome.pieces[0].id, 5000);
+    expect(s.stats().misses).toBe(before + 1);
+  });
+
+  it('leaves ratings alone when the field is nuked', () => {
+    const s = session();
+    const rock = s.nextWave()[0]!;
+    s.recordNuke(rock);
+    expect(s.skillTable['div.exact']).toBeUndefined();
+  });
+
   it('big rocks lumber and fragments are quick', () => {
     const s = session();
     expect(s.driftSpeed(f.maxRockValue)).toBeLessThan(s.driftSpeed(f.minRockValue));

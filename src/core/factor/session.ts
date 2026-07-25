@@ -25,7 +25,14 @@ import { creditsForRun, type RunStats } from '../economy/economy';
 import { createRng, type Rng } from '../rng';
 import { applyAttempt, targetLatencyMs, type SkillTable } from '../skills/rating';
 import { getSkill, SKILLS, type SkillId } from '../skills/taxonomy';
-import { composeRockValue, isPrime, resolveShot, shotScore, type ShotKind } from './factor';
+import {
+  balancedFactor,
+  composeRockValue,
+  isPrime,
+  resolveShot,
+  shotScore,
+  type ShotKind,
+} from './factor';
 
 export interface FactorSessionInit {
   seed: number;
@@ -62,6 +69,8 @@ export class FactorSession {
   private readonly drops: DropTracker;
   private hitsThisWave = 0;
   private damageThisWave = 0;
+  /** Rocks already rated as unanswered, so one rock cannot count twice. */
+  private readonly missedRocks = new Set<number>();
 
   score = 0;
   splits = 0;
@@ -319,10 +328,47 @@ export class FactorSession {
     return { result: 'split', parent: rock, pieces, points, balanced: outcome.balanced };
   }
 
-  /** A rock hit the ship. Costs HP and half the combo, like meteor gunfire. */
-  takeDamage(): void {
+  /**
+   * A rock hit the ship. Costs HP and half the combo, like meteor gunfire, and
+   * rates the number as unanswered.
+   *
+   * This is the mode's equivalent of a meteor landing: the rock posed a
+   * question, it was on screen long enough to drift the width of the field, and
+   * it was never broken. Without it every factor rating in the game came from a
+   * correct attempt, so the ratings could only ever climb.
+   *
+   * Once per rock. A rock that catches the ship twice is two collisions and one
+   * unanswered question, and after a split the fragments are new numbers with
+   * their own ids, so breaking a rock down resets the clock on its pieces.
+   *
+   * Wrong digits are deliberately not rated here — they cost combo clock and
+   * nothing else, exactly as they do in Meteor Defense. Every digit is a live
+   * guess in this input model, and a mode that quietly downgraded you for
+   * exploring the keypad would be teaching timidity.
+   */
+  takeDamage(rockId?: number, responseMs = 0): void {
     this.damageThisWave += 1;
     this.combo = comboDamaged(this.combo, this.cfg.combo);
+
+    const rock = this.rocks.find((r) => r.id === rockId);
+    if (rock && !this.missedRocks.has(rock.id)) {
+      this.missedRocks.add(rock.id);
+      // Rated against the split the player was meant to find — the balanced
+      // factor, or the number itself when it is prime and cannot be split.
+      const shot = balancedFactor(rock.value) ?? rock.value;
+      this.skills = applyAttempt(
+        this.skills,
+        this.skillsForShot(rock.value, shot),
+        {
+          correct: false,
+          responseMs,
+          difficulty: this.difficultyOf(rock.value, shot),
+          wave: this.globalWave,
+        },
+        this.cfg.rating,
+      );
+    }
+
     if (this.drops.shielded) return;
     this.hp -= 1;
   }
@@ -341,7 +387,10 @@ export class FactorSession {
       score: this.score,
       wavesCleared: Math.max(0, this.waveInRun - (this.gameOver ? 1 : 0)),
       kills: this.splits + this.destroyed,
-      misses: this.misfires,
+      // Refused shots plus numbers that got past the ship unbroken. The second
+      // is the honest one — misfires are nearly impossible, since the cannon
+      // only fires on a shot the rock accepts.
+      misses: this.misfires + this.missedRocks.size,
       bestStreak: this.combo.best,
     };
   }

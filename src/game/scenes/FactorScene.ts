@@ -545,7 +545,7 @@ export class FactorScene extends Phaser.Scene {
       if (!hitsCircle(r.shape, r.x, r.y, r.rotation, this.shipX, this.shipY, CONFIG.flight.shipRadius))
         continue;
 
-      this.session.takeDamage();
+      this.session.takeDamage(r.rock.id, this.time.now - r.spawnedAt);
       this.invulnUntil = this.time.now + f.invulnSeconds * 1000;
       getAudio(this)?.play('playerHit');
       this.cameras.main.flash(200, 255, 40, 40);
