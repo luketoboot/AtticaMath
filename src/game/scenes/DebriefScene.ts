@@ -32,7 +32,7 @@ export class DebriefScene extends Phaser.Scene {
 
   create(data: DebriefData): void {
     const { width, height } = this.scale;
-    getAudio(this)?.playMusic('menu');
+    getAudio(this)?.playMusic('debrief');
     applyCrt(this);
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
 

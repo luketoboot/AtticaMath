@@ -24,7 +24,17 @@ export type SfxName =
   | 'bossDown'
   | 'block'
   | 'enemyFire'
-  | 'playerHit';
+  | 'playerHit'
+  | 'reload'
+  | 'gunFraction'
+  | 'gunPercent'
+  | 'prime'
+  | 'implode'
+  | 'boltHit'
+  | 'phase'
+  | 'comboUp'
+  | 'nearMiss'
+  | 'waveClear';
 
 export interface SfxOptions {
   /** Frequency multiplier — used to climb the streak ladder. */
@@ -33,13 +43,17 @@ export interface SfxOptions {
   gain?: number;
 }
 
-export type MusicTrack = 'menu' | 'game' | 'boss';
+export type MusicTrack = 'menu' | 'game' | 'boss' | 'drift' | 'debrief';
 
 /** Owner-supplied looping tracks in public/music/. Missing files are skipped. */
 const MUSIC_TRACKS: Record<MusicTrack, string> = {
   menu: 'music/Last_Exit_Before_Dawn.mp3',
   game: 'music/Midnight_Interceptor.mp3',
   boss: 'music/Red_Room_Standoff.mp3',
+  // Free-flight modes: weightless rather than driving.
+  drift: 'music/Black_Glass_Horizon.mp3',
+  // Post-run: the comedown under the stats screen.
+  debrief: 'music/Rain_on_the_Pane.mp3',
 };
 
 const CROSSFADE_MS = 700;
@@ -48,6 +62,8 @@ const FADE_STEP_MS = 40;
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private sfxGain: GainNode | null = null;
+  /** Shared reverb send. Voices dry-route to sfxGain and bleed here for tail. */
+  private reverbSend: GainNode | null = null;
   private unlocked = false;
 
   /** One element per track, created lazily and reused across scene changes. */
@@ -101,8 +117,48 @@ export class AudioManager {
       limiter.release.value = 0.18;
       this.sfxGain.connect(limiter);
       limiter.connect(this.ctx.destination);
+
+      // Convolution tail on a send bus. Dry-only synthesis reads as "beeps in a
+      // vacuum"; a shared space behind every voice is the cheapest thing that
+      // makes procedural SFX sound recorded rather than generated.
+      const convolver = this.ctx.createConvolver();
+      convolver.buffer = this.makeImpulse(this.ctx, 1.9, 3.1);
+      const wet = this.ctx.createGain();
+      wet.gain.value = 0.42;
+      this.reverbSend = this.ctx.createGain();
+      this.reverbSend.gain.value = 1;
+      this.reverbSend.connect(convolver);
+      convolver.connect(wet);
+      wet.connect(this.sfxGain);
     }
     return this.ctx;
+  }
+
+  /**
+   * Synthesized impulse response: decaying noise, darkened over its length so
+   * the tail loses highs the way a real room does. Built once per context.
+   */
+  private makeImpulse(ctx: AudioContext, seconds: number, decay: number): AudioBuffer {
+    const rate = ctx.sampleRate;
+    const length = Math.max(1, Math.floor(rate * seconds));
+    const impulse = ctx.createBuffer(2, length, rate);
+    for (let channel = 0; channel < 2; channel++) {
+      const data = impulse.getChannelData(channel);
+      let last = 0;
+      for (let i = 0; i < length; i++) {
+        const t = i / length;
+        const white = Math.random() * 2 - 1;
+        // One-pole lowpass that closes as the tail decays.
+        last = white * (1 - t * 0.75) + last * (0.28 + t * 0.5);
+        data[i] = last * Math.pow(1 - t, decay);
+      }
+    }
+    return impulse;
+  }
+
+  /** Random multiplier around 1 — per-shot variation so repeats never phase. */
+  private vary(spread: number): number {
+    return 1 + (Math.random() * 2 - 1) * spread;
   }
 
   // --- music ---
@@ -286,6 +342,128 @@ export class AudioManager {
         this.tone(ctx, t + 0.07, 'sawtooth', 150, 0.18, 0.14 * g);
         break;
 
+      /**
+       * Weapon swap: a full mechanism, not a UI blip. Magazine drops, carrier
+       * racks back, bolt slams home. The last hit is the loudest and lowest so
+       * the sequence lands instead of trailing off, and the whole thing gets a
+       * heavy reverb send so it sounds like it happened in a hangar.
+       */
+      case 'reload': {
+        const v = this.vary(0.03);
+        // Magazine release: dry, bright, mechanical.
+        this.click(ctx, t, 0.03, 0.3 * g, 0.15);
+        this.zap(ctx, t, 'square', 1100 * v, 420 * v, 0.045, 0.09 * g);
+        this.zap(ctx, t + 0.012, 'sawtooth', 700 * v, 260 * v, 0.05, 0.06 * g, 18);
+        // Carrier drawn back: filtered noise sliding open, metal scrape on top.
+        this.noiseBurst(ctx, t + 0.06, 0.115, 3400, 0.22 * g, 'bandpass', 0.25);
+        this.zap(ctx, t + 0.06, 'sawtooth', 300 * v, 680 * v, 0.1, 0.07 * g, -14);
+        this.tone(ctx, t + 0.1, 'triangle', 2600 * v, 0.04, 0.05 * g, 0, 0.4);
+        // Bolt home: the payoff. Clack over a low thunk with real bottom.
+        this.click(ctx, t + 0.185, 0.045, 0.44 * g, 0.4);
+        this.zap(ctx, t + 0.185, 'square', 700 * v, 140, 0.1, 0.22 * g, -12);
+        this.zap(ctx, t + 0.185, 'sine', 190, 52, 0.24, 0.46 * g, 0, 0.3);
+        this.noiseBurst(ctx, t + 0.185, 0.09, 900, 0.2 * g, 'lowpass', 0.2);
+        // Charged-and-ready chirp, wet so it rings off into the space.
+        this.tone(ctx, t + 0.25, 'triangle', 1240 * v * p, 0.075, 0.1 * g, 0, 0.55);
+        this.tone(ctx, t + 0.25, 'sine', 1860 * v * p, 0.06, 0.05 * g, 0, 0.55);
+        break;
+      }
+
+      /**
+       * Fraction gun: tight and cutting. Three stacked layers — mechanical
+       * transient, the shot body, and a short bright tail — with per-shot
+       * detune so sustained fire never machine-guns into a single tone.
+       */
+      case 'gunFraction': {
+        const v = this.vary(0.06);
+        this.click(ctx, t, 0.018, 0.26 * g);
+        this.zap(ctx, t, 'square', 1900 * v * p, 480 * p, 0.085, 0.16 * g, -7);
+        this.zap(ctx, t, 'sawtooth', 2500 * v * p, 820 * p, 0.06, 0.07 * g, 16, 0.35);
+        this.zap(ctx, t + 0.004, 'sine', 320 * p, 110, 0.12, 0.16 * g);
+        this.noiseBurst(ctx, t, 0.05, 5200, 0.1 * g, 'highpass', 0.3);
+        break;
+      }
+
+      /** Percent gun: rounder, lower, heavier — told apart by ear alone. */
+      case 'gunPercent': {
+        const v = this.vary(0.06);
+        this.click(ctx, t, 0.02, 0.2 * g);
+        this.zap(ctx, t, 'sawtooth', 880 * v * p, 170 * p, 0.13, 0.17 * g, 9);
+        this.zap(ctx, t, 'square', 540 * v * p, 120 * p, 0.11, 0.1 * g, -16);
+        this.zap(ctx, t + 0.006, 'sine', 230, 62, 0.2, 0.3 * g, 0, 0.25);
+        this.noiseBurst(ctx, t, 0.08, 1700, 0.11 * g, 'bandpass', 0.35);
+        break;
+      }
+
+      /** Bolt biting a token: a short, hard, wet crack. */
+      case 'boltHit': {
+        const v = this.vary(0.09);
+        this.noiseBurst(ctx, t, 0.075, 4200 * v, 0.2 * g, 'bandpass', 0.45);
+        this.zap(ctx, t, 'triangle', 900 * v * p, 220, 0.07, 0.13 * g);
+        this.click(ctx, t, 0.014, 0.16 * g, 0.3);
+        break;
+      }
+
+      /** Target armed: two-note rise, wet, unmistakably "held and waiting". */
+      case 'prime':
+        this.tone(ctx, t, 'square', 720 * p, 0.055, 0.11 * g, 0, 0.3);
+        this.tone(ctx, t + 0.055, 'square', 1080 * p, 0.09, 0.12 * g, 0, 0.5);
+        this.tone(ctx, t + 0.055, 'sine', 2160 * p, 0.07, 0.05 * g, 0, 0.5);
+        this.click(ctx, t, 0.016, 0.09 * g);
+        break;
+
+      /** Phasing through matter: a soft filtered woosh, no transient. */
+      case 'phase':
+        this.noiseBurst(ctx, t, 0.24, 1200 * p, 0.11 * g, 'bandpass', 0.5);
+        this.zap(ctx, t, 'sine', 420 * p, 180 * p, 0.22, 0.06 * g, 0, 0.5);
+        break;
+
+      /** Chain step: a rung on a ladder. Pitch is supplied by the caller. */
+      case 'comboUp':
+        this.tone(ctx, t, 'square', 660 * p, 0.06, 0.09 * g, 0, 0.45);
+        this.tone(ctx, t + 0.045, 'square', 990 * p, 0.08, 0.08 * g, 0, 0.55);
+        this.click(ctx, t, 0.012, 0.08 * g);
+        break;
+
+      /** Threaded a gap: a thin doppler whip, mostly tail. */
+      case 'nearMiss':
+        this.noiseBurst(ctx, t, 0.16, 2600, 0.09 * g, 'bandpass', 0.6);
+        this.zap(ctx, t, 'sine', 1500, 500, 0.14, 0.05 * g, 0, 0.55);
+        break;
+
+      /** Board cleared: a short rising triad that resolves. */
+      case 'waveClear':
+        this.tone(ctx, t, 'triangle', 523 * p, 0.16, 0.1 * g, 0, 0.5);
+        this.tone(ctx, t + 0.08, 'triangle', 659 * p, 0.16, 0.1 * g, 0, 0.5);
+        this.tone(ctx, t + 0.16, 'triangle', 784 * p, 0.34, 0.12 * g, 0, 0.65);
+        this.tone(ctx, t + 0.16, 'sine', 1568 * p, 0.3, 0.05 * g, 0, 0.65);
+        this.noiseBurst(ctx, t + 0.16, 0.22, 3000, 0.07 * g, 'highpass', 0.5);
+        break;
+
+      /**
+       * The collapse. Inrush rises and cuts to nothing, then the detonation
+       * lands in the silence — the gap is what sells it, not more noise. Ends
+       * on a long sub drop and a debris rattle so it has a real tail.
+       */
+      case 'implode': {
+        const v = this.vary(0.04);
+        // Inrush: two sweeps climbing against each other, plus rising air.
+        this.zap(ctx, t, 'sawtooth', 240, 2600 * v, 0.28, 0.13 * g, -20, 0.3);
+        this.zap(ctx, t, 'square', 180, 2050 * v, 0.28, 0.09 * g, 24, 0.3);
+        this.noiseBurst(ctx, t, 0.28, 800, 0.14 * g, 'highpass', 0.4);
+        this.tone(ctx, t + 0.2, 'sine', 60, 0.1, 0.2 * g);
+        // Detonation, after the beat of silence.
+        this.noiseBurst(ctx, t + 0.32, 0.52, 4600, 0.46 * g, 'lowpass', 0.55);
+        this.zap(ctx, t + 0.32, 'sine', 240, 28, 0.7, 0.6 * g, 0, 0.35);
+        this.zap(ctx, t + 0.32, 'triangle', 520, 64, 0.42, 0.24 * g, 0, 0.4);
+        this.zap(ctx, t + 0.32, 'sawtooth', 1400, 300, 0.2, 0.12 * g, -30, 0.5);
+        this.click(ctx, t + 0.32, 0.05, 0.3 * g, 0.4);
+        // Bright ring-off and debris.
+        this.tone(ctx, t + 0.36, 'square', 1320 * p, 0.18, 0.09 * g, 0, 0.7);
+        this.noiseBurst(ctx, t + 0.5, 0.42, 2200, 0.09 * g, 'highpass', 0.6);
+        break;
+      }
+
       case 'ui':
         this.tone(ctx, t, 'square', 880 * p, 0.035, 0.1 * g);
         this.click(ctx, t, 0.02, 0.14 * g);
@@ -331,6 +509,7 @@ export class AudioManager {
     duration: number,
     peak: number,
     detune = 0,
+    send = 0,
   ): void {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -341,9 +520,19 @@ export class AudioManager {
     gain.gain.linearRampToValueAtTime(peak, start + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
     osc.connect(gain);
-    gain.connect(this.sfxGain!);
+    this.route(ctx, gain, send);
     osc.start(start);
     osc.stop(start + duration + 0.02);
+  }
+
+  /** Dry to the sfx bus, with an optional parallel bleed into the reverb. */
+  private route(ctx: AudioContext, gain: GainNode, send: number): void {
+    gain.connect(this.sfxGain!);
+    if (send <= 0 || !this.reverbSend) return;
+    const tap = ctx.createGain();
+    tap.gain.value = send;
+    gain.connect(tap);
+    tap.connect(this.reverbSend);
   }
 
   /** Pitch sweep (up or down) with decay — lasers, stingers, game over. */
@@ -356,6 +545,7 @@ export class AudioManager {
     duration: number,
     peak: number,
     detune = 0,
+    send = 0,
   ): void {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -367,14 +557,14 @@ export class AudioManager {
     gain.gain.linearRampToValueAtTime(peak, start + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
     osc.connect(gain);
-    gain.connect(this.sfxGain!);
+    this.route(ctx, gain, send);
     osc.start(start);
     osc.stop(start + duration + 0.02);
   }
 
   /** Very short noise transient — the "crack" in front of a laser or click. */
-  private click(ctx: AudioContext, start: number, duration: number, peak: number): void {
-    this.noiseBurst(ctx, start, duration, 7000, peak, 'highpass');
+  private click(ctx: AudioContext, start: number, duration: number, peak: number, send = 0): void {
+    this.noiseBurst(ctx, start, duration, 7000, peak, 'highpass', send);
   }
 
   /** Filtered white-noise burst — explosions, impacts, air. */
@@ -385,6 +575,7 @@ export class AudioManager {
     filterFrom: number,
     peak: number,
     filterType: BiquadFilterType = 'lowpass',
+    send = 0,
   ): void {
     const length = Math.ceil(ctx.sampleRate * duration);
     const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
@@ -408,7 +599,7 @@ export class AudioManager {
 
     source.connect(filter);
     filter.connect(gain);
-    gain.connect(this.sfxGain!);
+    this.route(ctx, gain, send);
     source.start(start);
   }
 }
