@@ -12,7 +12,9 @@ import {
 } from '../../core/input/bindings';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { drawBackdrop } from '../../ui/backdrop';
 import { MenuNav, type MenuItem } from '../../ui/MenuNav';
+import { neonButton } from '../../ui/panels';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 /**
@@ -41,7 +43,7 @@ export class ControlsScene extends Phaser.Scene {
     const audio = this.registry.get(AUDIO_REGISTRY_KEY) as AudioManager | undefined;
     audio?.playMusic('menu');
     applyCrt(this);
-    this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
+    drawBackdrop(this, { sun: false, horizon: 0.97 });
     this.capturing = null;
     this.slots.clear();
 
@@ -87,45 +89,30 @@ export class ControlsScene extends Phaser.Scene {
       rows.push([primary, alt]);
     });
 
-    const reset = this.add
-      .text(width / 2, height * 0.82, '[ RESET TO DEFAULTS ]', {
-        fontFamily: FONT,
-        fontSize: '20px',
-        fontStyle: 'bold',
-        color: CSS.red,
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    reset.on('pointerover', () => reset.setColor(CSS.magentaHot));
-    reset.on('pointerout', () => reset.setColor(CSS.red));
     const resetAll = (): void => {
-      getAudio(this)?.play('ui');
       this.bindings = defaultBindings();
       this.saves.save.keybindings = this.bindings;
       this.saves.persist();
       this.renderSlots();
     };
-    reset.on('pointerdown', resetAll);
+    const reset = neonButton(this, width / 2, height * 0.82, 'RESET TO DEFAULTS', resetAll, {
+      width: 320,
+      height: 44,
+      fontSize: 17,
+      accent: PALETTE.red,
+    });
 
-    const back = this.add
-      .text(width / 2, height * 0.9, '[ BACK ]', {
-        fontFamily: FONT,
-        fontSize: '24px',
-        fontStyle: 'bold',
-        color: CSS.cyan,
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    back.on('pointerover', () => back.setColor(CSS.magentaHot));
-    back.on('pointerout', () => back.setColor(CSS.cyan));
     const goBack = (): void => {
-      getAudio(this)?.play('ui');
       this.scene.start('Settings');
     };
-    back.on('pointerdown', goBack);
+    const back = neonButton(this, width / 2, height * 0.9, 'BACK', goBack, {
+      width: 200,
+      height: 44,
+      fontSize: 19,
+    });
 
-    rows.push([{ target: reset, onSelect: resetAll }]);
-    rows.push([{ target: back, onSelect: goBack }]);
+    rows.push([reset]);
+    rows.push([back]);
 
     this.nav = new MenuNav(this, rows);
 

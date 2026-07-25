@@ -4,6 +4,7 @@ import {
   BOARD_SIZE,
   LEADERBOARD_MODES,
   MODE_LABEL,
+  MODE_TAB_LABEL,
   ordinal,
   type LeaderboardMode,
   type ScoreEntry,
@@ -11,7 +12,10 @@ import {
 import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { drawBackdrop } from '../../ui/backdrop';
+import { makeIcon } from '../../ui/icons';
 import { MenuNav, navHint } from '../../ui/MenuNav';
+import { neonButton, neonChip, paintPanel, type NeonChip } from '../../ui/panels';
 import { LEADERBOARD_REGISTRY_KEY } from '../leaderboardStore';
 
 interface LeaderboardData {
@@ -27,7 +31,7 @@ export class LeaderboardScene extends Phaser.Scene {
   private highlightAt: number | undefined;
   private rows: Phaser.GameObjects.GameObject[] = [];
   private titleText!: Phaser.GameObjects.Text;
-  private tabTexts: Phaser.GameObjects.Text[] = [];
+  private tabs: NeonChip[] = [];
 
   constructor() {
     super('Leaderboard');
@@ -39,14 +43,19 @@ export class LeaderboardScene extends Phaser.Scene {
     this.mode = data.mode ?? 'meteor';
     this.highlightAt = data.highlightAt;
     this.rows = [];
-    this.tabTexts = [];
+    this.tabs = [];
 
     getAudio(this)?.playMusic('menu');
     applyCrt(this);
-    this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
+    drawBackdrop(this, { sun: false, horizon: 0.95 });
 
+    makeIcon(this, width / 2 - 190, 50, 'leaderboard', {
+      size: 46,
+      color: PALETTE.yellow,
+      dim: PALETTE.magenta,
+    });
     this.add
-      .text(width / 2, 46, 'HALL OF FAME', {
+      .text(width / 2 + 22, 48, 'HALL OF FAME', {
         fontFamily: FONT,
         fontSize: '44px',
         fontStyle: 'bold',
@@ -55,53 +64,44 @@ export class LeaderboardScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // Mode tabs: left/right walks them, which is what the cursor row does.
+    // Positions derive from the count so adding a mode re-spaces the row
+    // instead of pushing the last tab off the glass. The 0.84 inset keeps the
+    // outer two clear of the edge, where the tube darkening would grey them out.
+    const span = width * 0.84;
     LEADERBOARD_MODES.forEach((mode, i) => {
-      // Kept clear of the glass edge, where the tube darkening would grey them out.
-      const x = width * (0.2 + i * 0.2);
-      const text = this.add
-        .text(x, 104, MODE_LABEL[mode], {
-          fontFamily: FONT,
-          fontSize: '16px',
-          fontStyle: 'bold',
-          color: CSS.cyan,
-        })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true });
-      text.on('pointerdown', () => this.showMode(mode));
-      this.tabTexts.push(text);
+      const label = MODE_TAB_LABEL[mode];
+      const x = width / 2 + span * ((i + 0.5) / LEADERBOARD_MODES.length - 0.5);
+      this.tabs.push(
+        neonChip(this, x, 110, label, () => void this.showMode(mode), {
+          size: 40,
+          width: label.length * 11 + 26,
+          fontSize: 15,
+        }),
+      );
     });
 
     this.titleText = this.add
       .text(width / 2, 142, '', { fontFamily: FONT, fontSize: '15px', color: CSS.cyanDim })
       .setOrigin(0.5);
 
-    const back = this.add
-      .text(width / 2, height - 58, '[ BACK ]', {
-        fontFamily: FONT,
-        fontSize: '24px',
-        fontStyle: 'bold',
-        color: CSS.cyan,
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    back.on('pointerover', () => back.setColor(CSS.magentaHot));
-    back.on('pointerout', () => back.setColor(CSS.cyan));
     const goBack = (): void => {
-      getAudio(this)?.play('ui');
       this.scene.start('Menu');
     };
-    back.on('pointerdown', goBack);
+    const back = neonButton(this, width / 2, height - 58, 'BACK', goBack, {
+      width: 200,
+      height: 46,
+      fontSize: 20,
+    });
     this.input.keyboard?.once('keydown-ESC', goBack);
 
     const nav = new MenuNav(this, [
-      this.tabTexts.map((text, i) => ({
-        target: text,
+      this.tabs.map((tab, i) => ({
+        ...tab,
         // Landing on a tab shows it: pressing ENTER to see what the cursor is
         // already sitting on would be a step for nothing.
         onFocus: () => void this.showMode(LEADERBOARD_MODES[i]!),
-        onSelect: () => void this.showMode(LEADERBOARD_MODES[i]!),
       })),
-      [{ target: back, onSelect: goBack }],
+      [back],
     ]);
     nav.setColumn(0, LEADERBOARD_MODES.indexOf(this.mode));
     navHint(this, height - 18);
@@ -114,9 +114,7 @@ export class LeaderboardScene extends Phaser.Scene {
     for (const row of this.rows) row.destroy();
     this.rows = [];
 
-    this.tabTexts.forEach((text, i) => {
-      text.setColor(LEADERBOARD_MODES[i] === mode ? CSS.yellow : CSS.cyan);
-    });
+    this.tabs.forEach((tab, i) => tab.setChosen(LEADERBOARD_MODES[i] === mode));
     this.titleText.setText('LOADING...');
 
     // The board may be remote one day, so this is written as a real await and
@@ -131,48 +129,78 @@ export class LeaderboardScene extends Phaser.Scene {
     // The player may have switched tabs while that was in flight.
     if (this.mode !== mode || !this.scene.isActive()) return;
 
-    this.titleText.setText(board.length > 0 ? `TOP ${BOARD_SIZE}` : 'NO SCORES YET — GO SET ONE');
+    // The tab is abbreviated, so the full mode name lands here.
+    this.titleText.setText(
+      board.length > 0
+        ? `${MODE_LABEL[mode]} — TOP ${BOARD_SIZE}`
+        : `${MODE_LABEL[mode]} — NO SCORES YET, GO SET ONE`,
+    );
     this.renderBoard(board);
   }
 
+  /** Podium colours for the top three, so a board reads at a glance. */
+  private static readonly MEDAL: readonly number[] = [
+    PALETTE.yellow,
+    PALETTE.cyan,
+    PALETTE.magentaHot,
+  ];
+
   private renderBoard(board: readonly ScoreEntry[]): void {
     const { width } = this.scale;
+    const rowW = width * 0.62;
     board.forEach((entry, i) => {
-      const y = 190 + i * 44;
+      const y = 192 + i * 42;
       const mine = this.highlightAt !== undefined && entry.at === this.highlightAt;
-      const color = mine ? CSS.yellow : i === 0 ? CSS.white : CSS.cyan;
+      const accent = LeaderboardScene.MEDAL[i] ?? PALETTE.cyanDim;
+      const color = mine ? CSS.yellow : i < 3 ? CSS.white : CSS.cyan;
 
-      if (mine) {
-        this.rows.push(
-          this.add.rectangle(width / 2, y + 10, width * 0.62, 38, PALETTE.deepPurple, 0.85),
-        );
-      }
+      // Every row gets a strip, not just the player's — an unbroken ladder is
+      // what makes a board look like a board rather than a list.
+      const strip = this.add.graphics({ x: width / 2, y: y + 11 });
+      paintPanel(strip, {
+        width: rowW,
+        height: 36,
+        accent: mine ? PALETTE.yellow : accent,
+        chamfer: 8,
+        fillAlpha: mine ? 0.85 : i < 3 ? 0.5 : 0.28,
+        borderWidth: mine ? 2 : i < 3 ? 2 : 1,
+        headerRule: false,
+      });
+      this.rows.push(strip);
+
+      const left = width / 2 - rowW / 2;
       this.rows.push(
-        this.add.text(width * 0.28, y, ordinal(i + 1), {
-          fontFamily: FONT,
-          fontSize: '22px',
-          fontStyle: 'bold',
-          color: CSS.cyanDim,
-        }),
-        this.add.text(width * 0.4, y, entry.initials, {
-          fontFamily: FONT,
-          fontSize: '26px',
-          fontStyle: 'bold',
-          color,
-        }),
         this.add
-          .text(width * 0.62, y, String(entry.score), {
+          .text(left + 46, y + 11, ordinal(i + 1), {
             fontFamily: FONT,
-            fontSize: '26px',
+            fontSize: '19px',
+            fontStyle: 'bold',
+            color: `#${accent.toString(16).padStart(6, '0')}`,
+          })
+          .setOrigin(0.5),
+        this.add
+          .text(left + 116, y + 11, entry.initials, {
+            fontFamily: FONT,
+            fontSize: '25px',
             fontStyle: 'bold',
             color,
           })
-          .setOrigin(1, 0),
-        this.add.text(width * 0.66, y + 4, `WAVE ${entry.wave}`, {
-          fontFamily: FONT,
-          fontSize: '16px',
-          color: CSS.cyanDim,
-        }),
+          .setOrigin(0, 0.5),
+        this.add
+          .text(left + rowW - 108, y + 11, String(entry.score), {
+            fontFamily: FONT,
+            fontSize: '25px',
+            fontStyle: 'bold',
+            color,
+          })
+          .setOrigin(1, 0.5),
+        this.add
+          .text(left + rowW - 90, y + 11, `WAVE ${entry.wave}`, {
+            fontFamily: FONT,
+            fontSize: '14px',
+            color: CSS.cyanDim,
+          })
+          .setOrigin(0, 0.5),
       );
     });
   }

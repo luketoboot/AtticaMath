@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOARD_SIZE,
+  LEADERBOARD_MODES,
+  MODE_LABEL,
+  MODE_TAB_LABEL,
   insertScore,
   isInitialChar,
   modeFromSceneKey,
@@ -130,9 +133,23 @@ describe('presentation helpers', () => {
   it('maps scene keys to boards, defaulting to meteor', () => {
     expect(modeFromSceneKey('Expression')).toBe('expression');
     expect(modeFromSceneKey('Factor')).toBe('factor');
+    expect(modeFromSceneKey('Collapse')).toBe('collapse');
     expect(modeFromSceneKey('Boss')).toBe('boss');
     expect(modeFromSceneKey('Game')).toBe('meteor');
     expect(modeFromSceneKey(undefined)).toBe('meteor');
+  });
+
+  it('gives every playable mode a board, a tab and a name', () => {
+    // The tab row and the scene-key map are the two places a new mode gets
+    // forgotten, so hold them to the mode list rather than to a literal.
+    for (const mode of LEADERBOARD_MODES) {
+      expect(MODE_LABEL[mode]).toBeTruthy();
+      expect(MODE_TAB_LABEL[mode]).toBeTruthy();
+    }
+    const boards = new Set(
+      ['Game', 'Expression', 'Factor', 'Collapse', 'Boss'].map(modeFromSceneKey),
+    );
+    expect([...boards].sort()).toEqual([...LEADERBOARD_MODES].sort());
   });
 
   it('writes ordinals the way a cabinet does', () => {

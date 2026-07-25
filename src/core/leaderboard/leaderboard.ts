@@ -6,12 +6,14 @@
  */
 
 /** One board per mode: scores across modes are not comparable. */
-export type LeaderboardMode = 'meteor' | 'expression' | 'factor' | 'boss';
+export type LeaderboardMode = 'meteor' | 'expression' | 'factor' | 'collapse' | 'boss';
 
+/** Menu order. Every playable mode has a board — adding one here adds its tab. */
 export const LEADERBOARD_MODES: readonly LeaderboardMode[] = [
   'meteor',
   'expression',
   'factor',
+  'collapse',
   'boss',
 ];
 
@@ -19,6 +21,19 @@ export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   meteor: 'METEOR DEFENSE',
   expression: 'EXPRESSION BUILDER',
   factor: 'FACTOR STORM',
+  collapse: 'COLLAPSE',
+  boss: 'BOSS RUSH',
+};
+
+/**
+ * Shorter forms for the tab row, which gets narrower with every mode added.
+ * The full label still heads the board itself.
+ */
+export const MODE_TAB_LABEL: Readonly<Record<LeaderboardMode, string>> = {
+  meteor: 'METEOR',
+  expression: 'EXPRESSION',
+  factor: 'FACTOR',
+  collapse: 'COLLAPSE',
   boss: 'BOSS RUSH',
 };
 
@@ -29,6 +44,8 @@ export function modeFromSceneKey(key: string | undefined): LeaderboardMode {
       return 'expression';
     case 'Factor':
       return 'factor';
+    case 'Collapse':
+      return 'collapse';
     case 'Boss':
       return 'boss';
     default:

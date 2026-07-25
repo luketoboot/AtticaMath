@@ -4,7 +4,10 @@ import { getAudio } from '../../audio/getAudio';
 import { applyCrt } from '../../fx/applyCrt';
 import { defaultSave } from '../../core/save/save';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { drawBackdrop } from '../../ui/backdrop';
+import { makeIcon } from '../../ui/icons';
 import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
+import { neonButton, neonChip } from '../../ui/panels';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 export class SettingsScene extends Phaser.Scene {
@@ -20,13 +23,18 @@ export class SettingsScene extends Phaser.Scene {
     const audio = this.registry.get(AUDIO_REGISTRY_KEY) as AudioManager | undefined;
     audio?.playMusic('menu');
     applyCrt(this);
-    this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
+    drawBackdrop(this, { sun: false, horizon: 0.95 });
     this.resetArmed = false;
 
+    makeIcon(this, width / 2 - 130, height * 0.12, 'settings', {
+      size: 46,
+      color: PALETTE.cyan,
+      dim: PALETTE.magenta,
+    });
     this.add
-      .text(width / 2, height * 0.12, 'SETTINGS', {
+      .text(width / 2 + 24, height * 0.12, 'SETTINGS', {
         fontFamily: FONT,
-        fontSize: '48px',
+        fontSize: '46px',
         fontStyle: 'bold',
         color: CSS.magenta,
       })
@@ -58,54 +66,36 @@ export class SettingsScene extends Phaser.Scene {
       },
     );
 
-    const crt = this.add
-      .text(width / 2, height * 0.56, '', { fontFamily: FONT, fontSize: '28px', fontStyle: 'bold', color: CSS.cyan })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    const renderCrt = (): void => {
-      crt.setText(`[ CRT SHADER ${saves.save.settings.crtEnabled ? 'ON' : 'OFF'} ]`);
-    };
-    renderCrt();
+    const crtLabel = (): string =>
+      `CRT SHADER  ${saves.save.settings.crtEnabled ? 'ON' : 'OFF'}`;
     const toggleCrt = (): void => {
-      getAudio(this)?.play('ui');
       saves.save.settings.crtEnabled = !saves.save.settings.crtEnabled;
       saves.persist();
-      renderCrt();
+      crt.setText(crtLabel());
+      crt.setAccent(saves.save.settings.crtEnabled ? PALETTE.cyan : PALETTE.cyanDim);
       applyCrt(this);
     };
-    crt.on('pointerdown', toggleCrt);
+    const crt = neonButton(this, width / 2, height * 0.56, crtLabel(), toggleCrt, {
+      width: 340,
+      height: 54,
+      fontSize: 22,
+    });
 
-    const controls = this.add
-      .text(width / 2, height * 0.66, '[ CONTROLS ]', {
-        fontFamily: FONT,
-        fontSize: '28px',
-        fontStyle: 'bold',
-        color: CSS.cyan,
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    controls.on('pointerover', () => controls.setColor(CSS.magentaHot));
-    controls.on('pointerout', () => controls.setColor(CSS.cyan));
-    const openControls = (): void => {
-      getAudio(this)?.play('ui');
-      this.scene.start('Controls');
-    };
-    controls.on('pointerdown', openControls);
+    const controls = neonButton(
+      this,
+      width / 2,
+      height * 0.66,
+      'CONTROLS',
+      () => this.scene.start('Controls'),
+      { width: 340, height: 54, fontSize: 22, sub: 'REBIND EVERY KEY' },
+    );
 
-    const reset = this.add
-      .text(width / 2, height * 0.78, '[ RESET SAVE ]', {
-        fontFamily: FONT,
-        fontSize: '22px',
-        fontStyle: 'bold',
-        color: CSS.red,
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
     const resetSave = (): void => {
       if (!this.resetArmed) {
         this.resetArmed = true;
         getAudio(this)?.play('error');
-        reset.setText('[ CONFIRM AGAIN TO WIPE EVERYTHING ]');
+        reset.setText('CONFIRM AGAIN TO WIPE EVERYTHING');
+        reset.label.setFontSize(15);
         return;
       }
       saves.save = defaultSave();
@@ -113,28 +103,30 @@ export class SettingsScene extends Phaser.Scene {
       getAudio(this)?.play('land');
       this.scene.start('Menu');
     };
-    reset.on('pointerdown', resetSave);
+    const reset = neonButton(this, width / 2, height * 0.78, 'RESET SAVE', resetSave, {
+      width: 340,
+      height: 46,
+      fontSize: 18,
+      accent: PALETTE.red,
+    });
 
-    const back = this.add
-      .text(width / 2, height * 0.88, '[ BACK ]', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.cyan })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    back.on('pointerover', () => back.setColor(CSS.magentaHot));
-    back.on('pointerout', () => back.setColor(CSS.cyan));
     const goBack = (): void => {
-      getAudio(this)?.play('ui');
       this.scene.start('Menu');
     };
-    back.on('pointerdown', goBack);
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    const back = neonButton(this, width / 2, height * 0.88, 'BACK', goBack, {
+      width: 200,
+      height: 46,
+      fontSize: 20,
+    });
+    this.input.keyboard?.once('keydown-ESC', goBack);
 
     new MenuNav(this, [
       [sfx],
       [music],
-      [{ target: crt, onSelect: toggleCrt, onAdjust: toggleCrt }],
-      [{ target: controls, onSelect: openControls }],
-      [{ target: reset, onSelect: resetSave }],
-      [{ target: back, onSelect: goBack }],
+      [{ ...crt, onAdjust: toggleCrt }],
+      [controls],
+      [reset],
+      [back],
     ]);
     navHint(this, height * 0.96);
   }
@@ -166,17 +158,16 @@ export class SettingsScene extends Phaser.Scene {
       render();
     };
 
-    const minus = this.add
-      .text(width * 0.44, y, '[ − ]', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.magentaHot })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    minus.on('pointerdown', () => step(-1));
-
-    const plus = this.add
-      .text(width * 0.8, y, '[ + ]', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.magentaHot })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    plus.on('pointerdown', () => step(1));
+    neonChip(this, width * 0.44, y, '−', () => step(-1), {
+      size: 38,
+      fontSize: 24,
+      accent: PALETTE.magentaHot,
+    });
+    neonChip(this, width * 0.8, y, '+', () => step(1), {
+      size: 38,
+      fontSize: 24,
+      accent: PALETTE.magentaHot,
+    });
 
     // Unfilled rect spanning label→[+], so the cursor frames the whole row
     // rather than one of the two buttons. Purely a bounds source, never drawn.

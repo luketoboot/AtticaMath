@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
-import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
+import { MenuNav, navHint } from '../../ui/MenuNav';
+import { neonButton } from '../../ui/panels';
 import { onActionKey, sceneBindings } from '../input/KeyState';
 
 interface PauseData {
@@ -28,13 +29,26 @@ export class PauseScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const resume = this.makeButton(width / 2, height * 0.5, 'RESUME', () =>
-      this.resumeTarget(data.target),
+    const opts = { width: 280, height: 54, fontSize: 22 };
+    const resume = neonButton(
+      this,
+      width / 2,
+      height * 0.5,
+      'RESUME',
+      () => this.resumeTarget(data.target),
+      { ...opts, accent: PALETTE.cyan },
     );
-    const quit = this.makeButton(width / 2, height * 0.6, 'QUIT TO MENU', () => {
-      this.scene.stop(data.target);
-      this.scene.start('Menu');
-    });
+    const quit = neonButton(
+      this,
+      width / 2,
+      height * 0.6,
+      'QUIT TO MENU',
+      () => {
+        this.scene.stop(data.target);
+        this.scene.start('Menu');
+      },
+      { ...opts, accent: PALETTE.magenta },
+    );
 
     new MenuNav(this, [[resume], [quit]]);
     navHint(this, height * 0.72);
@@ -49,18 +63,4 @@ export class PauseScene extends Phaser.Scene {
     this.scene.stop();
   }
 
-  private makeButton(x: number, y: number, label: string, onClick: () => void): MenuItem {
-    const text = this.add
-      .text(x, y, `[ ${label} ]`, { fontFamily: FONT, fontSize: '30px', fontStyle: 'bold', color: CSS.cyan })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    text.on('pointerover', () => text.setColor(CSS.magentaHot));
-    text.on('pointerout', () => text.setColor(CSS.cyan));
-    const select = (): void => {
-      getAudio(this)?.play('ui');
-      onClick();
-    };
-    text.on('pointerdown', select);
-    return { target: text, onSelect: select };
-  }
 }

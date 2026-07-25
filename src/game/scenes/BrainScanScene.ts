@@ -5,7 +5,10 @@ import { earnedMilestones } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { drawBackdrop } from '../../ui/backdrop';
+import { makeIcon } from '../../ui/icons';
 import { MenuNav, navHint } from '../../ui/MenuNav';
+import { neonButton } from '../../ui/panels';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 const GROUPS: readonly { title: string; ops: readonly string[] }[] = [
@@ -27,10 +30,15 @@ export class BrainScanScene extends Phaser.Scene {
     const saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
     getAudio(this)?.playMusic('menu');
     applyCrt(this);
-    this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
+    drawBackdrop(this, { sun: false, horizon: 0.97 });
 
+    makeIcon(this, width / 2 - 160, 44, 'brainscan', {
+      size: 44,
+      color: PALETTE.cyan,
+      dim: PALETTE.magenta,
+    });
     this.add
-      .text(width / 2, 42, 'BRAIN SCAN', { fontFamily: FONT, fontSize: '42px', fontStyle: 'bold', color: CSS.magenta })
+      .text(width / 2 + 22, 42, 'BRAIN SCAN', { fontFamily: FONT, fontSize: '42px', fontStyle: 'bold', color: CSS.magenta })
       .setOrigin(0.5);
     this.add
       .text(width / 2, 78, 'WHAT THE MACHINE THINKS YOU KNOW', {
@@ -48,22 +56,19 @@ export class BrainScanScene extends Phaser.Scene {
     this.renderColumn(leftGroups, width * 0.06, width * 0.44, saves, mastered);
     this.renderColumn(rightGroups, width * 0.56, width * 0.94, saves, mastered);
 
-    const back = this.add
-      // Sits a line higher than the other screens' BACK to leave room for the
-      // hint below it; the skill columns bottom out around y=640.
-      .text(width / 2, height - 52, '[ BACK ]', { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: CSS.cyan })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    back.on('pointerover', () => back.setColor(CSS.magentaHot));
-    back.on('pointerout', () => back.setColor(CSS.cyan));
     const goBack = (): void => {
-      getAudio(this)?.play('ui');
       this.scene.start('Menu');
     };
-    back.on('pointerdown', goBack);
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    // Sits a line higher than the other screens' BACK to leave room for the
+    // hint below it; the skill columns bottom out around y=640.
+    const back = neonButton(this, width / 2, height - 52, 'BACK', goBack, {
+      width: 200,
+      height: 44,
+      fontSize: 19,
+    });
+    this.input.keyboard?.once('keydown-ESC', goBack);
 
-    new MenuNav(this, [[{ target: back, onSelect: goBack }]]);
+    new MenuNav(this, [[back]]);
     navHint(this);
   }
 

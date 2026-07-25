@@ -12,8 +12,11 @@ import {
 import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { drawBackdrop } from '../../ui/backdrop';
 import { InitialsEntry } from '../../ui/InitialsEntry';
-import { MenuNav, type MenuItem } from '../../ui/MenuNav';
+import { MenuNav, navHint } from '../../ui/MenuNav';
+import { spread } from '../../ui/ModeCard';
+import { neonButton } from '../../ui/panels';
 import { LEADERBOARD_REGISTRY_KEY } from '../leaderboardStore';
 
 interface DebriefData {
@@ -23,6 +26,14 @@ interface DebriefData {
   mode?: string;
   /** Newly earned mastery labels to surface as unlocks. */
   milestones?: string[];
+  /** Headline, for modes that end in something other than a lost base. */
+  title?: string;
+  /**
+   * Row labels a mode wants in its own vocabulary. The numbers are the same
+   * RunStats either way — only what the mode calls a kill or a streak differs.
+   */
+  killsLabel?: string;
+  streakLabel?: string;
 }
 
 export class DebriefScene extends Phaser.Scene {
@@ -34,10 +45,11 @@ export class DebriefScene extends Phaser.Scene {
     const { width, height } = this.scale;
     getAudio(this)?.playMusic('debrief');
     applyCrt(this);
-    this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
+    // Sun off: the button row sits low enough that it would fight for the space.
+    drawBackdrop(this, { sun: false, horizon: 0.93 });
 
     this.add
-      .text(width / 2, height * 0.18, 'BASE DESTROYED', {
+      .text(width / 2, height * 0.18, data.title ?? 'BASE DESTROYED', {
         fontFamily: FONT,
         fontSize: '56px',
         fontStyle: 'bold',
@@ -49,8 +61,8 @@ export class DebriefScene extends Phaser.Scene {
     const rows = [
       ['SCORE', String(s.score)],
       ['WAVES CLEARED', String(s.wavesCleared)],
-      ['KILLS', String(s.kills)],
-      ['BEST STREAK', `x${s.bestStreak}`],
+      [data.killsLabel ?? 'KILLS', String(s.kills)],
+      [data.streakLabel ?? 'BEST STREAK', `x${s.bestStreak}`],
       ['CREDITS EARNED', `+${data.credits}`],
     ];
     rows.forEach(([label, value], i) => {
@@ -209,27 +221,47 @@ export class DebriefScene extends Phaser.Scene {
   private showButtons(data: DebriefData, mode: LeaderboardMode, highlightAt?: number): void {
     const { width, height } = this.scale;
     const relaunchScene = data.mode ?? 'Game';
-    const relaunch = this.makeButton(width / 2, height * 0.77, 'RELAUNCH', () =>
-      this.scene.start(relaunchScene),
+    const y = height * 0.82;
+    const opts = { width: 250, height: 50, fontSize: 20 };
+    const relaunch = neonButton(
+      this,
+      spread(width / 2, 1060, 0, 4),
+      y,
+      'RELAUNCH',
+      () => this.scene.start(relaunchScene),
+      { ...opts, accent: PALETTE.magenta },
     );
-    const board = this.makeButton(width / 2, height * 0.835, 'LEADERBOARD', () =>
-      this.scene.start('Leaderboard', highlightAt === undefined ? { mode } : { mode, highlightAt }),
+    const board = neonButton(
+      this,
+      spread(width / 2, 1060, 1, 4),
+      y,
+      'SCORES',
+      () =>
+        this.scene.start(
+          'Leaderboard',
+          highlightAt === undefined ? { mode } : { mode, highlightAt },
+        ),
+      opts,
     );
-    const armory = this.makeButton(width / 2, height * 0.9, 'ARMORY', () => this.scene.start('Shop'));
-    const menu = this.makeButton(width / 2, height * 0.955, 'MENU', () => this.scene.start('Menu'));
+    const hangar = neonButton(
+      this,
+      spread(width / 2, 1060, 2, 4),
+      y,
+      'HANGAR',
+      () => this.scene.start('Shop'),
+      opts,
+    );
+    const menu = neonButton(
+      this,
+      spread(width / 2, 1060, 3, 4),
+      y,
+      'MENU',
+      () => this.scene.start('Menu'),
+      opts,
+    );
 
-    // Opens on RELAUNCH, so ENTER still means "go again" as it always has.
-    new MenuNav(this, [[relaunch], [board], [armory], [menu]]);
-  }
-
-  private makeButton(x: number, y: number, label: string, onClick: () => void): MenuItem {
-    const text = this.add
-      .text(x, y, `[ ${label} ]`, { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold', color: CSS.cyan })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    text.on('pointerover', () => text.setColor(CSS.magentaHot));
-    text.on('pointerout', () => text.setColor(CSS.cyan));
-    text.on('pointerdown', onClick);
-    return { target: text, onSelect: onClick };
+    // One row, opening on RELAUNCH, so ENTER still means "go again".
+    new MenuNav(this, [[relaunch, board, hangar, menu]]);
+    navHint(this, height - 18);
   }
 }

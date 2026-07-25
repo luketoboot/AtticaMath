@@ -21,6 +21,7 @@ import {
 } from '../../core/collapse/chain';
 import { opposite, resolveShot, type GunKind, type TokenRef } from '../../core/collapse/targeting';
 import { CONFIG } from '../../core/config';
+import { creditsForRun, type RunStats } from '../../core/economy/economy';
 import {
   newFlightState,
   stepFlight,
@@ -35,6 +36,7 @@ import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import type { KeyBindings } from '../../core/input/bindings';
+import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 /** A drifting target. Kind decides which gun bites and which colour it wears. */
 interface LiveToken {
@@ -117,8 +119,9 @@ const GUN_LABEL: Record<GunKind, string> = {
  * lockout: committing to a half of the field is the decision the mode is
  * actually about.
  *
- * Prototype scope: no skill-model, economy or debrief wiring — local score and
- * HP with instant retry.
+ * Prototype scope: no skill model yet, so no ratings move and no milestones
+ * unlock. It does earn credits and post to its own high score board, through
+ * the same debrief every other mode uses.
  */
 export class CollapseScene extends Phaser.Scene {
   private tokens: LiveToken[] = [];
@@ -140,7 +143,10 @@ export class CollapseScene extends Phaser.Scene {
   private lockedUntil = 0;
 
   private chain: ChainState = newChain();
+  /** Highest chain reached this run — the debrief's "best streak" row. */
+  private bestChain = 0;
   private nearMissed = new Set<number>();
+  private saves!: SaveManager;
 
   private ship!: Phaser.GameObjects.Container;
   private flight!: FlightState;
@@ -199,7 +205,9 @@ export class CollapseScene extends Phaser.Scene {
     this.lockedUntil = 0;
     this.invulnUntil = 0;
     this.chain = newChain();
+    this.bestChain = 0;
     this.nearMissed.clear();
+    this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
     this.starLayers = [];
     this.shapeRng = createRng(Date.now() >>> 0);
     this.flight = newFlightState(width / 2, height / 2);
@@ -551,6 +559,7 @@ export class CollapseScene extends Phaser.Scene {
 
     const step = advance(this.chain, this.time.now, c.chain);
     this.chain = step.state;
+    this.bestChain = Math.max(this.bestChain, step.state.count);
     const base = c.matchBase + (a.tier - 1) * c.tierBonus + (fractionHalf.unreduced ? c.unreducedBonus : 0);
     const points = Math.round(base * step.multiplier);
     this.score += points;
@@ -1238,44 +1247,36 @@ export class CollapseScene extends Phaser.Scene {
     clearHitStop(this);
     // The update loop stops driving the thruster from here, so cut it by hand.
     getAudio(this)?.stopAllLoops();
-    const { width, height } = this.scale;
+
+    // Collapse has no skill model of its own yet, but it earns and it ranks:
+    // the run goes through the shared debrief so it reaches the board like
+    // every other mode.
+    const stats: RunStats = {
+      score: this.score,
+      wavesCleared: Math.max(0, this.wave - 1),
+      kills: this.matched,
+      misses: this.misread,
+      bestStreak: this.bestChain,
+    };
+    const credits = creditsForRun(stats, CONFIG.economy);
+    const save = this.saves.save;
+    save.totalWaves += this.wave;
+    save.credits += credits;
+    save.bestScore = Math.max(save.bestScore, this.score);
+    this.saves.persist();
+
     getAudio(this)?.play('gameover');
     this.cameras.main.flash(400, 255, 45, 149);
     glowPulse(this, CONFIG.juice.glowPulseHeavy);
-
-    this.add.rectangle(0, 0, width, height, PALETTE.black, 0.72).setOrigin(0).setDepth(20);
-    this.add
-      .text(width / 2, height * 0.36, 'COLLAPSE FAILED', {
-        fontFamily: FONT,
-        fontSize: '52px',
-        fontStyle: 'bold',
-        color: CSS.magenta,
-      })
-      .setOrigin(0.5)
-      .setDepth(21);
-    const accuracy =
-      this.matched + this.misread > 0
-        ? Math.round((this.matched / (this.matched + this.misread)) * 100)
-        : 100;
-    this.add
-      .text(
-        width / 2,
-        height * 0.5,
-        `SCORE ${this.score}\nWAVE ${this.wave}\nPAIRED ${this.matched}   MISREAD ${this.misread}   ${accuracy}%`,
-        { fontFamily: FONT, fontSize: '24px', color: CSS.white, align: 'center' },
-      )
-      .setOrigin(0.5)
-      .setDepth(21);
-    this.add
-      .text(width / 2, height * 0.68, '[ R ] RETRY        [ ESC ] MENU', {
-        fontFamily: FONT,
-        fontSize: '22px',
-        fontStyle: 'bold',
-        color: CSS.cyan,
-      })
-      .setOrigin(0.5)
-      .setDepth(21);
-
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    this.time.delayedCall(900, () => {
+      this.scene.start('Debrief', {
+        stats,
+        credits,
+        mode: 'Collapse',
+        title: 'COLLAPSE FAILED',
+        killsLabel: 'PAIRED',
+        streakLabel: 'BEST CHAIN',
+      });
+    });
   }
 }
