@@ -246,6 +246,13 @@ export class FactorSession {
   /**
    * Skills a shot exercises: naming a factor is exact division, and seeing the
    * pair behind it is that pair's times table.
+   *
+   * The factor family is credited on top, because decomposition is the thing
+   * this mode teaches and neither division nor a times table is the same claim.
+   * Splitting a rock whose least factor is 7 or more is factor.smallest — the
+   * skill of having somewhere to look once 2, 3 and 5 have failed — and three
+   * digits of it is factor.deep. Destroying a prime is factor.prime, which
+   * nothing else in the game can rate.
    */
   private skillsForShot(value: number, shot: number): SkillId[] {
     const ids: SkillId[] = ['div.exact'];
@@ -254,6 +261,16 @@ export class FactorSession {
     if (shot !== value && family >= 2 && family <= 12 && Number.isInteger(other)) {
       ids.push(`mul.table.${family}`);
     }
+
+    if (shot === value && isPrime(value)) {
+      ids.push('factor.prime');
+    } else if (shot !== value) {
+      const least = Math.min(shot, other);
+      // A rock ending in an even digit or a 5 gives its factor away, so a split
+      // on one says nothing about whether the player can find a hidden factor.
+      if (least >= 7) ids.push(value >= 100 ? 'factor.deep' : 'factor.smallest');
+    }
+
     return ids.filter((id) => SKILLS.some((s) => s.id === id));
   }
 

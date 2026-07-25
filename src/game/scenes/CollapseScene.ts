@@ -19,6 +19,7 @@ import {
   isLive,
   type ChainState,
 } from '../../core/collapse/chain';
+import { collapseAttempt } from '../../core/collapse/skills';
 import { opposite, resolveShot, type GunKind, type TokenRef } from '../../core/collapse/targeting';
 import { CONFIG } from '../../core/config';
 import {
@@ -36,6 +37,8 @@ import {
   type FlightState,
 } from '../../core/flight/newtonian';
 import { createRng } from '../../core/rng';
+import { newMilestones } from '../../core/skills/milestones';
+import { applyAttempt } from '../../core/skills/rating';
 import { generateAsteroid, hitsCircle, maxRadius, type AsteroidShape } from '../../core/shapes/asteroid';
 import { applyCrt } from '../../fx/applyCrt';
 import { cameraPunch, clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '../../fx/juice';
@@ -56,7 +59,10 @@ interface LiveToken {
   /** Present on fraction tokens only. */
   fraction: Fraction | null;
   unreduced: boolean;
+  /** Wave tier cap — drives score, so late waves pay more. */
   tier: number;
+  /** The pair's own pool band, which is what the rating model is told about. */
+  bandTier: number;
   container: Phaser.GameObjects.Container;
   /** The drawn silhouette; also the hitbox, via core/shapes/asteroid. */
   gfx: Phaser.GameObjects.Graphics;
@@ -141,9 +147,10 @@ const GUN_LABEL: Record<GunKind, string> = {
  * lockout: committing to a half of the field is the decision the mode is
  * actually about.
  *
- * Prototype scope: no skill model yet, so no ratings move and no milestones
- * unlock. It does earn credits and post to its own high score board, through
- * the same debrief every other mode uses.
+ * A collapse rates frac.percent — and frac.reduce as well when the fraction was
+ * written unreduced — against the pair's own band, timed from the moment the
+ * charge was armed. A mismatch rates the same skills as a miss. Wrong-gun shots
+ * are left out of it: that is a fumble, not a misread.
  */
 export class CollapseScene extends Phaser.Scene {
   private tokens: LiveToken[] = [];
@@ -161,6 +168,8 @@ export class CollapseScene extends Phaser.Scene {
   private gun: GunKind = 'fraction';
   private armedId: number | null = null;
   private armedUntil = 0;
+  /** When the held charge was armed — the clock a resolution is timed against. */
+  private armedAt = 0;
   private fireReadyAt = 0;
   private lockedUntil = 0;
 
@@ -235,6 +244,7 @@ export class CollapseScene extends Phaser.Scene {
     this.gun = 'fraction';
     this.armedId = null;
     this.armedUntil = 0;
+    this.armedAt = 0;
     this.fireReadyAt = 0;
     this.lockedUntil = 0;
     this.invulnUntil = 0;
@@ -594,6 +604,7 @@ export class CollapseScene extends Phaser.Scene {
         if (held && held.id !== target.id) this.setArmedVisual(held, false);
         this.armedId = target.id;
         this.armedUntil = this.time.now + CONFIG.collapse.armedSeconds * 1000;
+        this.armedAt = this.time.now;
         this.setArmedVisual(target, true);
         getAudio(this)?.play('prime');
         break;
@@ -605,6 +616,33 @@ export class CollapseScene extends Phaser.Scene {
         break;
     }
     this.syncHud();
+  }
+
+  /**
+   * Move the ratings for one resolution.
+   *
+   * Latency runs from the moment the charge was armed, because that is when the
+   * question was actually asked: everything before it was flying, and the mode
+   * would otherwise punish players for taking a wide route to the counterpart.
+   */
+  private rateResolution(fractionHalf: LiveToken | null, correct: boolean): void {
+    if (!fractionHalf) return;
+    const { skillIds, difficulty } = collapseAttempt(
+      fractionHalf.bandTier,
+      fractionHalf.unreduced,
+    );
+    const save = this.saves.save;
+    save.skills = applyAttempt(
+      save.skills,
+      skillIds,
+      {
+        correct,
+        responseMs: Math.max(1, this.time.now - this.armedAt),
+        difficulty,
+        wave: save.totalWaves + this.wave,
+      },
+      CONFIG.rating,
+    );
   }
 
   private refOf(t: LiveToken): TokenRef {
@@ -631,6 +669,10 @@ export class CollapseScene extends Phaser.Scene {
   private mismatchFeedback(target: LiveToken, held: LiveToken | null): void {
     const c = CONFIG.collapse;
     this.misread += 1;
+    // Rate the fraction of the two, since that is the form being read. If the
+    // player armed a percentage and shot the wrong fraction, the fraction they
+    // chose is the misread; if they armed a fraction, it is the one they held.
+    this.rateResolution(target.kind === 'fraction' ? target : held, false);
     this.chain = breakChain();
     this.lockedUntil = this.time.now + c.mismatchLockoutSeconds * 1000;
     if (held) this.setArmedVisual(held, false);
@@ -667,6 +709,8 @@ export class CollapseScene extends Phaser.Scene {
     const x = (a.x + b.x) / 2;
     const y = (a.y + b.y) / 2;
     const fractionHalf = a.kind === 'fraction' ? a : b;
+
+    this.rateResolution(fractionHalf, true);
 
     const step = advance(this.chain, this.time.now, c.chain);
     this.chain = step.state;
@@ -828,8 +872,8 @@ export class CollapseScene extends Phaser.Scene {
 
     this.carriersLeft = CONFIG.drops.carriersPerWave;
     for (const pair of plan) {
-      this.spawnToken('percent', pair.percent, null, maxTier);
-      this.spawnToken('fraction', toPercent(pair.fraction), pair.fraction, maxTier);
+      this.spawnToken('percent', pair.percent, null, maxTier, pair.tier);
+      this.spawnToken('fraction', toPercent(pair.fraction), pair.fraction, maxTier, pair.tier);
     }
 
     this.waveText.setText(`WAVE ${this.wave}`);
@@ -853,7 +897,13 @@ export class CollapseScene extends Phaser.Scene {
     return { x: radius + 30, y: radius + 80 };
   }
 
-  private spawnToken(kind: GunKind, percent: number, fraction: Fraction | null, tier: number): void {
+  private spawnToken(
+    kind: GunKind,
+    percent: number,
+    fraction: Fraction | null,
+    tier: number,
+    bandTier: number,
+  ): void {
     const c = CONFIG.collapse;
     const radius = kind === 'fraction' ? c.fractionRadius : c.percentRadius;
     const { x, y } = this.safeSpawn(radius);
@@ -914,6 +964,7 @@ export class CollapseScene extends Phaser.Scene {
       fraction,
       unreduced: !!(fraction && reduced && reduced.num !== fraction.num),
       tier,
+      bandTier,
       container,
       gfx,
       shape,
@@ -1368,9 +1419,6 @@ export class CollapseScene extends Phaser.Scene {
     // The update loop stops driving the thruster from here, so cut it by hand.
     getAudio(this)?.stopAllLoops();
 
-    // Collapse has no skill model of its own yet, but it earns and it ranks:
-    // the run goes through the shared debrief so it reaches the board like
-    // every other mode.
     const stats: RunStats = {
       score: this.score,
       wavesCleared: Math.max(0, this.wave - 1),
@@ -1383,6 +1431,10 @@ export class CollapseScene extends Phaser.Scene {
     save.totalWaves += this.wave;
     save.credits += credits;
     save.bestScore = Math.max(save.bestScore, this.score);
+    // Ratings moved as the run went, so mastery here unlocks in the debrief on
+    // the same terms as every other mode.
+    const unlocked = newMilestones(save.skills, save.milestones, CONFIG);
+    save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
 
     getAudio(this)?.play('gameover');
