@@ -267,6 +267,12 @@ export interface FactorConfig {
   balancedMultiplier: number;
   /** Speed given to the two halves of a split, pushing them apart. */
   splitSpeed: number;
+  /**
+   * Degrees a rock must sit closer to the nose than the current lock before
+   * it steals the highlight. Damping, not delay: turning still sweeps the
+   * lock instantly; only drift within this wedge is ignored.
+   */
+  aimHysteresisDeg: number;
 }
 
 export interface BossConfig {
@@ -597,6 +603,7 @@ export const CONFIG: GameConfig = {
     primeMultiplier: 2.5,
     balancedMultiplier: 2,
     splitSpeed: 90,
+    aimHysteresisDeg: 6,
   },
   collapse: {
     basePairs: 3,

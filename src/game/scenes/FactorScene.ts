@@ -4,6 +4,7 @@ import { CONFIG } from '../../core/config';
 import { hullFor, trailFor } from '../../core/cosmetics/cosmetics';
 import { isCompleteShot, isPrime, isViablePrefix } from '../../core/factor/factor';
 import { FactorSession, type Rock } from '../../core/factor/session';
+import { pickByNose } from '../../core/flight/aim';
 import {
   newFlightState,
   stepFlight,
@@ -311,25 +312,22 @@ export class FactorScene extends Phaser.Scene {
   // --- targeting ---
 
   /**
-   * The rock the typing applies to: the nearest one, except while a buffer is
-   * being typed, when the lock is held so drifting cannot steal the shot
-   * halfway through a number.
+   * The rock the typing applies to: the one nearest the nose, so aiming is
+   * steering — point at a rock and it lights. Held while a buffer is being
+   * typed, so drifting cannot steal the shot halfway through a number.
    */
   private refreshLock(): void {
     if (this.buffer.value !== '' && this.rocks.some((r) => r.rock.id === this.lockedId)) {
       this.paintLocks();
       return;
     }
-    let best: LiveRock | null = null;
-    let bestDist = Infinity;
-    for (const r of this.rocks) {
-      const d = Phaser.Math.Distance.Between(this.shipX, this.shipY, r.x, r.y);
-      if (d < bestDist) {
-        bestDist = d;
-        best = r;
-      }
-    }
-    this.lockedId = best ? best.rock.id : null;
+    this.lockedId = pickByNose(
+      this.flight,
+      this.rocks.map((r) => ({ id: r.rock.id, x: r.x, y: r.y })),
+      { width: this.scale.width, height: this.scale.height },
+      this.lockedId,
+      Phaser.Math.DegToRad(CONFIG.factor.aimHysteresisDeg),
+    );
     this.paintLocks();
   }
 
