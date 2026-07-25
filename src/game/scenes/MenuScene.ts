@@ -115,13 +115,7 @@ export class MenuScene extends Phaser.Scene {
       ),
     ];
 
-    // Dropping to the utility row puts the card light out behind you.
-    for (const button of utility) button.onFocus = () => deck.blur();
-
     new MenuNav(this, [deck.items, utility]);
-    // MenuNav does not fire onFocus for the item it opens on, and the first
-    // card has to arrive already lit.
-    deck.focus(0);
 
     navHint(this, height - 20);
   }

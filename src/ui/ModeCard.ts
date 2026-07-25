@@ -136,8 +136,8 @@ class ModeCard {
     this.container.on('pointerdown', () => this.select(spec));
   }
 
-  item(spec: ModeCardSpec, onFocus: () => void): MenuItem {
-    return { target: this.container, onSelect: () => this.select(spec), onFocus };
+  item(spec: ModeCardSpec, setFocused: (on: boolean) => void): MenuItem {
+    return { target: this.container, onSelect: () => this.select(spec), setFocused };
   }
 
   setFocused(on: boolean): void {
@@ -201,9 +201,9 @@ class ModeCard {
 }
 
 /**
- * A row of cards that keeps exactly one lit. Hand the returned items to
- * MenuNav as a row; call `focus(0)` afterwards, since MenuNav does not fire
- * `onFocus` for the item it opens on.
+ * A row of cards that keeps exactly one lit. Hand the returned items to MenuNav
+ * as a row — it lights the card it opens on and blurs the deck when the cursor
+ * leaves the row, so the caller has nothing to wire up.
  */
 export class CardDeck {
   private readonly cards: ModeCard[] = [];
@@ -220,7 +220,7 @@ export class CardDeck {
       const { x, y } = position(i, specs.length);
       const card = new ModeCard(scene, x, y, i, spec, layout);
       this.cards.push(card);
-      this.items.push(card.item(spec, () => this.focus(i)));
+      this.items.push(card.item(spec, (on) => (on ? this.focus(i) : this.blur())));
     });
   }
 

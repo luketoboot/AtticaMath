@@ -166,9 +166,9 @@ export function neonChip(
 /**
  * A panelled button that answers to both the cursor and the mouse.
  *
- * Returned as a MenuItem so it drops straight into a MenuNav row. Focus is not
- * handled here — MenuNav owns the cursor outline, and the button only reacts to
- * the pointer, so the two can never disagree about what is selected.
+ * Returned as a MenuItem so it drops straight into a MenuNav row. It draws its
+ * own focus, which suppresses MenuNav's cursor outline, and MenuNav focuses on
+ * pointerover, so mouse and keyboard can never disagree about what is selected.
  */
 export function neonButton(
   scene: Phaser.Scene,
@@ -222,12 +222,36 @@ export function neonButton(
   );
   container.input!.cursor = 'pointer';
 
-  const repaint = (hot: boolean): void => {
+  // Hover and cursor focus are separate signals for the same look, so they are
+  // tracked separately — a mouse leaving must not darken the focused button.
+  let hovered = false;
+  let focused = false;
+  const repaint = (): void => {
+    const hot = hovered || focused;
     paintPanel(panel, { ...style, accent, fillAlpha: hot ? 0.8 : 0.5, borderWidth: hot ? 3 : 2 });
     text.setColor(hot ? CSS.yellow : CSS.white);
   };
-  container.on('pointerover', () => repaint(true));
-  container.on('pointerout', () => repaint(false));
+  container.on('pointerover', () => {
+    hovered = true;
+    repaint();
+  });
+  container.on('pointerout', () => {
+    hovered = false;
+    repaint();
+  });
+
+  /** Same grow-and-lift the mode cards use, so one menu has one focus language. */
+  const setFocused = (on: boolean): void => {
+    focused = on;
+    repaint();
+    scene.tweens.killTweensOf(container);
+    scene.tweens.add({
+      targets: container,
+      scale: on ? 1.08 : 1,
+      duration: 140,
+      ease: 'Quad.easeOut',
+    });
+  };
 
   const select = (): void => {
     getAudio(scene)?.play('ui');
@@ -238,13 +262,14 @@ export function neonButton(
   return {
     target: container,
     onSelect: select,
+    setFocused,
     container,
     label: text,
     setText: (next) => text.setText(next),
     setAccent: (color) => {
       accent = color;
       style.accent = color;
-      repaint(false);
+      repaint();
     },
   };
 }

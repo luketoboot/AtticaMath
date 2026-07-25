@@ -20,6 +20,12 @@ export interface MenuItem {
    * left/right instead of walking the row — that is how steppers work.
    */
   onAdjust?: (dir: -1 | 1) => void;
+  /**
+   * The item draws its own focus — cards and buttons grow and light up. Items
+   * that provide this get no cursor outline, since two focus indicators on the
+   * same thing is one too many.
+   */
+  setFocused?: (on: boolean) => void;
 }
 
 const UP = new Set(['ArrowUp', 'w', 'W']);
@@ -40,6 +46,9 @@ const PAD_Y = 8;
  * already use colour to carry state — the chosen sector filter, owned gear —
  * and a highlight that fought those would be ambiguous. Outline means "where
  * you are", colour keeps meaning "what is chosen".
+ *
+ * Items that light themselves (`setFocused`) are the exception: an outline
+ * bolted onto a card that already grows and glows only boxes it in.
  */
 export class MenuNav {
   private readonly scene: Phaser.Scene;
@@ -49,6 +58,8 @@ export class MenuNav {
   private readonly cols: number[];
   private row = 0;
   private enabled = true;
+  /** Whoever was last told it is lit, so it can be told when it is not. */
+  private lit: MenuItem | undefined;
 
   constructor(scene: Phaser.Scene, rows: readonly (readonly MenuItem[])[]) {
     this.scene = scene;
@@ -112,7 +123,7 @@ export class MenuNav {
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    this.cursor.setVisible(enabled && this.current() !== undefined);
+    this.render();
   }
 
   // --- internals ---
@@ -160,8 +171,18 @@ export class MenuNav {
   }
 
   private render(): void {
-    const item = this.current();
-    if (!item || !item.target.active) {
+    const raw = this.current();
+    const item = raw?.target.active === true ? raw : undefined;
+
+    if (this.lit !== item) {
+      this.lit?.setFocused?.(false);
+      item?.setFocused?.(true);
+      this.lit = item;
+    }
+
+    // Self-lit items need no outline, and the outline is meaningless while
+    // navigation is suspended.
+    if (!item || item.setFocused || !this.enabled) {
       this.cursor.setVisible(false);
       return;
     }
