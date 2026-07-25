@@ -1,9 +1,20 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import type { RunStats } from '../../core/economy/economy';
+import {
+  DEFAULT_INITIALS,
+  insertScore,
+  modeFromSceneKey,
+  ordinal,
+  qualifies,
+  type LeaderboardMode,
+} from '../../core/leaderboard/leaderboard';
+import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
-import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
+import { InitialsEntry } from '../../ui/InitialsEntry';
+import { MenuNav, type MenuItem } from '../../ui/MenuNav';
+import { LEADERBOARD_REGISTRY_KEY } from '../leaderboardStore';
 
 interface DebriefData {
   stats: RunStats;
@@ -84,16 +95,131 @@ export class DebriefScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // A qualifying score gets the initials prompt first; the buttons appear
+    // once it is answered, so ENTER cannot relaunch out from under the entry.
+    void this.offerHighScore(data);
+  }
+
+  /**
+   * Ask the board whether this run made it, and if so take three initials.
+   *
+   * The board may be remote one day, so a failure here drops the player
+   * straight to the buttons — a run must never be held hostage by a score
+   * service being down.
+   */
+  private async offerHighScore(data: DebriefData): Promise<void> {
+    const { width, height } = this.scale;
+    const store = this.registry.get(LEADERBOARD_REGISTRY_KEY) as LeaderboardStore | undefined;
+    const mode = modeFromSceneKey(data.mode);
+    const score = data.stats.score;
+
+    if (!store) {
+      this.showButtons(data, mode);
+      return;
+    }
+
+    let board;
+    let initial = DEFAULT_INITIALS;
+    try {
+      [board, initial] = await Promise.all([store.load(mode), store.lastInitials()]);
+    } catch {
+      this.showButtons(data, mode);
+      return;
+    }
+    if (!this.scene.isActive()) return;
+
+    if (!qualifies(board, score)) {
+      this.showButtons(data, mode);
+      return;
+    }
+
+    const rank = insertScore(board, {
+      initials: initial,
+      score,
+      wave: data.stats.wavesCleared,
+      at: 0,
+    }).rank;
+
+    const header = this.add
+      .text(width / 2, height * 0.7, `NEW HIGH SCORE — ${ordinal(rank + 1)}`, {
+        fontFamily: FONT,
+        fontSize: '26px',
+        fontStyle: 'bold',
+        color: CSS.yellow,
+      })
+      .setOrigin(0.5);
+    const hint = this.add
+      .text(width / 2, height * 0.93, 'TYPE YOUR INITIALS  ·  ARROWS ADJUST  ·  ENTER CONFIRMS', {
+        fontFamily: FONT,
+        fontSize: '14px',
+        color: CSS.cyanDim,
+      })
+      .setOrigin(0.5);
+    getAudio(this)?.play('tip');
+
+    const entry = new InitialsEntry(this, width / 2, height * 0.82, initial, (initials) => {
+      this.input.keyboard?.off('keydown', route);
+      entry.destroy();
+      header.destroy();
+      hint.destroy();
+      void this.submitScore(store, mode, initials, data, header);
+    });
+    const route = (event: KeyboardEvent): void => {
+      entry.handleKey(event);
+    };
+    this.input.keyboard?.on('keydown', route);
+  }
+
+  private async submitScore(
+    store: LeaderboardStore,
+    mode: LeaderboardMode,
+    initials: string,
+    data: DebriefData,
+    _header: Phaser.GameObjects.Text,
+  ): Promise<void> {
+    const { width, height } = this.scale;
+    const at = Date.now();
+    let rank = -1;
+    try {
+      await store.rememberInitials(initials);
+      rank = (
+        await store.submit(mode, {
+          initials,
+          score: data.stats.score,
+          wave: data.stats.wavesCleared,
+          at,
+        })
+      ).rank;
+    } catch {
+      // Keep going: the run is over either way and the player gets the buttons.
+    }
+    if (!this.scene.isActive()) return;
+
+    this.add
+      .text(
+        width / 2,
+        height * 0.7,
+        rank >= 0 ? `${initials} — ${ordinal(rank + 1)} ON THE BOARD` : `${initials} — LOGGED`,
+        { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: CSS.yellow },
+      )
+      .setOrigin(0.5);
+    this.showButtons(data, mode, at);
+  }
+
+  private showButtons(data: DebriefData, mode: LeaderboardMode, highlightAt?: number): void {
+    const { width, height } = this.scale;
     const relaunchScene = data.mode ?? 'Game';
-    const relaunch = this.makeButton(width / 2, height * 0.74, 'RELAUNCH', () =>
+    const relaunch = this.makeButton(width / 2, height * 0.77, 'RELAUNCH', () =>
       this.scene.start(relaunchScene),
     );
-    const armory = this.makeButton(width / 2, height * 0.82, 'ARMORY', () => this.scene.start('Shop'));
-    const menu = this.makeButton(width / 2, height * 0.9, 'MENU', () => this.scene.start('Menu'));
+    const board = this.makeButton(width / 2, height * 0.835, 'LEADERBOARD', () =>
+      this.scene.start('Leaderboard', highlightAt === undefined ? { mode } : { mode, highlightAt }),
+    );
+    const armory = this.makeButton(width / 2, height * 0.9, 'ARMORY', () => this.scene.start('Shop'));
+    const menu = this.makeButton(width / 2, height * 0.955, 'MENU', () => this.scene.start('Menu'));
 
     // Opens on RELAUNCH, so ENTER still means "go again" as it always has.
-    new MenuNav(this, [[relaunch], [armory], [menu]]);
-    navHint(this);
+    new MenuNav(this, [[relaunch], [board], [armory], [menu]]);
   }
 
   private makeButton(x: number, y: number, label: string, onClick: () => void): MenuItem {

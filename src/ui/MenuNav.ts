@@ -10,6 +10,12 @@ export interface MenuItem {
   /** ENTER / SPACE on this item. */
   onSelect?: () => void;
   /**
+   * The cursor landed here. For a tab strip, where arriving *is* the choice —
+   * anything that would make the player press ENTER to see what they are
+   * already pointing at.
+   */
+  onFocus?: () => void;
+  /**
    * Left/right while this item is focused. Providing it means the item swallows
    * left/right instead of walking the row — that is how steppers work.
    */
@@ -82,7 +88,9 @@ export class MenuNav {
     this.row = nextRow;
     this.cols[nextRow] = nextCol;
     this.render();
-    if (changed && sound) getAudio(this.scene)?.play('ui');
+    if (!changed) return;
+    if (sound) getAudio(this.scene)?.play('ui');
+    this.current()?.onFocus?.();
   }
 
   /** Pre-seed a row's column, e.g. to open on the option that is already chosen. */

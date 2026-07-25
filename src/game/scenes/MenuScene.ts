@@ -60,11 +60,16 @@ export class MenuScene extends Phaser.Scene {
       ['FACTOR STORM', 'Factor'],
       ['BOSS RUSH', 'Boss'],
       ['ARMORY', 'Shop'],
+      ['LEADERBOARD', 'Leaderboard'],
       ['BRAIN SCAN', 'BrainScan'],
       ['SETTINGS', 'Settings'],
     ];
+    // Spacing derives from the count so adding a mode never walks the last
+    // entry into the hint line at the bottom of the glass.
+    const top = 0.44;
+    const step = Math.min(0.07, (0.9 - top) / entries.length);
     const rows = entries.map(([label, target], i) => [
-      this.makeButton(width / 2, height * (0.46 + i * 0.07), label, () => this.scene.start(target)),
+      this.makeButton(width / 2, height * (top + i * step), label, () => this.scene.start(target)),
     ]);
 
     new MenuNav(this, rows);

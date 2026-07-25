@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { AudioManager, AUDIO_REGISTRY_KEY } from '../../audio/AudioManager';
 import { CrtPipeline } from '../../fx/CrtPipeline';
 import { PALETTE } from '../../fx/palette';
+import { LEADERBOARD_REGISTRY_KEY, LocalLeaderboardStore } from '../leaderboardStore';
 import { SaveManager, SAVE_REGISTRY_KEY } from '../storage';
 
 /** Generates all textures procedurally (no asset downloads) and boots the menu. */
@@ -13,6 +14,9 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     const saves = new SaveManager();
     this.registry.set(SAVE_REGISTRY_KEY, saves);
+    // Swapping this for a server-backed store is the whole extent of moving
+    // the boards online: every consumer already awaits it.
+    this.registry.set(LEADERBOARD_REGISTRY_KEY, new LocalLeaderboardStore());
     this.registry.set(
       AUDIO_REGISTRY_KEY,
       new AudioManager(saves.save.settings.sfxVolume, saves.save.settings.musicVolume),
