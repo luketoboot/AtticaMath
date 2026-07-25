@@ -3,6 +3,7 @@
  */
 import type { ChainConfig } from './collapse/chain';
 import type { FlightConfig } from './flight/newtonian';
+import type { AsteroidOptions } from './shapes/asteroid';
 
 export interface RatingConfig {
   /** Starting rating for every skill before placement. */
@@ -408,6 +409,8 @@ export interface GameConfig {
   drops: DropConfig;
   expression: ExpressionConfig;
   flight: FlightConfig;
+  /** Rock silhouettes, shared by every mode that fields asteroids. */
+  asteroid: AsteroidOptions & { minSpinDeg: number; maxSpinDeg: number };
   factor: FactorConfig;
   collapse: CollapseConfig;
   boss: BossConfig;
@@ -520,6 +523,15 @@ export const CONFIG: GameConfig = {
     fourChipRating: 850,
     misfireLockSeconds: 1.2,
     scrapPenaltySeconds: 1.5,
+  },
+  asteroid: {
+    minVertices: 9,
+    maxVertices: 14,
+    jitter: 0.24,
+    notchChance: 0.28,
+    notchDepth: 0.3,
+    minSpinDeg: 8,
+    maxSpinDeg: 34,
   },
   flight: {
     rotationSpeedDeg: 240,

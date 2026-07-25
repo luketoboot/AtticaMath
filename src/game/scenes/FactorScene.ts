@@ -9,10 +9,13 @@ import {
   withVelocity,
   type FlightState,
 } from '../../core/flight/newtonian';
+import { createRng } from '../../core/rng';
+import { generateAsteroid, hitsCircle, type AsteroidShape } from '../../core/shapes/asteroid';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { paintAsteroid } from '../AsteroidGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -22,15 +25,19 @@ import type { KeyBindings } from '../../core/input/bindings';
 interface LiveRock {
   container: Phaser.GameObjects.Container;
   label: Phaser.GameObjects.Text;
-  ring: Phaser.GameObjects.Arc;
+  /** The drawn silhouette; also the hitbox, via core/shapes/asteroid. */
+  gfx: Phaser.GameObjects.Graphics;
+  shape: AsteroidShape;
   rock: Rock;
   x: number;
   y: number;
   vx: number;
   vy: number;
   radius: number;
+  /** Current spin (radians) and its rate, applied to both art and collision. */
+  rotation: number;
+  spinRate: number;
   spawnedAt: number;
-  spin: Phaser.Tweens.Tween;
 }
 
 type Phase = 'wave' | 'breather' | 'over';
@@ -60,6 +67,7 @@ export class FactorScene extends Phaser.Scene {
   private invulnUntil = 0;
   private keys!: KeyState;
   private bindings!: KeyBindings;
+  private shapeRng = createRng(1);
 
   /** Rock the typing applies to. Held while the buffer is non-empty. */
   private lockedId: number | null = null;
@@ -89,6 +97,7 @@ export class FactorScene extends Phaser.Scene {
     this.wave = 0;
     this.lockedId = null;
     this.invulnUntil = 0;
+    this.shapeRng = createRng(Date.now() >>> 0);
     this.flight = newFlightState(width / 2, height / 2);
 
     const save = this.saves.save;
@@ -188,6 +197,9 @@ export class FactorScene extends Phaser.Scene {
       r.x = this.wrapX(r.x + r.vx * dt);
       r.y = this.wrapY(r.y + r.vy * dt);
       r.container.setPosition(r.x, r.y);
+      // Only the silhouette turns; the number stays upright and readable.
+      r.rotation += r.spinRate * dt;
+      r.gfx.setRotation(r.rotation);
     }
   }
 
@@ -219,7 +231,14 @@ export class FactorScene extends Phaser.Scene {
   private paintLocks(): void {
     for (const r of this.rocks) {
       const locked = r.rock.id === this.lockedId;
-      r.ring.setStrokeStyle(locked ? 4 : 2, locked ? PALETTE.yellow : PALETTE.cyan, locked ? 1 : 0.55);
+      paintAsteroid(r.gfx, r.shape, {
+        stroke: locked ? PALETTE.yellow : PALETTE.cyan,
+        strokeWidth: locked ? 4 : 2,
+        strokeAlpha: locked ? 1 : 0.6,
+        fill: PALETTE.deepPurple,
+        fillAlpha: locked ? 0.7 : 0.5,
+        facets: true,
+      });
       r.label.setColor(locked ? CSS.yellow : CSS.white);
     }
     const target = this.rocks.find((r) => r.rock.id === this.lockedId);
@@ -345,8 +364,19 @@ export class FactorScene extends Phaser.Scene {
 
   private spawnRock(rock: Rock, x: number, y: number, vx: number, vy: number): void {
     const radius = this.session.radius(rock.value);
-    const ring = this.add.circle(0, 0, radius).setStrokeStyle(2, PALETTE.cyan, 0.55);
-    const shell = this.add.circle(0, 0, radius - 5, PALETTE.deepPurple, 0.55);
+    const a = CONFIG.asteroid;
+    const shape = generateAsteroid(this.shapeRng, radius, a);
+
+    const gfx = this.add.graphics();
+    paintAsteroid(gfx, shape, {
+      stroke: PALETTE.cyan,
+      strokeWidth: 2,
+      strokeAlpha: 0.6,
+      fill: PALETTE.deepPurple,
+      fillAlpha: 0.5,
+      facets: true,
+    });
+
     const label = this.add
       .text(0, 0, String(rock.value), {
         fontFamily: FONT,
@@ -357,32 +387,29 @@ export class FactorScene extends Phaser.Scene {
         strokeThickness: 5,
       })
       .setOrigin(0.5);
-    const container = this.add.container(x, y, [ring, shell, label]);
-    const spin = this.tweens.add({
-      targets: ring,
-      angle: 360,
-      duration: 6000 + radius * 90,
-      repeat: -1,
-    });
+    const container = this.add.container(x, y, [gfx, label]);
+
+    const spinDeg = Phaser.Math.Between(a.minSpinDeg, a.maxSpinDeg) * (this.shapeRng.chance(0.5) ? 1 : -1);
 
     this.rocks.push({
       container,
       label,
-      ring,
+      gfx,
+      shape,
       rock,
       x,
       y,
       vx,
       vy,
       radius,
+      rotation: this.shapeRng.next() * Math.PI * 2,
+      spinRate: Phaser.Math.DegToRad(spinDeg),
       spawnedAt: this.time.now,
-      spin,
     });
   }
 
   private removeRock(r: LiveRock): void {
     this.rocks = this.rocks.filter((x) => x !== r);
-    r.spin.stop();
     r.container.destroy();
   }
 
@@ -390,8 +417,8 @@ export class FactorScene extends Phaser.Scene {
     if (this.time.now < this.invulnUntil) return;
     const f = CONFIG.factor;
     for (const r of this.rocks) {
-      const dist = Phaser.Math.Distance.Between(this.shipX, this.shipY, r.x, r.y);
-      if (dist > r.radius + CONFIG.flight.shipRadius) continue;
+      if (!hitsCircle(r.shape, r.x, r.y, r.rotation, this.shipX, this.shipY, CONFIG.flight.shipRadius))
+        continue;
 
       this.session.takeDamage();
       this.invulnUntil = this.time.now + f.invulnSeconds * 1000;

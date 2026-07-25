@@ -28,9 +28,11 @@ import {
   type FlightState,
 } from '../../core/flight/newtonian';
 import { createRng } from '../../core/rng';
+import { generateAsteroid, hitsCircle, maxRadius, type AsteroidShape } from '../../core/shapes/asteroid';
 import { applyCrt } from '../../fx/applyCrt';
 import { cameraPunch, clearHitStop, glowPulse, impact, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { paintAsteroid } from '../AsteroidGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import type { KeyBindings } from '../../core/input/bindings';
 
@@ -45,12 +47,18 @@ interface LiveToken {
   unreduced: boolean;
   tier: number;
   container: Phaser.GameObjects.Container;
-  ring: Phaser.GameObjects.Arc;
+  /** The drawn silhouette; also the hitbox, via core/shapes/asteroid. */
+  gfx: Phaser.GameObjects.Graphics;
+  shape: AsteroidShape;
   x: number;
   y: number;
   vx: number;
   vy: number;
   radius: number;
+  /** Widest point — broad-phase spacing at spawn. */
+  reach: number;
+  rotation: number;
+  spinRate: number;
   armedGlow: Phaser.Tweens.Tween | null;
   /** Idle throb that marks a token as solid; paused while it is phased. */
   dangerPulse: Phaser.Tweens.Tween | null;
@@ -145,6 +153,7 @@ export class CollapseScene extends Phaser.Scene {
 
   private keys!: KeyState;
   private bindings!: KeyBindings;
+  private shapeRng = createRng(1);
 
   private hpText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
@@ -186,6 +195,7 @@ export class CollapseScene extends Phaser.Scene {
     this.chain = newChain();
     this.nearMissed.clear();
     this.starLayers = [];
+    this.shapeRng = createRng(Date.now() >>> 0);
     this.flight = newFlightState(width / 2, height / 2);
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
@@ -281,6 +291,9 @@ export class CollapseScene extends Phaser.Scene {
       t.x = this.wrapX(t.x + t.vx * dt);
       t.y = this.wrapY(t.y + t.vy * dt);
       t.container.setPosition(t.x, t.y);
+      // Only the rock turns; the fraction or percentage stays upright.
+      t.rotation += t.spinRate * dt;
+      t.gfx.setRotation(t.rotation);
     }
   }
 
@@ -393,8 +406,8 @@ export class CollapseScene extends Phaser.Scene {
         this.killBolt(b);
         continue;
       }
-      const hit = this.tokens.find(
-        (t) => Phaser.Math.Distance.Between(b.x, b.y, t.x, t.y) <= t.radius + CONFIG.collapse.projectileRadius,
+      const hit = this.tokens.find((t) =>
+        hitsCircle(t.shape, t.x, t.y, t.rotation, b.x, b.y, CONFIG.collapse.projectileRadius),
       );
       if (hit) {
         const normal = Math.atan2(b.y - hit.y, b.x - hit.x);
@@ -492,7 +505,14 @@ export class CollapseScene extends Phaser.Scene {
     if (held) this.setArmedVisual(held, false);
     this.armedId = null;
 
-    target.ring.setStrokeStyle(5, PALETTE.red, 1);
+    paintAsteroid(target.gfx, target.shape, {
+      stroke: PALETTE.red,
+      strokeWidth: 5,
+      strokeAlpha: 1,
+      fill: PALETTE.red,
+      fillAlpha: 0.3,
+      facets: true,
+    });
     this.tweens.add({
       targets: target.container,
       alpha: 0.35,
@@ -590,16 +610,16 @@ export class CollapseScene extends Phaser.Scene {
     const grazeAt = CONFIG.flight.shipRadius + c.nearMissRadius;
     for (const t of this.tokens) {
       if (this.isPhased(t)) continue;
-      const dist = Phaser.Math.Distance.Between(this.shipX, this.shipY, t.x, t.y);
-      const inside = dist <= t.radius + grazeAt;
-      if (!inside) {
+      const grazing = hitsCircle(t.shape, t.x, t.y, t.rotation, this.shipX, this.shipY, grazeAt);
+      if (!grazing) {
         this.nearMissed.delete(t.id);
         continue;
       }
       if (this.nearMissed.has(t.id)) continue;
       this.nearMissed.add(t.id);
       // Contact is handled elsewhere; this only fires for a genuine graze.
-      if (dist <= t.radius + CONFIG.flight.shipRadius) continue;
+      if (hitsCircle(t.shape, t.x, t.y, t.rotation, this.shipX, this.shipY, CONFIG.flight.shipRadius))
+        continue;
       this.score += c.nearMissBonus;
       this.popup(this.shipX, this.shipY - 26, `+${c.nearMissBonus} CLOSE`, CSS.cyanDim);
       getAudio(this)?.play('nearMiss');
@@ -625,8 +645,8 @@ export class CollapseScene extends Phaser.Scene {
       // and everything else is a wall. Swapping to shoot therefore also swaps
       // which half of the board can kill you.
       if (this.isPhased(t)) continue;
-      const dist = Phaser.Math.Distance.Between(this.shipX, this.shipY, t.x, t.y);
-      if (dist > t.radius + CONFIG.flight.shipRadius) continue;
+      if (!hitsCircle(t.shape, t.x, t.y, t.rotation, this.shipX, this.shipY, CONFIG.flight.shipRadius))
+        continue;
 
       this.hp -= 1;
       this.invulnUntil = this.time.now + c.invulnSeconds * 1000;
@@ -689,7 +709,7 @@ export class CollapseScene extends Phaser.Scene {
       const y = Phaser.Math.Between(radius + 70, height - radius - 80);
       if (Phaser.Math.Distance.Between(x, y, this.shipX, this.shipY) < 190) continue;
       const clear = this.tokens.every(
-        (t) => Phaser.Math.Distance.Between(x, y, t.x, t.y) > radius + t.radius + 34,
+        (t) => Phaser.Math.Distance.Between(x, y, t.x, t.y) > radius * 1.3 + t.reach + 34,
       );
       if (clear) return { x, y };
     }
@@ -704,13 +724,20 @@ export class CollapseScene extends Phaser.Scene {
     const angle = Math.random() * Math.PI * 2;
 
     const isFraction = kind === 'fraction';
+    const a = CONFIG.asteroid;
     // Both kinds are equally solid and equally lethal, so both are drawn with
     // the same weight. Type is carried by hue and content, never by how
     // dangerous a token looks.
-    const ring = this.add
-      .circle(0, 0, radius)
-      .setStrokeStyle(3, isFraction ? PALETTE.cyan : PALETTE.magenta, 0.85);
-    const shell = this.add.circle(0, 0, radius - 6, PALETTE.black, 0.85);
+    const shape = generateAsteroid(this.shapeRng, radius, a);
+    const gfx = this.add.graphics();
+    paintAsteroid(gfx, shape, {
+      stroke: isFraction ? PALETTE.cyan : PALETTE.magenta,
+      strokeWidth: 3,
+      strokeAlpha: 0.95,
+      fill: PALETTE.black,
+      fillAlpha: 0.85,
+      facets: true,
+    });
     const label = this.add
       .text(0, 0, isFraction && fraction ? formatFraction(fraction) : formatPercent(percent), {
         fontFamily: FONT,
@@ -721,16 +748,18 @@ export class CollapseScene extends Phaser.Scene {
         strokeThickness: 4,
       })
       .setOrigin(0.5);
-    const container = this.add.container(x, y, [ring, shell, label]).setDepth(2);
+    const container = this.add.container(x, y, [gfx, label]).setDepth(2);
 
     const dangerPulse = this.tweens.add({
-      targets: ring,
+      targets: gfx,
       scale: 1.08,
       duration: isFraction ? 820 : 700,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
+    const spinDeg =
+      Phaser.Math.Between(a.minSpinDeg, a.maxSpinDeg) * (this.shapeRng.chance(0.5) ? 1 : -1);
 
     const reduced = fraction ? reduce(fraction) : null;
     this.tokens.push({
@@ -741,12 +770,16 @@ export class CollapseScene extends Phaser.Scene {
       unreduced: !!(fraction && reduced && reduced.num !== fraction.num),
       tier,
       container,
-      ring,
+      gfx,
+      shape,
       x,
       y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       radius,
+      reach: maxRadius(shape),
+      rotation: this.shapeRng.next() * Math.PI * 2,
+      spinRate: Phaser.Math.DegToRad(spinDeg),
       armedGlow: null,
       dangerPulse,
     });
@@ -767,17 +800,25 @@ export class CollapseScene extends Phaser.Scene {
     const phased = this.isPhased(t);
     const hue = t.kind === 'fraction' ? PALETTE.cyan : PALETTE.magenta;
 
-    if (armed) t.ring.setStrokeStyle(5, PALETTE.yellow, 1);
-    else t.ring.setStrokeStyle(phased ? 2 : 3, hue, phased ? 0.5 : 0.95);
+    paintAsteroid(t.gfx, t.shape, {
+      stroke: armed ? PALETTE.yellow : hue,
+      strokeWidth: armed ? 5 : 3,
+      strokeAlpha: armed ? 1 : 0.95,
+      fill: PALETTE.black,
+      fillAlpha: 0.85,
+      facets: true,
+    });
 
-    // The held charge never dims: losing track of it would be worse than the
-    // ambiguity of it not matching the rest of its colour.
-    t.container.setAlpha(armed ? 1 : phased ? 0.5 : 1);
+    // Tokens stay fully opaque whatever is loaded — the board should read the
+    // same at all times. Which half is solid is carried by the throb below and
+    // by the hull colour, not by fading half the field out.
+    t.container.setAlpha(1);
 
-    // An armed token has its own throb, so the danger pulse would only fight it.
+    // Solid tokens throb; phased ones hold still. An armed token has its own
+    // pulse, so the danger throb would only fight it.
     if (phased || armed) {
       t.dangerPulse?.pause();
-      t.ring.setScale(1);
+      t.gfx.setScale(1);
     } else {
       t.dangerPulse?.resume();
     }
