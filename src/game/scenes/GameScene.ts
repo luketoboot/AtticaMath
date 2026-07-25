@@ -11,6 +11,7 @@ import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { isTouchDevice, Numpad } from '../../ui/Numpad';
+import { announceDrop, effectsLine, DROP_CSS } from '../DropGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -617,31 +618,11 @@ export class GameScene extends Phaser.Scene {
     const y = p.container.y;
     this.removePickup(p);
     this.session.collectDrop(kind);
-    const audio = getAudio(this);
-
-    switch (kind) {
-      case 'nuke':
-        this.detonateNuke();
-        break;
-      case 'repair':
-        audio?.play('shield');
-        this.cameras.main.flash(200, 0, 220, 255);
-        break;
-      case 'freeze':
-        audio?.play('slowfield');
-        this.cameras.main.flash(160, 0, 220, 255);
-        break;
-      case 'shield':
-        audio?.play('shield');
-        this.cameras.main.flash(220, 255, 230, 77);
-        break;
-      default:
-        audio?.play('purchase');
-        break;
-    }
+    announceDrop(this, kind);
+    if (kind === 'nuke') this.detonateNuke();
     // Named at the cannon where it was caught, not across the field — meteors
     // are still falling and the middle of the screen is not free real estate.
-    this.floatText(x, y, DROP_LABEL[kind], CSS.cyan, 24);
+    this.floatText(x, y, DROP_LABEL[kind], DROP_CSS[kind], 24);
     glowPulse(this, CONFIG.juice.glowPulseHeavy);
     this.updateHud();
   }
@@ -1086,13 +1067,7 @@ export class GameScene extends Phaser.Scene {
 
   /** e.g. "FREEZE 1.8  ·  x2 5.2  ·  CHAIN 2" — empty when nothing is running. */
   private effectsLine(): string {
-    const d = this.session.dropState;
-    const parts: string[] = [];
-    if (d.freezeLeft > 0) parts.push(`FREEZE ${d.freezeLeft.toFixed(1)}`);
-    if (d.doubleLeft > 0) parts.push(`x2 ${d.doubleLeft.toFixed(1)}`);
-    if (d.chainLeft > 0) parts.push(`CHAIN ${d.chainLeft}`);
-    if (d.shieldLeft > 0) parts.push(`SHIELD ${d.shieldLeft.toFixed(1)}`);
-    return parts.join('  ·  ');
+    return effectsLine(this.session.dropState);
   }
 
   // --- end of run ---

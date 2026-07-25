@@ -10,6 +10,7 @@ import {
   withVelocity,
   type FlightState,
 } from '../../core/flight/newtonian';
+import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { createRng } from '../../core/rng';
 import { generateAsteroid, hitsCircle, type AsteroidShape } from '../../core/shapes/asteroid';
 import { newMilestones } from '../../core/skills/milestones';
@@ -17,6 +18,7 @@ import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
+import { announceDrop, carrierRing, effectsLine, pickupPod } from '../DropGfx';
 import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
@@ -40,6 +42,20 @@ interface LiveRock {
   rotation: number;
   spinRate: number;
   spawnedAt: number;
+  /** Destroying this rock leaves a pickup. Splitting passes it to one half. */
+  payload: DropKind | null;
+  carrierMark: Phaser.GameObjects.Arc | null;
+}
+
+/** A pickup drifting in the field, taken by flying through it. */
+interface LivePickup {
+  container: Phaser.GameObjects.Container;
+  kind: DropKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  diesAt: number;
 }
 
 type Phase = 'wave' | 'breather' | 'over';
@@ -60,6 +76,7 @@ export class FactorScene extends Phaser.Scene {
   private buffer!: InputBuffer;
 
   private rocks: LiveRock[] = [];
+  private pickups: LivePickup[] = [];
   private phase: Phase = 'wave';
   private wave = 0;
 
@@ -79,6 +96,7 @@ export class FactorScene extends Phaser.Scene {
   private streakText!: Phaser.GameObjects.Text;
   private comboBar!: Phaser.GameObjects.Rectangle;
   private waveText!: Phaser.GameObjects.Text;
+  private effectsText!: Phaser.GameObjects.Text;
   private bufferText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
 
@@ -101,6 +119,7 @@ export class FactorScene extends Phaser.Scene {
     this.events.on(Phaser.Scenes.Events.PAUSE, () => getAudio(this)?.stopAllLoops());
 
     this.rocks = [];
+    this.pickups = [];
     this.phase = 'wave';
     this.wave = 0;
     this.lockedId = null;
@@ -147,6 +166,7 @@ export class FactorScene extends Phaser.Scene {
 
     this.session.tick(dt);
     this.driftRocks(dt);
+    this.driftPickups(dt);
     this.refreshLock();
     this.syncCombo();
     this.checkCollisions();
@@ -206,14 +226,86 @@ export class FactorScene extends Phaser.Scene {
   }
 
   private driftRocks(dt: number): void {
+    // A freeze pickup pins the board. The rocks still spin, so the field reads
+    // as held rather than as a dropped frame.
+    const drift = this.session.driftFrozen ? 0 : dt;
     for (const r of this.rocks) {
-      r.x = this.wrapX(r.x + r.vx * dt);
-      r.y = this.wrapY(r.y + r.vy * dt);
+      r.x = this.wrapX(r.x + r.vx * drift);
+      r.y = this.wrapY(r.y + r.vy * drift);
       r.container.setPosition(r.x, r.y);
       // Only the silhouette turns; the number stays upright and readable.
       r.rotation += r.spinRate * dt;
       r.gfx.setRotation(r.rotation);
     }
+  }
+
+  // --- drops ---
+
+  private spawnPickup(x: number, y: number, kind: DropKind): void {
+    const c = CONFIG.factor;
+    const angle = Math.random() * Math.PI * 2;
+    this.pickups.push({
+      container: pickupPod(this, x, y, kind),
+      kind,
+      x,
+      y,
+      // Drifts slowly off the wreck, so it is a place you have to fly to
+      // rather than something you already happen to be sitting on.
+      vx: Math.cos(angle) * c.pickupDrift,
+      vy: Math.sin(angle) * c.pickupDrift,
+      diesAt: this.time.now + c.pickupLifeSeconds * 1000,
+    });
+  }
+
+  /**
+   * Pods drift, and are taken by flying through them. Collection is the same
+   * verb as everything else in this mode: go there.
+   */
+  private driftPickups(dt: number): void {
+    const reach = CONFIG.flight.shipRadius + CONFIG.factor.pickupRadius;
+    for (const p of [...this.pickups]) {
+      p.x = this.wrapX(p.x + p.vx * dt);
+      p.y = this.wrapY(p.y + p.vy * dt);
+      p.container.setPosition(p.x, p.y);
+
+      if (Phaser.Math.Distance.Between(p.x, p.y, this.shipX, this.shipY) <= reach) {
+        this.collectPickup(p);
+      } else if (this.time.now >= p.diesAt) {
+        // Timed out: a dull fizzle and no penalty. Losing it is the penalty.
+        this.explode(p.x, p.y, PALETTE.deepPurple, 8);
+        this.removePickup(p);
+      }
+    }
+  }
+
+  private removePickup(p: LivePickup): void {
+    this.pickups = this.pickups.filter((x) => x !== p);
+    p.container.destroy();
+  }
+
+  private collectPickup(p: LivePickup): void {
+    const { kind, x, y } = p;
+    this.removePickup(p);
+    this.session.collectDrop(kind);
+    announceDrop(this, kind);
+    if (kind === 'nuke') this.detonateNuke();
+    this.popup(x, y, DROP_LABEL[kind]);
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    this.updateHud();
+  }
+
+  /** Clears the field for score. No ratings move — none of it was factored. */
+  private detonateNuke(): void {
+    for (const r of [...this.rocks]) {
+      const points = this.session.recordNuke(r.rock);
+      if (r.payload) this.spawnPickup(r.x, r.y, r.payload);
+      this.explode(r.x, r.y, PALETTE.red, CONFIG.juice.killParticles);
+      this.popup(r.x, r.y, `+${points}`);
+      this.removeRock(r);
+    }
+    this.lockedId = null;
+    this.cameras.main.shake(340, 0.014);
+    this.cameras.main.flash(300, 255, 59, 59);
   }
 
   // --- targeting ---
@@ -309,6 +401,7 @@ export class FactorScene extends Phaser.Scene {
     this.removeRock(target);
 
     if (outcome.result === 'destroyed') {
+      if (target.payload) this.spawnPickup(target.x, target.y, target.payload);
       const tint = outcome.prime ? PALETTE.magenta : PALETTE.cyan;
       audio?.play(outcome.prime ? 'fast' : 'explosion', { pitch });
       this.explode(target.x, target.y, tint, outcome.prime ? juice.fastKillParticles : juice.killParticles);
@@ -340,6 +433,7 @@ export class FactorScene extends Phaser.Scene {
           target.y + Math.sin(angle) * dir * target.radius,
           target.vx + Math.cos(angle) * dir * speed,
           target.vy + Math.sin(angle) * dir * speed,
+          i === 0 ? target.payload : null,
         );
       });
       impact(this, {
@@ -360,6 +454,7 @@ export class FactorScene extends Phaser.Scene {
     this.wave += 1;
     this.phase = 'wave';
     const { width, height } = this.scale;
+    let carriers = CONFIG.drops.carriersPerWave;
     for (const rock of this.session.nextWave()) {
       // Rocks enter around the edges so the player is never spawned on top of one.
       const edge = Phaser.Math.Between(0, 3);
@@ -367,7 +462,11 @@ export class FactorScene extends Phaser.Scene {
       const y = edge === 2 ? 40 : edge === 3 ? height - 40 : Phaser.Math.Between(40, height - 40);
       const speed = this.session.driftSpeed(rock.value);
       const angle = Math.random() * Math.PI * 2;
-      this.spawnRock(rock, x, y, Math.cos(angle) * speed, Math.sin(angle) * speed);
+      // A few rocks a wave are carrying. Split one and the payload rides on
+      // whichever half you did not just make easier — you have to finish it.
+      const payload = carriers > 0 ? this.session.rollDrop() : null;
+      if (payload) carriers -= 1;
+      this.spawnRock(rock, x, y, Math.cos(angle) * speed, Math.sin(angle) * speed, payload);
     }
     this.waveText.setText(`WAVE ${this.wave}`);
     this.banner(`WAVE ${this.wave}`, CSS.magenta);
@@ -375,7 +474,14 @@ export class FactorScene extends Phaser.Scene {
     this.refreshLock();
   }
 
-  private spawnRock(rock: Rock, x: number, y: number, vx: number, vy: number): void {
+  private spawnRock(
+    rock: Rock,
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    payload: DropKind | null = null,
+  ): void {
     const radius = this.session.radius(rock.value);
     const a = CONFIG.asteroid;
     const shape = generateAsteroid(this.shapeRng, radius, a);
@@ -400,7 +506,11 @@ export class FactorScene extends Phaser.Scene {
         strokeThickness: 5,
       })
       .setOrigin(0.5);
-    const container = this.add.container(x, y, [gfx, label]);
+    const carrierMark = payload ? carrierRing(this, radius + 10) : null;
+    const parts: Phaser.GameObjects.GameObject[] = carrierMark
+      ? [carrierMark, gfx, label]
+      : [gfx, label];
+    const container = this.add.container(x, y, parts);
 
     const spinDeg = Phaser.Math.Between(a.minSpinDeg, a.maxSpinDeg) * (this.shapeRng.chance(0.5) ? 1 : -1);
 
@@ -418,6 +528,8 @@ export class FactorScene extends Phaser.Scene {
       rotation: this.shapeRng.next() * Math.PI * 2,
       spinRate: Phaser.Math.DegToRad(spinDeg),
       spawnedAt: this.time.now,
+      payload,
+      carrierMark,
     });
   }
 
@@ -618,6 +730,10 @@ export class FactorScene extends Phaser.Scene {
       .text(width / 2, 20, '', { ...style, color: CSS.cyanDim })
       .setOrigin(0.5, 0)
       .setDepth(hud);
+    this.effectsText = this.add
+      .text(width / 2, 50, '', { fontFamily: FONT, fontSize: '15px', color: CSS.cyan })
+      .setOrigin(0.5, 0)
+      .setDepth(hud);
 
     this.hintText = this.add
       .text(width / 2, height - 74, '', { fontFamily: FONT, fontSize: '18px', color: CSS.cyanDim })
@@ -652,6 +768,9 @@ export class FactorScene extends Phaser.Scene {
 
   private syncCombo(): void {
     const { session } = this;
+    // Every frame, not just on a kill: these are clocks, and a countdown that
+    // only moves when you score is not a countdown.
+    this.effectsText.setText(effectsLine(session.dropState));
     this.streakText.setText(session.streak > 0 ? `x${session.comboMultiplier}  ${session.streak}` : '');
     this.streakText.setColor(session.overdriveActive ? CSS.magentaHot : CSS.yellow);
     this.comboBar

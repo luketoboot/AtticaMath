@@ -24,6 +24,7 @@ import {
 } from '../combo';
 import { CONFIG, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
+import { DropTracker, type DropKind, type DropState } from '../drops';
 import { creditsForRun, killScore, type RunStats } from '../economy/economy';
 import { createRng, type Rng } from '../rng';
 import { applyAttempt, targetLatencyMs, type SkillTable } from '../skills/rating';
@@ -88,6 +89,7 @@ export class ExpressionSession {
   private live: ExpressionProblem[] = [];
   private queued = 0;
   private combo: ComboState = createCombo();
+  private readonly drops: DropTracker;
   private missesThisWave = 0;
 
   score = 0;
@@ -95,6 +97,7 @@ export class ExpressionSession {
   misses = 0;
   misfires = 0;
   hp: number;
+  private readonly maxHp: number;
 
   constructor(init: ExpressionSessionInit) {
     this.cfg = init.config ?? CONFIG;
@@ -102,6 +105,12 @@ export class ExpressionSession {
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.hp = this.cfg.meteors.baseHp;
+    this.maxHp = this.hp;
+    this.drops = new DropTracker(
+      (init.seed ^ 0x85ebca6b) >>> 0,
+      this.cfg.drops,
+      this.cfg.drops.pools.expression,
+    );
   }
 
   get globalWave(): number {
@@ -152,6 +161,11 @@ export class ExpressionSession {
     return comboMultiplier(this.combo, this.cfg.combo);
   }
 
+  /** Combo tier and any active x2 pickup, together. */
+  get scoreMultiplier(): number {
+    return this.comboMultiplier * this.drops.multiplier;
+  }
+
   get comboFraction(): number {
     return comboFraction(this.combo, this.cfg.combo);
   }
@@ -162,6 +176,43 @@ export class ExpressionSession {
 
   tick(dtSeconds: number): void {
     this.combo = tickCombo(this.combo, dtSeconds, this.cfg.combo);
+    this.drops.tick(dtSeconds);
+  }
+
+  // --- drops ---
+
+  get dropState(): Readonly<DropState> {
+    return this.drops.snapshot;
+  }
+
+  /** Targets hang in the air while a freeze runs. */
+  get descentFrozen(): boolean {
+    return this.drops.frozen;
+  }
+
+  /** What the carrier target that was just solved was holding. */
+  rollDrop(): DropKind {
+    return this.drops.roll(this.hp);
+  }
+
+  collectDrop(kind: DropKind): void {
+    if (kind === 'repair') {
+      this.hp = Math.min(this.maxHp, this.hp + 1);
+      return;
+    }
+    this.drops.apply(kind);
+  }
+
+  /**
+   * Score for a target the nuke cleared, and drop it from the live list. No
+   * rating moves: the player solved none of these.
+   */
+  recordNuke(problem: ExpressionProblem): number {
+    const points = Math.round(this.cfg.score.killBase * this.scoreMultiplier);
+    this.kills += 1;
+    this.score += points;
+    this.live = this.live.filter((t) => t.id !== problem.id);
+    return points;
   }
 
   // --- hand ---
@@ -312,7 +363,7 @@ export class ExpressionSession {
     for (const o of distinctOps(tokens)) this.opUsage[o] += 1;
 
     const fast = responseMs <= targetLatencyMs(hit.difficulty, this.cfg.rating);
-    const base = killScore(hit.difficulty, this.comboMultiplier, fast, this.cfg.score);
+    const base = killScore(hit.difficulty, this.scoreMultiplier, fast, this.cfg.score);
     const parBonus = used.length <= hit.par ? e.parBonus : 0;
     const ops = distinctOps(tokens);
     const varietyBonus = ops.length > 1 ? ops.length * e.varietyBonusPerOperator : 0;
@@ -385,6 +436,7 @@ export class ExpressionSession {
     this.missesThisWave += 1;
     this.combo = comboBreak(this.combo);
     this.live = this.live.filter((t) => t.id !== problem.id);
+    if (this.drops.shielded) return;
     this.hp -= 1;
   }
 

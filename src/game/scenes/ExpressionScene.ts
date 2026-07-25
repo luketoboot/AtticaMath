@@ -5,11 +5,13 @@ import { evaluateTokens, type Token } from '../../core/expression/expression';
 import type { ExpressionProblem } from '../../core/expression/generate';
 import { ExpressionSession, type Recalibration } from '../../core/expression/session';
 import { newMilestones } from '../../core/skills/milestones';
+import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { onActionKey, sceneBindings } from '../input/KeyState';
+import { announceDrop, carrierRing, effectsLine, DROP_CSS } from '../DropGfx';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 import { codeMatches } from '../../core/input/bindings';
 
@@ -23,6 +25,8 @@ interface LiveTarget {
   problem: ExpressionProblem;
   spawnedAt: number;
   speed: number;
+  /** Solving this one hands over a pickup. Null for an ordinary target. */
+  payload: DropKind | null;
 }
 
 /** Why an expression was refused, in the player's words. */
@@ -42,6 +46,8 @@ export class ExpressionScene extends Phaser.Scene {
 
   private phase: Phase = 'wave';
   private targets: LiveTarget[] = [];
+  /** Carriers still owed this wave. */
+  private carriersLeft = 0;
   private groundY = 0;
   private wave = 0;
   /** Scene-clock time the misfire lockout ends. */
@@ -52,6 +58,7 @@ export class ExpressionScene extends Phaser.Scene {
   private streakText!: Phaser.GameObjects.Text;
   private comboBar!: Phaser.GameObjects.Rectangle;
   private waveText!: Phaser.GameObjects.Text;
+  private effectsText!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Expression');
@@ -121,8 +128,9 @@ export class ExpressionScene extends Phaser.Scene {
       this.composer.reset();
     }
 
+    const frozen = this.session.descentFrozen;
     for (const t of [...this.targets]) {
-      t.container.y += t.speed * dt;
+      if (!frozen) t.container.y += t.speed * dt;
       if (t.container.y >= this.groundY - 30) this.landTarget(t);
       if (this.phase !== 'wave') return; // the landing ended the run
     }
@@ -158,6 +166,7 @@ export class ExpressionScene extends Phaser.Scene {
     this.wave += 1;
     this.session.nextWave();
     this.phase = 'wave';
+    this.carriersLeft = CONFIG.drops.carriersPerWave;
     this.waveText.setText(`WAVE ${this.wave}`);
     this.banner(`WAVE ${this.wave}`, CSS.magenta);
     getAudio(this)?.play('wave');
@@ -239,7 +248,15 @@ export class ExpressionScene extends Phaser.Scene {
         strokeThickness: 4,
       })
       .setOrigin(0.5);
-    const container = this.add.container(x, -70, [rock, valueLabel, parLabel]);
+    // Carriers are marked before they are rolled, so the ring is a promise of
+    // something rather than a spoiler of what.
+    const payload = this.carriersLeft > 0 ? this.session.rollDrop() : null;
+    const parts: Phaser.GameObjects.GameObject[] = [rock, valueLabel, parLabel];
+    if (payload) {
+      this.carriersLeft -= 1;
+      parts.unshift(carrierRing(this, 46));
+    }
+    const container = this.add.container(x, -70, parts);
     this.tweens.add({ targets: rock, angle: -360, duration: 14000, repeat: -1 });
     this.targets.push({
       container,
@@ -248,6 +265,7 @@ export class ExpressionScene extends Phaser.Scene {
       problem,
       spawnedAt: this.time.now,
       speed: (this.groundY + 70) / this.session.fallSeconds(problem),
+      payload,
     });
   }
 
@@ -323,7 +341,11 @@ export class ExpressionScene extends Phaser.Scene {
         glow: bonus ? juice.glowPulseHeavy : juice.glowPulseKill,
         hitStopMs: juice.hitStopMs,
       });
+      const payload = aimed.payload;
       this.removeTarget(aimed);
+      // There is no avatar to catch anything with here, so the target hands its
+      // payload over on the way out. Solving it *is* the collection.
+      if (payload) this.collectDrop(payload, x, y);
       // The hand changed, so the chips and any target it stranded both follow.
       this.composer.dealHand(this.session.handChips);
       this.applyRecalibrations(outcome.recalibrated);
@@ -409,6 +431,9 @@ export class ExpressionScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setVisible(false);
     this.waveText = this.add.text(width / 2, 20, '', { ...style, color: CSS.cyanDim }).setOrigin(0.5, 0);
+    this.effectsText = this.add
+      .text(width / 2, 50, '', { fontFamily: FONT, fontSize: '15px', color: CSS.cyan })
+      .setOrigin(0.5, 0);
     this.updateHud();
   }
 
@@ -418,9 +443,39 @@ export class ExpressionScene extends Phaser.Scene {
     this.syncCombo();
   }
 
+  // --- drops ---
+
+  /**
+   * Take the payload a solved carrier was holding. `nuke` is the one that
+   * cannot be a timer — it clears what is in the air right now.
+   */
+  private collectDrop(kind: DropKind, x: number, y: number): void {
+    this.session.collectDrop(kind);
+    announceDrop(this, kind);
+    if (kind === 'nuke') this.detonateNuke();
+    this.floatText(x, y, DROP_LABEL[kind], DROP_CSS[kind]);
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    this.updateHud();
+  }
+
+  /** Clears the air for score. No ratings move — the player solved none of it. */
+  private detonateNuke(): void {
+    for (const t of [...this.targets]) {
+      const points = this.session.recordNuke(t.problem);
+      this.explode(t.container.x, t.container.y, PALETTE.red, CONFIG.juice.killParticles);
+      this.scorePopup(t.container.x, t.container.y, `+${points}`);
+      this.removeTarget(t);
+    }
+    this.cameras.main.shake(320, 0.012);
+    this.cameras.main.flash(300, 255, 59, 59);
+  }
+
   /** Same combo readout as meteor mode — one meter, one language. */
   private syncCombo(): void {
     const { session } = this;
+    // Every frame, not just on a kill: these are clocks, and a countdown that
+    // only moves when you score is not a countdown.
+    this.effectsText.setText(effectsLine(session.dropState));
     this.streakText.setText(session.streak > 0 ? `x${session.comboMultiplier}  ${session.streak}` : '');
     this.streakText.setColor(session.overdriveActive ? CSS.magentaHot : CSS.yellow);
     this.comboBar

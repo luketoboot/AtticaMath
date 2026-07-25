@@ -5,11 +5,13 @@ import { CONFIG } from '../../core/config';
 import type { Token } from '../../core/expression/expression';
 import type { Problem } from '../../core/generator/problem';
 import { newMilestones } from '../../core/skills/milestones';
+import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, impact, shockwave, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, impact, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { onActionKey, sceneBindings } from '../input/KeyState';
+import { announceDrop, carrierRing, effectsLine } from '../DropGfx';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 import { codeMatches } from '../../core/input/bindings';
 
@@ -18,6 +20,8 @@ type Phase = 'fight' | 'breather' | 'over';
 interface ActiveAttack {
   container: Phaser.GameObjects.Container;
   bufferText: Phaser.GameObjects.Text;
+  /** Blocking this one hands over a pickup. Null for an ordinary attack. */
+  payload: DropKind | null;
   problem: Problem;
   spawnedAt: number;
   speed: number;
@@ -38,12 +42,15 @@ export class BossScene extends Phaser.Scene {
   private attack: ActiveAttack | null = null;
   private attackBuffer = '';
   private sinceAttack = 0;
+  /** Attacks since the last carrier. */
+  private sinceCarrier = 0;
   private handDealtAt = 0;
 
   private hpText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private streakText!: Phaser.GameObjects.Text;
   private bossLabel!: Phaser.GameObjects.Text;
+  private effectsText!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Boss');
@@ -126,6 +133,8 @@ export class BossScene extends Phaser.Scene {
   override update(_time: number, deltaMs: number): void {
     if (this.phase !== 'fight') return;
     const dt = (deltaMs / 1000) * timeScale(this);
+    this.session.tick(dt);
+    this.effectsText.setText(effectsLine(this.session.dropState));
 
     if (!this.attack) {
       this.sinceAttack += dt;
@@ -308,12 +317,24 @@ export class BossScene extends Phaser.Scene {
     const bufferText = this.add
       .text(0, 26, '', { fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: CSS.cyan })
       .setOrigin(0.5);
-    const container = this.add.container(this.boss.x, this.boss.y + 60, [bg, label, bufferText]);
+    // Every few attacks carries something. Blocking is already the thing the
+    // player is trying to do, so the payload rides on doing it well rather than
+    // on a separate catch.
+    this.sinceCarrier += 1;
+    let payload: DropKind | null = null;
+    const parts: Phaser.GameObjects.GameObject[] = [bg, label, bufferText];
+    if (this.sinceCarrier >= CONFIG.boss.attacksPerCarrier) {
+      this.sinceCarrier = 0;
+      payload = this.session.rollDrop();
+      parts.unshift(carrierRing(this, 42));
+    }
+    const container = this.add.container(this.boss.x, this.boss.y + 60, parts);
 
     const travel = this.scale.height - 220 - container.y;
     this.attack = {
       container,
       bufferText,
+      payload,
       problem,
       spawnedAt: this.time.now,
       speed: travel / this.session.attackTravelSeconds(),
@@ -340,8 +361,38 @@ export class BossScene extends Phaser.Scene {
       glow: juice.glowPulseKill,
       hitStopMs: juice.hitStopMs,
     });
+    // Read the position before clearAttack destroys the container.
+    const payload = a.payload;
+    const px = a.container.x;
+    const py = a.container.y;
     this.clearAttack();
+    if (payload) this.collectDrop(payload, px, py);
     this.updateHud();
+  }
+
+  // --- drops ---
+
+  /**
+   * Take what a blocked carrier was holding. Nothing falls in a boss fight, so
+   * the nuke is a bite out of the boss rather than a cleared board.
+   */
+  private collectDrop(kind: DropKind, x: number, y: number): void {
+    this.session.collectDrop(kind);
+    announceDrop(this, kind);
+    if (kind === 'nuke') this.nukeBoss();
+    this.scorePopup(x, y, DROP_LABEL[kind]);
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    this.updateHud();
+  }
+
+  private nukeBoss(): void {
+    const { damage, points, defeated } = this.session.nukeBoss();
+    this.scorePopup(this.boss.x, this.boss.y, `-${damage}  +${points}`);
+    this.explode(this.boss.x, this.boss.y, PALETTE.red, CONFIG.juice.fastKillParticles);
+    shockwave(this, this.boss.x, this.boss.y, PALETTE.red);
+    this.cameras.main.shake(340, 0.014);
+    if (defeated) this.bossDown();
+    else this.renderBoss();
   }
 
   private attackHits(): void {
@@ -412,10 +463,14 @@ export class BossScene extends Phaser.Scene {
     this.scoreText = this.add.text(width - 24, 20, '', { ...style, color: CSS.white }).setOrigin(1, 0);
     this.streakText = this.add.text(width - 24, 50, '', { ...style, color: CSS.yellow }).setOrigin(1, 0);
     this.bossLabel = this.add.text(width / 2, 20, '', { ...style, color: CSS.cyanDim }).setOrigin(0.5, 0);
+    this.effectsText = this.add
+      .text(width / 2, 50, '', { fontFamily: FONT, fontSize: '15px', color: CSS.cyan })
+      .setOrigin(0.5, 0);
     this.updateHud();
   }
 
   private updateHud(): void {
+    this.effectsText.setText(effectsLine(this.session.dropState));
     this.hpText.setText(`HP ${'█'.repeat(Math.max(0, this.session.hp))}`);
     this.scoreText.setText(`${this.session.score}`);
     this.streakText.setText(this.session.streak > 1 ? `STREAK x${this.session.streak}` : '');

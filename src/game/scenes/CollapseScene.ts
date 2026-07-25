@@ -27,6 +27,7 @@ import {
   DEFAULT_HULL,
   DEFAULT_TRAIL,
 } from '../../core/cosmetics/cosmetics';
+import { DropTracker, DROP_LABEL, type DropKind } from '../../core/drops';
 import { creditsForRun, type RunStats } from '../../core/economy/economy';
 import {
   newFlightState,
@@ -40,6 +41,7 @@ import { applyCrt } from '../../fx/applyCrt';
 import { cameraPunch, clearHitStop, glowPulse, impact, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
+import { announceDrop, carrierRing, effectsLine, pickupPod, DROP_CSS } from '../DropGfx';
 import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import type { KeyBindings } from '../../core/input/bindings';
@@ -68,6 +70,8 @@ interface LiveToken {
   reach: number;
   rotation: number;
   spinRate: number;
+  /** Collapsing a pair with a payload leaves a pickup at the implosion point. */
+  payload: DropKind | null;
   armedGlow: Phaser.Tweens.Tween | null;
   /** Idle throb that marks a token as solid; paused while it is phased. */
   dangerPulse: Phaser.Tweens.Tween | null;
@@ -84,6 +88,17 @@ interface Bolt {
   /** Ghost segments dropped behind the bolt, oldest first. */
   trail: Phaser.GameObjects.Arc[];
   trailAt: number;
+}
+
+/** A pickup drifting in the field, taken by flying through it. */
+interface CollapsePickup {
+  container: Phaser.GameObjects.Container;
+  kind: DropKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  diesAt: number;
 }
 
 /** One depth plane of the parallax field. */
@@ -152,6 +167,15 @@ export class CollapseScene extends Phaser.Scene {
   private chain: ChainState = newChain();
   /** Highest chain reached this run — the debrief's "best streak" row. */
   private bestChain = 0;
+  /**
+   * Collapse has no session object yet, so the scene holds the drop clocks
+   * directly. The tracker is core and pure, so this is still the same
+   * implementation the other four modes run.
+   */
+  private drops = new DropTracker(1, CONFIG.drops, CONFIG.drops.pools.collapse);
+  private pickups: CollapsePickup[] = [];
+  /** Pairs still owed a carrier this wave. */
+  private carriersLeft = 0;
   private nearMissed = new Set<number>();
   private saves!: SaveManager;
 
@@ -173,6 +197,7 @@ export class CollapseScene extends Phaser.Scene {
   private hpText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
+  private effectsText!: Phaser.GameObjects.Text;
   private gunText!: Phaser.GameObjects.Text;
   private gunIcon!: Phaser.GameObjects.Container;
   private heldText!: Phaser.GameObjects.Text;
@@ -215,6 +240,8 @@ export class CollapseScene extends Phaser.Scene {
     this.invulnUntil = 0;
     this.chain = newChain();
     this.bestChain = 0;
+    this.drops = new DropTracker(Date.now() >>> 0, CONFIG.drops, CONFIG.drops.pools.collapse);
+    this.pickups = [];
     this.nearMissed.clear();
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
     this.hullDef = hullFor(this.saves.save.equipped.hull);
@@ -249,7 +276,9 @@ export class CollapseScene extends Phaser.Scene {
     this.flyShip(dt);
     if (this.phase !== 'wave') return;
 
+    this.drops.tick(dt);
     this.driftTokens(dt);
+    this.driftPickups(dt);
     this.moveBolts(dt);
     this.expireArmed();
     this.checkNearMisses();
@@ -318,14 +347,85 @@ export class CollapseScene extends Phaser.Scene {
   }
 
   private driftTokens(dt: number): void {
+    // Freeze pins the field but leaves the spin running, so it reads as held
+    // rather than as a dropped frame.
+    const drift = this.drops.frozen ? 0 : dt;
     for (const t of this.tokens) {
-      t.x = this.wrapX(t.x + t.vx * dt);
-      t.y = this.wrapY(t.y + t.vy * dt);
+      t.x = this.wrapX(t.x + t.vx * drift);
+      t.y = this.wrapY(t.y + t.vy * drift);
       t.container.setPosition(t.x, t.y);
       // Only the rock turns; the fraction or percentage stays upright.
       t.rotation += t.spinRate * dt;
       t.gfx.setRotation(t.rotation);
     }
+  }
+
+  // --- drops ---
+
+  private spawnPickup(x: number, y: number, kind: DropKind): void {
+    const c = CONFIG.factor;
+    const angle = Math.random() * Math.PI * 2;
+    this.pickups.push({
+      container: pickupPod(this, x, y, kind),
+      kind,
+      x,
+      y,
+      vx: Math.cos(angle) * c.pickupDrift,
+      vy: Math.sin(angle) * c.pickupDrift,
+      diesAt: this.time.now + c.pickupLifeSeconds * 1000,
+    });
+  }
+
+  /** Pods are taken by flying through them — the same verb as everything else. */
+  private driftPickups(dt: number): void {
+    const reach = CONFIG.flight.shipRadius + CONFIG.factor.pickupRadius;
+    for (const p of [...this.pickups]) {
+      p.x = this.wrapX(p.x + p.vx * dt);
+      p.y = this.wrapY(p.y + p.vy * dt);
+      p.container.setPosition(p.x, p.y);
+
+      if (Phaser.Math.Distance.Between(p.x, p.y, this.shipX, this.shipY) <= reach) {
+        this.collectPickup(p);
+      } else if (this.time.now >= p.diesAt) {
+        this.removePickup(p);
+      }
+    }
+  }
+
+  private removePickup(p: CollapsePickup): void {
+    this.pickups = this.pickups.filter((x) => x !== p);
+    p.container.destroy();
+  }
+
+  private collectPickup(p: CollapsePickup): void {
+    const { kind, x, y } = p;
+    this.removePickup(p);
+    if (kind === 'repair') this.hp = Math.min(CONFIG.collapse.startingHp, this.hp + 1);
+    else this.drops.apply(kind);
+    announceDrop(this, kind);
+    if (kind === 'nuke') this.detonateNuke();
+    this.popup(x, y, DROP_LABEL[kind], DROP_CSS[kind]);
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    this.updateHud();
+  }
+
+  /**
+   * Blows every token off the board for score. No pair was read, so this pays
+   * a flat rate and does not touch the chain — the ladder is for conversions.
+   */
+  private detonateNuke(): void {
+    const c = CONFIG.collapse;
+    for (const t of [...this.tokens]) {
+      this.score += Math.round(c.matchBase * 0.35 * this.drops.multiplier);
+      this.detonate(t.x, t.y, 1);
+      t.armedGlow?.stop();
+      t.dangerPulse?.stop();
+      t.container.destroy();
+    }
+    this.tokens = [];
+    this.armedId = null;
+    this.cameras.main.shake(360, 0.016);
+    this.cameras.main.flash(320, 255, 59, 59);
   }
 
   // --- gunnery ---
@@ -572,7 +672,7 @@ export class CollapseScene extends Phaser.Scene {
     this.chain = step.state;
     this.bestChain = Math.max(this.bestChain, step.state.count);
     const base = c.matchBase + (a.tier - 1) * c.tierBonus + (fractionHalf.unreduced ? c.unreducedBonus : 0);
-    const points = Math.round(base * step.multiplier);
+    const points = Math.round(base * step.multiplier * this.drops.multiplier);
     this.score += points;
     this.matched += 1;
     this.armedId = null;
@@ -603,8 +703,12 @@ export class CollapseScene extends Phaser.Scene {
       });
     }
 
+    const payload = a.payload ?? b.payload;
     this.time.delayedCall(265, () => {
       this.detonate(x, y, step.tier);
+      // The pod arrives out of the implosion, so the reward is visibly the
+      // conversion's and not a separate event.
+      if (payload) this.spawnPickup(x, y, payload);
       const suffix =
         fractionHalf.unreduced && fractionHalf.fraction
           ? `   ${formatFraction(fractionHalf.fraction)} = ${formatFraction(reduce(fractionHalf.fraction))}`
@@ -680,7 +784,7 @@ export class CollapseScene extends Phaser.Scene {
       if (!hitsCircle(t.shape, t.x, t.y, t.rotation, this.shipX, this.shipY, CONFIG.flight.shipRadius))
         continue;
 
-      this.hp -= 1;
+      if (!this.drops.shielded) this.hp -= 1;
       this.invulnUntil = this.time.now + c.invulnSeconds * 1000;
       this.chain = breakChain();
       getAudio(this)?.play('playerHit');
@@ -722,6 +826,7 @@ export class CollapseScene extends Phaser.Scene {
     const rng = createRng((Date.now() ^ (this.wave * 0x9e3779b1)) >>> 0);
     const plan = generateWave(rng, { pairs, maxTier, unreducedChance: c.unreducedChance });
 
+    this.carriersLeft = CONFIG.drops.carriersPerWave;
     for (const pair of plan) {
       this.spawnToken('percent', pair.percent, null, maxTier);
       this.spawnToken('fraction', toPercent(pair.fraction), pair.fraction, maxTier);
@@ -780,7 +885,15 @@ export class CollapseScene extends Phaser.Scene {
         strokeThickness: 4,
       })
       .setOrigin(0.5);
-    const container = this.add.container(x, y, [gfx, label]).setDepth(2);
+    // Only the fraction half of a pair is ever marked, so the ring never
+    // double-advertises the same reward.
+    const payload =
+      kind === 'fraction' && this.carriersLeft > 0 ? this.drops.roll(this.hp) : null;
+    const parts: Phaser.GameObjects.GameObject[] = payload
+      ? [carrierRing(this, radius + 12), gfx, label]
+      : [gfx, label];
+    if (payload) this.carriersLeft -= 1;
+    const container = this.add.container(x, y, parts).setDepth(2);
 
     const dangerPulse = this.tweens.add({
       targets: gfx,
@@ -812,6 +925,7 @@ export class CollapseScene extends Phaser.Scene {
       reach: maxRadius(shape),
       rotation: this.shapeRng.next() * Math.PI * 2,
       spinRate: Phaser.Math.DegToRad(spinDeg),
+      payload,
       armedGlow: null,
       dangerPulse,
     });
@@ -1130,6 +1244,10 @@ export class CollapseScene extends Phaser.Scene {
       .text(width / 2, 20, '', { ...style, color: CSS.cyanDim })
       .setOrigin(0.5, 0)
       .setDepth(hud);
+    this.effectsText = this.add
+      .text(width / 2, 50, '', { fontFamily: FONT, fontSize: '15px', color: CSS.cyan })
+      .setOrigin(0.5, 0)
+      .setDepth(hud);
 
     // Armed weapon, bottom-left, with a sample of its own round beside it —
     // the bolt in the air and the icon in the HUD must be the same object.
@@ -1206,6 +1324,7 @@ export class CollapseScene extends Phaser.Scene {
 
   private syncHud(): void {
     this.syncChain();
+    this.effectsText.setText(effectsLine(this.drops.snapshot));
     const held = this.armedToken();
     if (!held) {
       this.heldText.setText('');

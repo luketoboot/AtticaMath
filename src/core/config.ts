@@ -109,7 +109,16 @@ export interface DropConfig {
   weights: Readonly<
     Record<'freeze' | 'nuke' | 'repair' | 'double' | 'chain' | 'shield', number>
   >;
+  /**
+   * What each mode is allowed to drop. An effect that has no meaning in a mode
+   * is left out rather than given a strained reinterpretation — a pickup that
+   * does nothing is worse than no pickup.
+   */
+  pools: Readonly<Record<'meteor' | 'expression' | 'factor' | 'collapse' | 'boss', readonly DropKindName[]>>;
 }
+
+/** Kept as a string union here so config does not import from drops. */
+type DropKindName = 'freeze' | 'nuke' | 'repair' | 'double' | 'chain' | 'shield';
 
 /**
  * Meteor gunfire and player dodging (Meteor Defense). Meteors take aimed shots
@@ -227,6 +236,10 @@ export interface ExpressionConfig {
 
 /** Factor Storm: the free-flight arena. See core/factor/. */
 export interface FactorConfig {
+  /** Drift speed, radius and lifetime of a pickup pod left by a carrier rock. */
+  pickupDrift: number;
+  pickupRadius: number;
+  pickupLifeSeconds: number;
   /** Rocks at the start of wave 1, and how many more each wave adds. */
   baseRocks: number;
   rocksPerWave: number;
@@ -274,6 +287,10 @@ export interface BossConfig {
   scorePerDamage: number;
   /** Flat score bonus for downing a boss. */
   defeatBonus: number;
+  /** Fraction of a boss's max HP a nuke pickup takes off. */
+  nukeFraction: number;
+  /** Attacks between carriers. Blocking a carrier hands over its pickup. */
+  attacksPerCarrier: number;
   /** Score for blocking an attack. */
   blockScore: number;
 }
@@ -486,6 +503,17 @@ export const CONFIG: GameConfig = {
     lowHpAt: 2,
     lowHpRepairWeight: 6,
     weights: { freeze: 3, nuke: 2, repair: 2, double: 3, chain: 3, shield: 3 },
+    pools: {
+      // Chain is meteor-only: "one answer kills everything sharing it" needs
+      // meteors that share an answer.
+      meteor: ['freeze', 'nuke', 'repair', 'double', 'chain', 'shield'],
+      expression: ['freeze', 'nuke', 'repair', 'double', 'shield'],
+      factor: ['freeze', 'nuke', 'repair', 'double', 'shield'],
+      collapse: ['freeze', 'nuke', 'repair', 'double', 'shield'],
+      // Nothing falls in a boss fight, so freeze has nothing to halt; the nuke
+      // becomes a chunk taken out of the boss instead of a cleared board.
+      boss: ['nuke', 'repair', 'double', 'shield'],
+    },
   },
   combo: {
     baseWindowSeconds: 4.5,
@@ -547,6 +575,9 @@ export const CONFIG: GameConfig = {
     shipRadius: 18,
   },
   factor: {
+    pickupDrift: 18,
+    pickupRadius: 22,
+    pickupLifeSeconds: 14,
     baseRocks: 3,
     rocksPerWave: 1,
     maxRocks: 8,
@@ -614,6 +645,8 @@ export const CONFIG: GameConfig = {
     attackTravelShrinkPerBoss: 0.95,
     scorePerDamage: 3,
     defeatBonus: 1500,
+    nukeFraction: 0.18,
+    attacksPerCarrier: 4,
     blockScore: 150,
   },
   hazard: {

@@ -20,6 +20,7 @@ import {
 } from '../combo';
 import { CONFIG, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
+import { DropTracker, type DropKind, type DropState } from '../drops';
 import { creditsForRun, type RunStats } from '../economy/economy';
 import { createRng, type Rng } from '../rng';
 import { applyAttempt, targetLatencyMs, type SkillTable } from '../skills/rating';
@@ -58,6 +59,7 @@ export class FactorSession {
   private rocks: Rock[] = [];
   private lastTipSkill: SkillId | undefined;
   private combo: ComboState = createCombo();
+  private readonly drops: DropTracker;
   private hitsThisWave = 0;
   private damageThisWave = 0;
 
@@ -66,6 +68,7 @@ export class FactorSession {
   destroyed = 0;
   misfires = 0;
   hp: number;
+  private readonly maxHp: number;
 
   constructor(init: FactorSessionInit) {
     this.cfg = init.config ?? CONFIG;
@@ -73,6 +76,12 @@ export class FactorSession {
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.hp = this.cfg.meteors.baseHp;
+    this.maxHp = this.hp;
+    this.drops = new DropTracker(
+      (init.seed ^ 0x85ebca6b) >>> 0,
+      this.cfg.drops,
+      this.cfg.drops.pools.factor,
+    );
   }
 
   get globalWave(): number {
@@ -109,6 +118,11 @@ export class FactorSession {
     return comboMultiplier(this.combo, this.cfg.combo);
   }
 
+  /** Combo tier and any active x2 pickup, together. */
+  get scoreMultiplier(): number {
+    return this.comboMultiplier * this.drops.multiplier;
+  }
+
   get comboFraction(): number {
     return comboFraction(this.combo, this.cfg.combo);
   }
@@ -119,6 +133,45 @@ export class FactorSession {
 
   tick(dtSeconds: number): void {
     this.combo = tickCombo(this.combo, dtSeconds, this.cfg.combo);
+    this.drops.tick(dtSeconds);
+  }
+
+  // --- drops ---
+
+  get dropState(): Readonly<DropState> {
+    return this.drops.snapshot;
+  }
+
+  /** Rocks hold still while a freeze runs. */
+  get driftFrozen(): boolean {
+    return this.drops.frozen;
+  }
+
+  /** What the carrier rock that just died was holding. */
+  rollDrop(): DropKind {
+    return this.drops.roll(this.hp);
+  }
+
+  /** The ship flew through a pickup. */
+  collectDrop(kind: DropKind): void {
+    if (kind === 'repair') {
+      this.hp = Math.min(this.maxHp, this.hp + 1);
+      return;
+    }
+    this.drops.apply(kind);
+  }
+
+  /**
+   * Score for a rock the nuke cleared. No rating moves and no combo is gained:
+   * the player factored none of these, and telling the skill model otherwise
+   * would poison the table the game schedules from.
+   */
+  recordNuke(rock: Rock): number {
+    const points = Math.round(this.cfg.score.killBase * this.scoreMultiplier);
+    this.destroyed += 1;
+    this.score += points;
+    this.rocks = this.rocks.filter((r) => r.id !== rock.id);
+    return points;
   }
 
   /** A typed digit that cannot lead to a legal shot. Costs clock, not combo. */
@@ -229,7 +282,7 @@ export class FactorSession {
 
     const fast = responseMs <= targetLatencyMs(difficulty, this.cfg.rating);
     const raw = shotScore(rock.value, outcome, this.cfg.factor);
-    const points = Math.round(raw * this.comboMultiplier * (fast ? this.cfg.score.speedBonusMultiplier : 1));
+    const points = Math.round(raw * this.scoreMultiplier * (fast ? this.cfg.score.speedBonusMultiplier : 1));
     this.score += points;
     this.combo = comboHit(this.combo, this.cfg.combo);
     this.hitsThisWave += 1;
@@ -251,9 +304,10 @@ export class FactorSession {
 
   /** A rock hit the ship. Costs HP and half the combo, like meteor gunfire. */
   takeDamage(): void {
-    this.hp -= 1;
     this.damageThisWave += 1;
     this.combo = comboDamaged(this.combo, this.cfg.combo);
+    if (this.drops.shielded) return;
+    this.hp -= 1;
   }
 
   endWave(): CoachPick | undefined {

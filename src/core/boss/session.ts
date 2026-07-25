@@ -9,6 +9,7 @@
  */
 import { CONFIG, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
+import { DropTracker, type DropKind, type DropState } from '../drops';
 import { creditsForRun, type RunStats } from '../economy/economy';
 import { evaluateTokens, type Token } from '../expression/expression';
 import { skillsForTokens } from '../expression/generate';
@@ -48,6 +49,8 @@ export class BossSession {
   misses = 0;
   misfires = 0;
   hp: number;
+  private readonly maxHp: number;
+  private readonly drops: DropTracker;
 
   constructor(init: BossSessionInit) {
     this.cfg = init.config ?? CONFIG;
@@ -55,8 +58,53 @@ export class BossSession {
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.hp = this.cfg.meteors.baseHp;
+    this.maxHp = this.hp;
     this.bossMaxHp = this.cfg.boss.baseHp;
     this.bossHp = this.bossMaxHp;
+    this.drops = new DropTracker(
+      (init.seed ^ 0x85ebca6b) >>> 0,
+      this.cfg.drops,
+      this.cfg.drops.pools.boss,
+    );
+  }
+
+  // --- drops ---
+
+  /** Bleed the drop clocks. The boss fight has no combo meter to tick. */
+  tick(dtSeconds: number): void {
+    this.drops.tick(dtSeconds);
+  }
+
+  get dropState(): Readonly<DropState> {
+    return this.drops.snapshot;
+  }
+
+  /** What the carrier attack that was just blocked was holding. */
+  rollDrop(): DropKind {
+    return this.drops.roll(this.hp);
+  }
+
+  collectDrop(kind: DropKind): void {
+    if (kind === 'repair') {
+      this.hp = Math.min(this.maxHp, this.hp + 1);
+      return;
+    }
+    this.drops.apply(kind);
+  }
+
+  /**
+   * The nuke, in a fight with nothing falling: a flat bite out of the boss.
+   * Scored like any other damage, but no rating moves — the player did not
+   * compute it.
+   */
+  nukeBoss(): { damage: number; points: number; defeated: boolean } {
+    const damage = Math.max(1, Math.round(this.bossMaxHp * this.cfg.boss.nukeFraction));
+    this.bossHp -= damage;
+    const points = Math.round(damage * this.cfg.boss.scorePerDamage * this.drops.multiplier);
+    this.score += points;
+    const defeated = this.bossHp <= 0;
+    if (defeated) this.advanceBoss();
+    return { damage, points, defeated };
   }
 
   get globalWave(): number {
@@ -118,16 +166,11 @@ export class BossSession {
     const damage = result.value;
     this.shots += 1;
     this.bossHp -= damage;
-    const points = damage * this.cfg.boss.scorePerDamage;
+    const points = Math.round(damage * this.cfg.boss.scorePerDamage * this.drops.multiplier);
     this.score += points;
 
     const defeated = this.bossHp <= 0;
-    if (defeated) {
-      this.score += this.cfg.boss.defeatBonus;
-      this.bossNumber += 1;
-      this.bossMaxHp = Math.round(this.cfg.boss.baseHp * Math.pow(this.cfg.boss.hpGrowthPerBoss, this.bossNumber - 1));
-      this.bossHp = this.bossMaxHp;
-    }
+    if (defeated) this.advanceBoss();
     return { result: 'hit', damage, points, defeated };
   }
 
@@ -143,9 +186,19 @@ export class BossSession {
     this.streak += 1;
     this.bestStreak = Math.max(this.bestStreak, this.streak);
     const fast = responseMs <= targetLatencyMs(problem.difficulty, this.cfg.rating);
-    const points = this.cfg.boss.blockScore * (fast ? 2 : 1);
+    const points = Math.round(this.cfg.boss.blockScore * (fast ? 2 : 1) * this.drops.multiplier);
     this.score += points;
     return points;
+  }
+
+  /** Next boss: bigger, on the same curve. */
+  private advanceBoss(): void {
+    this.score += this.cfg.boss.defeatBonus;
+    this.bossNumber += 1;
+    this.bossMaxHp = Math.round(
+      this.cfg.boss.baseHp * Math.pow(this.cfg.boss.hpGrowthPerBoss, this.bossNumber - 1),
+    );
+    this.bossHp = this.bossMaxHp;
   }
 
   /** An attack reached the player. */
@@ -158,6 +211,7 @@ export class BossSession {
     );
     this.misses += 1;
     this.streak = 0;
+    if (this.drops.shielded) return;
     this.hp -= 1;
   }
 

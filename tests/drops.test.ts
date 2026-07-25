@@ -10,7 +10,9 @@ import {
   DROP_LABEL,
   dropMultiplier,
   rollDrop,
+  shieldActive,
   tickDrops,
+  DropTracker,
   type DropKind,
 } from '../src/core/drops';
 import { createRng } from '../src/core/rng';
@@ -89,5 +91,89 @@ describe('drop table', () => {
 
   it('is deterministic for a given stream', () => {
     expect(tally(50, 4)).toEqual(tally(50, 4));
+  });
+});
+
+
+describe('mode pools', () => {
+  it('only ever rolls from the pool it was given', () => {
+    const rng = createRng(7);
+    const pool: DropKind[] = ['repair', 'shield'];
+    for (let i = 0; i < 300; i++) {
+      expect(pool).toContain(rollDrop(rng, 5, cfg, pool));
+    }
+  });
+
+  it('falls back to the full set rather than crashing on an empty pool', () => {
+    expect(DROP_KINDS).toContain(rollDrop(createRng(1), 5, cfg, []));
+  });
+
+  it('keeps chain out of every mode that cannot use it', () => {
+    // A pickup that does nothing is worse than no pickup, and chain only means
+    // something where several targets can share an answer.
+    for (const [mode, pool] of Object.entries(cfg.pools)) {
+      if (mode === 'meteor') continue;
+      expect(pool, `${mode} cannot honour a chain pickup`).not.toContain('chain');
+    }
+  });
+
+  it('gives every mode something to drop', () => {
+    for (const [mode, pool] of Object.entries(cfg.pools)) {
+      expect(pool.length, `${mode} has an empty pool`).toBeGreaterThan(0);
+      for (const kind of pool) expect(DROP_KINDS).toContain(kind);
+    }
+  });
+});
+
+describe('DropTracker', () => {
+  const tracker = (): DropTracker => new DropTracker(99, cfg, DROP_KINDS);
+
+  it('starts with nothing running', () => {
+    const t = tracker();
+    expect(t.frozen).toBe(false);
+    expect(t.shielded).toBe(false);
+    expect(t.chainReady).toBe(false);
+    expect(t.multiplier).toBe(1);
+  });
+
+  it('runs an effect down over time', () => {
+    const t = tracker();
+    t.apply('shield');
+    expect(t.shielded).toBe(true);
+    t.tick(cfg.shieldSeconds - 0.01);
+    expect(t.shielded).toBe(true);
+    t.tick(0.02);
+    expect(t.shielded).toBe(false);
+  });
+
+  it('doubles the score while x2 is up, and stops when it lapses', () => {
+    const t = tracker();
+    t.apply('double');
+    expect(t.multiplier).toBe(cfg.doubleMultiplier);
+    t.tick(cfg.doubleSeconds + 0.1);
+    expect(t.multiplier).toBe(1);
+  });
+
+  it('spends chain one kill at a time', () => {
+    const t = tracker();
+    t.apply('chain');
+    for (let i = 0; i < cfg.chainKills; i++) {
+      expect(t.chainReady).toBe(true);
+      t.useChain();
+    }
+    expect(t.chainReady).toBe(false);
+  });
+
+  it('is deterministic for a seed', () => {
+    const a = new DropTracker(4242, cfg, DROP_KINDS);
+    const b = new DropTracker(4242, cfg, DROP_KINDS);
+    for (let i = 0; i < 40; i++) expect(a.roll(5)).toBe(b.roll(5));
+  });
+
+  it('hands out a snapshot that matches the free functions', () => {
+    const t = tracker();
+    t.apply('freeze');
+    expect(descentFrozen(t.snapshot)).toBe(true);
+    expect(shieldActive(t.snapshot)).toBe(false);
   });
 });

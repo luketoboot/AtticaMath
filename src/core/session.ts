@@ -20,19 +20,7 @@ import {
 } from './combo';
 import { CONFIG, type GameConfig } from './config';
 import { selectTip, type CoachPick } from './coach/select';
-import {
-  applyDrop,
-  chainReady,
-  consumeChain,
-  createDrops,
-  descentFrozen,
-  dropMultiplier,
-  rollDrop,
-  shieldActive,
-  tickDrops,
-  type DropKind,
-  type DropState,
-} from './drops';
+import { DropTracker, type DropKind, type DropState } from './drops';
 import { creditsForRun, killScore, type RunStats } from './economy/economy';
 import type { Problem } from './generator/problem';
 import {
@@ -68,8 +56,7 @@ export class RunSession {
    * composition depend on how many frames elapsed, killing reproducibility.
    */
   private readonly hazardRng: Rng;
-  /** Drop rolls get their own stream for the same reason gunfire does. */
-  private readonly dropRng: Rng;
+
   private skills: SkillTable;
   private readonly startWave: number;
   private waveInRun = 0;
@@ -88,14 +75,19 @@ export class RunSession {
   private combo: ComboState = createCombo();
   /** Landings this wave; a clean wave carries the combo through the breather. */
   private missesThisWave = 0;
-  private drops: DropState = createDrops();
+  /** Drops get their own stream for the same reason gunfire does. */
+  private readonly drops: DropTracker;
   private readonly maxHp: number;
 
   constructor(init: RunSessionInit) {
     this.cfg = init.config ?? CONFIG;
     this.rng = createRng(init.seed);
     this.hazardRng = createRng((init.seed ^ 0x9e3779b9) >>> 0);
-    this.dropRng = createRng((init.seed ^ 0x85ebca6b) >>> 0);
+    this.drops = new DropTracker(
+      (init.seed ^ 0x85ebca6b) >>> 0,
+      this.cfg.drops,
+      this.cfg.drops.pools.meteor,
+    );
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.placementDone = init.placementDone;
@@ -156,7 +148,7 @@ export class RunSession {
   /** Bleed the combo and drop clocks. Called once per frame while a wave runs. */
   tick(dtSeconds: number): void {
     this.combo = tickCombo(this.combo, dtSeconds, this.cfg.combo);
-    this.drops = tickDrops(this.drops, dtSeconds);
+    this.drops.tick(dtSeconds);
   }
 
   /**
@@ -170,22 +162,22 @@ export class RunSession {
   // --- drops ---
 
   get dropState(): Readonly<DropState> {
-    return this.drops;
+    return this.drops.snapshot;
   }
 
   /** Descent is halted by a freeze pickup. */
   get descentFrozen(): boolean {
-    return descentFrozen(this.drops);
+    return this.drops.frozen;
   }
 
   /** The next kill hits every meteor sharing its answer. */
   get chainReady(): boolean {
-    return chainReady(this.drops);
+    return this.drops.chainReady;
   }
 
   /** What the carrier meteor that just died was holding. */
   rollDrop(): DropKind {
-    return rollDrop(this.dropRng, this.hp, this.cfg.drops);
+    return this.drops.roll(this.hp);
   }
 
   /** The player caught a pickup. */
@@ -194,12 +186,12 @@ export class RunSession {
       this.hp = Math.min(this.maxHp, this.hp + 1);
       return;
     }
-    this.drops = applyDrop(this.drops, kind, this.cfg.drops);
+    this.drops.apply(kind);
   }
 
   /** Spend one kill of the chain shot. */
   useChain(): void {
-    this.drops = consumeChain(this.drops);
+    this.drops.useChain();
   }
 
   /**
@@ -216,7 +208,7 @@ export class RunSession {
 
   /** Combo tier and any active x2 pickup, together. */
   get scoreMultiplier(): number {
-    return this.comboMultiplier * dropMultiplier(this.drops, this.cfg.drops);
+    return this.comboMultiplier * this.drops.multiplier;
   }
 
   /** Advance to the next wave and get its problem list. */
@@ -279,7 +271,7 @@ export class RunSession {
     this.missesThisWave += 1;
     this.combo = comboBreak(this.combo);
     // A shield pickup eats the damage; the landing still breaks the combo.
-    if (shieldActive(this.drops)) return;
+    if (this.drops.shielded) return;
     this.hp -= 1;
   }
 
@@ -365,7 +357,7 @@ export class RunSession {
     this.combo = comboDamaged(this.combo, this.cfg.combo);
     // The shield covers everything that hurts, not just landings. A player who
     // just caught one should not still be losing HP to something on screen.
-    if (shieldActive(this.drops)) return;
+    if (this.drops.shielded) return;
     this.hp -= 1;
   }
 
