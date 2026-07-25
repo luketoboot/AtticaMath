@@ -15,7 +15,7 @@ import { createRng } from '../../core/rng';
 import { generateAsteroid, hitsCircle, type AsteroidShape } from '../../core/shapes/asteroid';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
 import { announceDrop, carrierRing, effectsLine, pickupPod } from '../DropGfx';
@@ -304,7 +304,7 @@ export class FactorScene extends Phaser.Scene {
       this.removeRock(r);
     }
     this.lockedId = null;
-    this.cameras.main.shake(340, 0.014);
+    shake(this, 340, 0.014);
     this.cameras.main.flash(300, 255, 59, 59);
   }
 

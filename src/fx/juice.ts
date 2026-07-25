@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { CONFIG } from '../core/config';
 import { CrtPipeline } from './CrtPipeline';
+import { shakeScale } from './videoSettings';
 
 /**
  * Shared impact feel: camera shake, CRT glow pulse, hit-stop, shockwave rings.
@@ -37,6 +38,17 @@ export function hitStop(scene: Phaser.Scene, durationMs: number, scale: number):
   });
 }
 
+/**
+ * Camera shake, scaled by the player's setting. Every shake in the game goes
+ * through here — a motion dial that half the screens ignored would be worse
+ * than no dial at all.
+ */
+export function shake(scene: Phaser.Scene, durationMs: number, intensity: number): void {
+  const scaled = intensity * shakeScale();
+  if (scaled <= 0) return;
+  scene.cameras.main.shake(durationMs, scaled);
+}
+
 /** Current time scale for a scene: 1 unless a hit-stop is running. */
 export function timeScale(scene: Phaser.Scene): number {
   return freezes.get(scene) ?? 1;
@@ -59,7 +71,7 @@ export interface ImpactOptions {
 
 /** Shake + glow (+ optional hit-stop) in one call. */
 export function impact(scene: Phaser.Scene, opts: ImpactOptions): void {
-  scene.cameras.main.shake(opts.shakeMs, opts.shakeIntensity);
+  shake(scene, opts.shakeMs, opts.shakeIntensity);
   glowPulse(scene, opts.glow);
   if (opts.hitStopMs !== undefined) {
     hitStop(scene, opts.hitStopMs, CONFIG.juice.hitStopScale);

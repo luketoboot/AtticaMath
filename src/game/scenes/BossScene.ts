@@ -7,7 +7,7 @@ import type { Problem } from '../../core/generator/problem';
 import { newMilestones } from '../../core/skills/milestones';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shockwave, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { onActionKey, sceneBindings } from '../input/KeyState';
@@ -390,7 +390,7 @@ export class BossScene extends Phaser.Scene {
     this.scorePopup(this.boss.x, this.boss.y, `-${damage}  +${points}`);
     this.explode(this.boss.x, this.boss.y, PALETTE.red, CONFIG.juice.fastKillParticles);
     shockwave(this, this.boss.x, this.boss.y, PALETTE.red);
-    this.cameras.main.shake(340, 0.014);
+    shake(this, 340, 0.014);
     if (defeated) this.bossDown();
     else this.renderBoss();
   }
@@ -493,7 +493,7 @@ export class BossScene extends Phaser.Scene {
     this.saves.persist();
 
     getAudio(this)?.play('gameover');
-    this.cameras.main.shake(500, 0.02);
+    shake(this, 500, 0.02);
     this.time.delayedCall(900, () => {
       this.scene.start('Debrief', {
         stats: this.session.stats(),

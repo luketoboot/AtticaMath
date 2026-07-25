@@ -11,6 +11,7 @@ import {
   type CosmeticDef,
 } from '../../core/cosmetics/cosmetics';
 import { applyCrt } from '../../fx/applyCrt';
+import { shake } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -231,7 +232,7 @@ export class ShopScene extends Phaser.Scene {
       const res = buyCosmetic(def.id, save.credits, save.ownedCosmetics);
       if (!res.ok) {
         audio?.play('error');
-        this.cameras.main.shake(120, 0.005);
+        shake(this, 120, 0.005);
         return;
       }
       save.credits = res.credits;

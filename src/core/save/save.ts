@@ -5,6 +5,11 @@
  */
 import { defaultEquipped, type Equipped } from '../cosmetics/cosmetics';
 import { defaultBindings, type KeyBindings } from '../input/bindings';
+import {
+  defaultVideoSettings,
+  sanitizeVideoSettings,
+  type VideoSettings,
+} from '../settings/video';
 import type { SkillTable } from '../skills/rating';
 
 export interface StorageAdapter {
@@ -14,7 +19,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 4;
+export const CURRENT_SAVE_VERSION = 5;
 
 export interface SaveV1 {
   version: 1;
@@ -53,7 +58,13 @@ export interface SaveV4 extends Omit<SaveV3, 'version' | 'ownedUpgrades' | 'load
   equipped: Equipped;
 }
 
-export type Save = SaveV4;
+/** The CRT stopped being one switch: every effect is now on its own dial. */
+export interface SaveV5 extends Omit<SaveV4, 'version' | 'settings'> {
+  version: 5;
+  settings: SaveV4['settings'] & { video: VideoSettings };
+}
+
+export type Save = SaveV5;
 
 export function defaultSave(): Save {
   return {
@@ -64,7 +75,12 @@ export function defaultSave(): Save {
     credits: 0,
     ownedCosmetics: [],
     equipped: defaultEquipped(),
-    settings: { crtEnabled: true, musicVolume: 0.8, sfxVolume: 0.9 },
+    settings: {
+      crtEnabled: true,
+      musicVolume: 0.8,
+      sfxVolume: 0.9,
+      video: defaultVideoSettings(),
+    },
     bestScore: 0,
     milestones: [],
     keybindings: defaultBindings(),
@@ -121,8 +137,21 @@ export function migrate(raw: unknown): Save {
       equipped: defaultEquipped(),
     };
   }
+  if (save.version === 4) {
+    const v4 = save as unknown as SaveV4;
+    save = {
+      ...v4,
+      version: 5,
+      settings: { ...v4.settings, video: defaultVideoSettings() },
+    };
+  }
   if (save.version === CURRENT_SAVE_VERSION) {
-    return save as unknown as Save;
+    const current = save as unknown as Save;
+    // A hand-edited or half-written settings block must not reach the shader.
+    return {
+      ...current,
+      settings: { ...current.settings, video: sanitizeVideoSettings(current.settings?.video) },
+    };
   }
   // Anything unrecognised below the current version: start fresh.
   return defaultSave();

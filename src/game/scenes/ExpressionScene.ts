@@ -7,7 +7,7 @@ import { ExpressionSession, type Recalibration } from '../../core/expression/ses
 import { newMilestones } from '../../core/skills/milestones';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { onActionKey, sceneBindings } from '../input/KeyState';
@@ -354,7 +354,7 @@ export class ExpressionScene extends Phaser.Scene {
       // Fired at nothing: no chips spent, no HP, just the clock and the lock.
       getAudio(this)?.play('error');
       this.composer.flashWrong(outcome.value);
-      this.cameras.main.shake(60, 0.003);
+      shake(this, 60, 0.003);
       this.lockOut();
       this.updateHud();
     } else if (outcome.result === 'invalid') {
@@ -466,7 +466,7 @@ export class ExpressionScene extends Phaser.Scene {
       this.scorePopup(t.container.x, t.container.y, `+${points}`);
       this.removeTarget(t);
     }
-    this.cameras.main.shake(320, 0.012);
+    shake(this, 320, 0.012);
     this.cameras.main.flash(300, 255, 59, 59);
   }
 
@@ -523,7 +523,7 @@ export class ExpressionScene extends Phaser.Scene {
     this.saves.persist();
 
     getAudio(this)?.play('gameover');
-    this.cameras.main.shake(500, 0.02);
+    shake(this, 500, 0.02);
     this.time.delayedCall(900, () => {
       this.scene.start('Debrief', {
         stats: this.session.stats(),

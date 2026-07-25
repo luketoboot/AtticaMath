@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { AudioManager, AUDIO_REGISTRY_KEY } from '../../audio/AudioManager';
 import { CrtPipeline } from '../../fx/CrtPipeline';
 import { PALETTE } from '../../fx/palette';
+import { setVideoSettings } from '../../fx/videoSettings';
 import { LEADERBOARD_REGISTRY_KEY, LocalLeaderboardStore } from '../leaderboardStore';
 import { SaveManager, SAVE_REGISTRY_KEY } from '../storage';
 
@@ -21,6 +22,9 @@ export class BootScene extends Phaser.Scene {
       AUDIO_REGISTRY_KEY,
       new AudioManager(saves.save.settings.sfxVolume, saves.save.settings.musicVolume),
     );
+
+    // Before the first frame renders, or the menu flashes the default picture.
+    setVideoSettings(saves.save.settings.video);
 
     if (this.game.renderer.type === Phaser.WEBGL) {
       const renderer = this.game.renderer as Phaser.Renderer.WebGL.WebGLRenderer;

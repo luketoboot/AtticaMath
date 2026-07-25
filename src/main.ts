@@ -15,6 +15,7 @@ import { ModeSelectScene } from './game/scenes/ModeSelectScene';
 import { PauseScene } from './game/scenes/PauseScene';
 import { SettingsScene } from './game/scenes/SettingsScene';
 import { ShopScene } from './game/scenes/ShopScene';
+import { VideoScene } from './game/scenes/VideoScene';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -41,6 +42,7 @@ const game = new Phaser.Game({
     BrainScanScene,
     SettingsScene,
     ControlsScene,
+    VideoScene,
     PauseScene,
   ],
 });

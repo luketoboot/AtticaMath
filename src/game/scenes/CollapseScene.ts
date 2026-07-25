@@ -38,7 +38,7 @@ import {
 import { createRng } from '../../core/rng';
 import { generateAsteroid, hitsCircle, maxRadius, type AsteroidShape } from '../../core/shapes/asteroid';
 import { applyCrt } from '../../fx/applyCrt';
-import { cameraPunch, clearHitStop, glowPulse, impact, shockwave, timeScale } from '../../fx/juice';
+import { cameraPunch, clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
 import { announceDrop, carrierRing, effectsLine, pickupPod, DROP_CSS } from '../DropGfx';
@@ -424,7 +424,7 @@ export class CollapseScene extends Phaser.Scene {
     }
     this.tokens = [];
     this.armedId = null;
-    this.cameras.main.shake(360, 0.016);
+    shake(this, 360, 0.016);
     this.cameras.main.flash(320, 255, 59, 59);
   }
 
@@ -653,7 +653,7 @@ export class CollapseScene extends Phaser.Scene {
       onComplete: () => this.paintToken(target),
     });
     this.popup(target.x, target.y, 'NOT EQUAL', CSS.red);
-    this.cameras.main.shake(120, 0.006);
+    shake(this, 120, 0.006);
     getAudio(this)?.play('error');
   }
 

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CONFIG } from '../core/config';
+import { activeCrt } from './videoSettings';
 
 /**
  * CRT post-processing: a curved glass tube rather than a scanline filter.
@@ -179,7 +180,8 @@ export class CrtPipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline 
   }
 
   override onPreRender(): void {
-    const crt = CONFIG.crt;
+    // The player's dials, already folded into the configured look.
+    const crt = activeCrt();
     const dt = this.game.loop.delta / 1000;
     this.elapsed += dt;
     this.boost = Math.max(0, this.boost - CONFIG.juice.glowPulseDecayPerSecond * dt * this.boost);
