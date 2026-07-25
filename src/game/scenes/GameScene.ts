@@ -17,9 +17,23 @@ interface LiveMeteor {
   problem: Problem;
   spawnedAt: number;
   speed: number;
+  /** Scene-clock time before which this meteor will not fire again. */
+  nextFireAt: number;
+}
+
+/** An aimed shot from a meteor, travelling on a fixed heading. */
+interface LiveBullet {
+  sprite: Phaser.GameObjects.Image;
+  vx: number;
+  vy: number;
 }
 
 type Phase = 'wave' | 'breather' | 'over';
+
+/** Every meteor enters from here; gunfire arms relative to this line. */
+const METEOR_START_Y = -50;
+/** glowdot is 32px wide, so this renders a shot roughly 24px across. */
+const BULLET_SCALE = 0.75;
 
 export class GameScene extends Phaser.Scene {
   private session!: RunSession;
@@ -27,11 +41,22 @@ export class GameScene extends Phaser.Scene {
   private buffer!: InputBuffer;
 
   private meteors: LiveMeteor[] = [];
+  private bullets: LiveBullet[] = [];
   private spawnQueue: Problem[] = [];
   private phase: Phase = 'wave';
   private sinceSpawn = 0;
   private groundY = 0;
   private cannonX = 0;
+
+  private cannon!: Phaser.GameObjects.Container;
+  private moveKeys: { left: Phaser.Input.Keyboard.Key[]; right: Phaser.Input.Keyboard.Key[] } = {
+    left: [],
+    right: [],
+  };
+  /** Drag target for touch/mouse dodging; null when no drag is active. */
+  private pointerTargetX: number | null = null;
+  private invulnUntil = 0;
+  private warnedArmed = false;
 
   private hpText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
@@ -53,8 +78,12 @@ export class GameScene extends Phaser.Scene {
     this.events.once('shutdown', () => clearHitStop(this));
 
     this.meteors = [];
+    this.bullets = [];
     this.spawnQueue = [];
     this.phase = 'wave';
+    this.pointerTargetX = null;
+    this.invulnUntil = 0;
+    this.warnedArmed = false;
     this.groundY = height - 90;
     this.cannonX = width / 2;
 
@@ -93,6 +122,8 @@ export class GameScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     padToggle.on('pointerdown', () => numpad.setVisible(!numpad.visible));
 
+    this.setupDodgeInput();
+
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Game' });
@@ -103,9 +134,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   override update(_time: number, deltaMs: number): void {
-    if (this.phase !== 'wave') return;
+    if (this.phase === 'over') return;
     // Scaled so hit-stop freezes falling meteors along with tweens and timers.
     const dt = (deltaMs / 1000) * timeScale(this);
+
+    // Repositioning stays live through the breather — no dead air between waves.
+    this.movePlayer(dt);
+    if (this.phase !== 'wave') return;
 
     this.sinceSpawn += dt;
     if (
@@ -123,8 +158,13 @@ export class GameScene extends Phaser.Scene {
         this.landMeteor(m);
       }
     }
+    if (this.phase !== 'wave') return; // a landing ended the run
 
-    if (this.phase === 'wave' && this.spawnQueue.length === 0 && this.meteors.length === 0) {
+    this.updateGunfire(dt);
+    this.updateBullets(dt);
+    if (this.phase !== 'wave') return; // a shot ended the run
+
+    if (this.spawnQueue.length === 0 && this.meteors.length === 0 && this.bullets.length === 0) {
       this.waveComplete();
     }
   }
@@ -145,10 +185,19 @@ export class GameScene extends Phaser.Scene {
       this.time.delayedCall(220, () => audio?.play('slowfield'));
     }
     glowPulse(this, CONFIG.juice.glowPulseKill);
+
+    // The wave meteors start shooting is the one the player has to be told about.
+    if (this.session.meteorsArmed && !this.warnedArmed) {
+      this.warnedArmed = true;
+      this.time.delayedCall(1500, () => {
+        if (this.phase === 'wave') this.banner('THEY SHOOT BACK', CSS.red);
+      });
+    }
   }
 
   private waveComplete(): void {
     this.phase = 'breather';
+    this.clearBullets();
     const pick = this.session.endWave();
     const { width, height } = this.scale;
 
@@ -197,7 +246,7 @@ export class GameScene extends Phaser.Scene {
     const { width } = this.scale;
     const margin = 110;
     const x = Phaser.Math.Between(margin, width - margin);
-    const startY = -50;
+    const startY = METEOR_START_Y;
 
     const rock = this.add.image(0, 0, 'meteor');
     const label = this.add
@@ -216,7 +265,13 @@ export class GameScene extends Phaser.Scene {
 
     const distance = this.groundY - startY;
     const speed = distance / this.session.fallSeconds(problem.difficulty);
-    this.meteors.push({ container, problem, spawnedAt: this.time.now, speed });
+    this.meteors.push({
+      container,
+      problem,
+      spawnedAt: this.time.now,
+      speed,
+      nextFireAt: this.time.now + CONFIG.hazard.fireCooldownSeconds * 1000,
+    });
   }
 
   private removeMeteor(m: LiveMeteor): void {
@@ -303,6 +358,171 @@ export class GameScene extends Phaser.Scene {
     });
     this.buffer.clear();
     this.updateHud();
+  }
+
+  // --- dodging & meteor gunfire ---
+
+  private setupDodgeInput(): void {
+    const kb = this.input.keyboard;
+    // A/D is the primary scheme; arrows are the secondary. Neither collides with
+    // the digit buffer, so typing an answer and dodging can happen at once.
+    this.moveKeys = {
+      left: kb ? [kb.addKey('A'), kb.addKey('LEFT')] : [],
+      right: kb ? [kb.addKey('D'), kb.addKey('RIGHT')] : [],
+    };
+
+    // Touch/mouse: drag anywhere in the field and the cannon tracks your finger.
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      if (over.length > 0) return; // numpad and PAD toggle taps aren't dodges
+      this.pointerTargetX = p.x;
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (p.isDown && this.pointerTargetX !== null) this.pointerTargetX = p.x;
+    });
+    this.input.on('pointerup', () => {
+      this.pointerTargetX = null;
+    });
+  }
+
+  private movePlayer(dt: number): void {
+    const h = CONFIG.hazard;
+    const { width } = this.scale;
+
+    let dir = 0;
+    if (this.moveKeys.left.some((k) => k.isDown)) dir -= 1;
+    if (this.moveKeys.right.some((k) => k.isDown)) dir += 1;
+
+    let x = this.cannonX;
+    if (dir !== 0) {
+      this.pointerTargetX = null; // keys take over from a drag mid-motion
+      x += dir * h.playerSpeed * dt;
+    } else if (this.pointerTargetX !== null) {
+      // Chase the finger at the key traverse speed so touch gets no free teleport.
+      const step = h.playerSpeed * dt;
+      x += Phaser.Math.Clamp(this.pointerTargetX - x, -step, step);
+    }
+
+    this.cannonX = Phaser.Math.Clamp(x, h.playerEdgeMargin, width - h.playerEdgeMargin);
+    this.cannon.x = this.cannonX;
+  }
+
+  private updateGunfire(dt: number): void {
+    if (!this.session.meteorsArmed) return;
+    const h = CONFIG.hazard;
+    for (const m of this.meteors) {
+      if (this.time.now < m.nextFireAt) continue;
+      if (m.container.y - METEOR_START_Y < h.armingFallPixels) continue;
+      if (!this.session.rollMeteorFire(dt)) continue;
+      m.nextFireAt = this.time.now + h.fireCooldownSeconds * 1000;
+      this.fireBullet(m);
+    }
+  }
+
+  /** An aimed shot: it leads at where the cannon stands *now*, so standing still is fatal. */
+  private fireBullet(m: LiveMeteor): void {
+    const sx = m.container.x;
+    const sy = m.container.y;
+    const angle = Math.atan2(this.groundY - sy, this.cannonX - sx);
+    const speed = this.session.bulletSpeed();
+
+    const sprite = this.add
+      .image(sx, sy, 'glowdot')
+      .setTint(PALETTE.red)
+      .setScale(BULLET_SCALE)
+      .setDepth(4);
+    this.tweens.add({ targets: sprite, scale: BULLET_SCALE * 1.35, duration: 220, yoyo: true, repeat: -1 });
+    this.bullets.push({ sprite, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
+
+    // Muzzle flash on the rock itself, so the player can see which one shot.
+    const flash = this.add.image(sx, sy, 'glowdot').setTint(PALETTE.magentaHot).setScale(2.5).setDepth(4);
+    this.tweens.add({
+      targets: flash,
+      scale: 6,
+      alpha: 0,
+      duration: 220,
+      onComplete: () => flash.destroy(),
+    });
+    getAudio(this)?.play('enemyFire');
+  }
+
+  private updateBullets(dt: number): void {
+    const { width, height } = this.scale;
+    for (const b of [...this.bullets]) {
+      b.sprite.x += b.vx * dt;
+      b.sprite.y += b.vy * dt;
+
+      const offscreen = b.sprite.x < -40 || b.sprite.x > width + 40 || b.sprite.y > height + 40;
+      if (b.sprite.y < this.groundY && !offscreen) continue;
+
+      const x = b.sprite.x;
+      const connects = !offscreen && Math.abs(x - this.cannonX) <= CONFIG.hazard.bulletHitRadius;
+      this.removeBullet(b);
+      if (connects) {
+        this.playerHit();
+        if (this.phase !== 'wave') return;
+      } else if (!offscreen) {
+        this.dirtPuff(x);
+      }
+    }
+  }
+
+  private removeBullet(b: LiveBullet): void {
+    this.bullets = this.bullets.filter((x) => x !== b);
+    this.tweens.killTweensOf(b.sprite);
+    b.sprite.destroy();
+  }
+
+  private clearBullets(): void {
+    for (const b of [...this.bullets]) this.removeBullet(b);
+  }
+
+  /** Sparks where a dodged shot buries into the ground — a near miss should read. */
+  private dirtPuff(x: number): void {
+    const emitter = this.add.particles(x, this.groundY, 'particle', {
+      speed: { min: 40, max: 200 },
+      angle: { min: 200, max: 340 },
+      lifespan: { min: 150, max: 380 },
+      scale: { start: 1.4, end: 0 },
+      tint: PALETTE.red,
+      quantity: 8,
+      emitting: false,
+    });
+    emitter.explode(8);
+    this.time.delayedCall(600, () => emitter.destroy());
+  }
+
+  private playerHit(): void {
+    if (this.time.now < this.invulnUntil) return; // shot passed through the i-frames
+    const h = CONFIG.hazard;
+    const { juice } = CONFIG;
+    this.invulnUntil = this.time.now + h.invulnSeconds * 1000;
+
+    this.session.takeDamage();
+    getAudio(this)?.play('playerHit');
+    this.explode(this.cannonX, this.groundY - 12, PALETTE.red, juice.landParticles);
+    shockwave(this, this.cannonX, this.groundY - 12, PALETTE.red);
+    this.cameras.main.flash(200, 255, 40, 40);
+    impact(this, {
+      shakeMs: juice.landShakeMs,
+      shakeIntensity: juice.landShakeIntensity,
+      glow: juice.glowPulseHeavy,
+      hitStopMs: juice.heavyHitStopMs,
+    });
+
+    // Blink through the i-frames so the player can see they're briefly safe.
+    this.tweens.killTweensOf(this.cannon);
+    this.cannon.setAlpha(1);
+    this.tweens.add({
+      targets: this.cannon,
+      alpha: 0.25,
+      duration: 90,
+      yoyo: true,
+      repeat: Math.max(0, Math.round((h.invulnSeconds * 1000) / 180) - 1),
+      onComplete: () => this.cannon.setAlpha(1),
+    });
+
+    this.updateHud();
+    if (this.session.gameOver) this.endRun();
   }
 
   // --- fx ---
@@ -429,22 +649,38 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Drawn in local space inside a container, because the cannon now slides. */
   private drawCannon(): void {
     const g = this.add.graphics();
     g.fillStyle(PALETTE.cyan, 1);
-    g.fillTriangle(this.cannonX - 22, this.groundY, this.cannonX + 22, this.groundY, this.cannonX, this.groundY - 34);
+    g.fillTriangle(-22, 0, 22, 0, 0, -34);
     g.fillStyle(PALETTE.black, 1);
-    g.fillTriangle(this.cannonX - 12, this.groundY, this.cannonX + 12, this.groundY, this.cannonX, this.groundY - 20);
+    g.fillTriangle(-12, 0, 12, 0, 0, -20);
+    // Tread bar: gives the eye something to track against the ground line.
+    g.fillStyle(PALETTE.magenta, 1);
+    g.fillRect(-26, 0, 52, 4);
+    this.cannon = this.add.container(this.cannonX, this.groundY, [g]).setDepth(4);
   }
 
   private createHud(): void {
     const { width, height } = this.scale;
     const style = { fontFamily: FONT, fontSize: '22px', fontStyle: 'bold' };
 
-    this.hpText = this.add.text(24, 20, '', { ...style, color: CSS.magenta });
-    this.scoreText = this.add.text(width - 24, 20, '', { ...style, color: CSS.white }).setOrigin(1, 0);
-    this.streakText = this.add.text(width - 24, 50, '', { ...style, color: CSS.yellow }).setOrigin(1, 0);
-    this.waveText = this.add.text(width / 2, 20, '', { ...style, color: CSS.cyanDim }).setOrigin(0.5, 0);
+    // Above bullets and particles — readouts must never be buried by the fireworks.
+    const hud = 12;
+    this.hpText = this.add.text(24, 20, '', { ...style, color: CSS.magenta }).setDepth(hud);
+    this.scoreText = this.add
+      .text(width - 24, 20, '', { ...style, color: CSS.white })
+      .setOrigin(1, 0)
+      .setDepth(hud);
+    this.streakText = this.add
+      .text(width - 24, 50, '', { ...style, color: CSS.yellow })
+      .setOrigin(1, 0)
+      .setDepth(hud);
+    this.waveText = this.add
+      .text(width / 2, 20, '', { ...style, color: CSS.cyanDim })
+      .setOrigin(0.5, 0)
+      .setDepth(hud);
 
     this.bufferText = this.add
       .text(width / 2, height - 40, '_', {
@@ -453,7 +689,13 @@ export class GameScene extends Phaser.Scene {
         fontStyle: 'bold',
         color: CSS.cyan,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(hud);
+
+    this.add
+      .text(24, height - 44, 'A / D  DODGE', { fontFamily: FONT, fontSize: '14px', color: CSS.cyanDim })
+      .setAlpha(0.7)
+      .setDepth(hud);
 
     this.updateHud();
   }
@@ -468,6 +710,7 @@ export class GameScene extends Phaser.Scene {
 
   private endRun(): void {
     this.phase = 'over';
+    this.clearBullets();
     clearHitStop(this); // never hand a frozen clock to the next scene
     const save = this.saves.save;
     const credits = this.session.creditsEarned();

@@ -22,7 +22,9 @@ export type SfxName =
   | 'fast'
   | 'bossHit'
   | 'bossDown'
-  | 'block';
+  | 'block'
+  | 'enemyFire'
+  | 'playerHit';
 
 export interface SfxOptions {
   /** Frequency multiplier — used to climb the streak ladder. */
@@ -254,6 +256,22 @@ export class AudioManager {
         this.zap(ctx, t + 0.05, 'sawtooth', 660, 50, 1.4, 0.26 * g, 18);
         this.noiseBurst(ctx, t, 1.2, 3000, 0.45 * g);
         this.zap(ctx, t + 0.1, 'sine', 110, 28, 1.6, 0.5 * g);
+        break;
+
+      // Meteor gunfire: thin spit that sweeps *up*, the mirror of the player's
+      // cannon, so incoming and outgoing fire never sound alike.
+      case 'enemyFire':
+        this.zap(ctx, t, 'sawtooth', 220 * p, 760 * p, 0.13, 0.13 * g, 30);
+        this.zap(ctx, t, 'square', 216 * p, 740 * p, 0.13, 0.08 * g, -30);
+        this.noiseBurst(ctx, t, 0.08, 3200, 0.1 * g, 'bandpass');
+        break;
+
+      // Player takes a shot: dull crunch under an alarm blip.
+      case 'playerHit':
+        this.noiseBurst(ctx, t, 0.34, 1200, 0.4 * g);
+        this.zap(ctx, t, 'sawtooth', 300, 60, 0.36, 0.28 * g, -20);
+        this.zap(ctx, t, 'sine', 110, 40, 0.5, 0.45 * g);
+        this.tone(ctx, t + 0.1, 'square', 330, 0.14, 0.12 * g);
         break;
 
       // Block: short upward chirp — reads as a parry, not a hit.

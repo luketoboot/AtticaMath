@@ -6,6 +6,12 @@ import { CONFIG, type GameConfig } from './config';
 import { selectTip, type CoachPick } from './coach/select';
 import { creditsForRun, killScore, type RunStats } from './economy/economy';
 import type { Problem } from './generator/problem';
+import {
+  bulletSpeed as bulletSpeedForWave,
+  fireChancePerSecond,
+  meteorsArmed as armedAtWave,
+  rollFire,
+} from './hazard/gunfire';
 import { createRng, type Rng } from './rng';
 import { seedFromPlacement, type PlacementAttempt } from './skills/placement';
 import { applyAttempt, targetLatencyMs, type SkillTable } from './skills/rating';
@@ -30,6 +36,11 @@ const COACH_RECENCY_WAVES = 3;
 export class RunSession {
   private readonly cfg: GameConfig;
   private readonly rng: Rng;
+  /**
+   * Gunfire draws on its own stream. Rolling it from `rng` would make wave
+   * composition depend on how many frames elapsed, killing reproducibility.
+   */
+  private readonly hazardRng: Rng;
   private skills: SkillTable;
   private readonly startWave: number;
   private waveInRun = 0;
@@ -44,6 +55,8 @@ export class RunSession {
   bestStreak = 0;
   kills = 0;
   misses = 0;
+  /** Meteor shots that connected — HP lost to dodging, not to math. */
+  shotsTaken = 0;
   hp: number;
   readonly loadout: readonly string[];
   private shieldUsed = false;
@@ -51,6 +64,7 @@ export class RunSession {
   constructor(init: RunSessionInit) {
     this.cfg = init.config ?? CONFIG;
     this.rng = createRng(init.seed);
+    this.hazardRng = createRng((init.seed ^ 0x9e3779b9) >>> 0);
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
     this.placementDone = init.placementDone;
@@ -172,6 +186,34 @@ export class RunSession {
     secs += (difficulty * m.difficultySlowdownMs) / 1000;
     if (this.loadout.includes('upgrade.slowfield')) secs *= 1.15;
     return Math.max(m.minFallSeconds, secs);
+  }
+
+  // --- meteor gunfire ---
+
+  /** True once meteors in the current wave shoot back. */
+  get meteorsArmed(): boolean {
+    return armedAtWave(this.waveInRun, this.inPlacement, this.cfg);
+  }
+
+  /** Roll whether one live meteor opens fire during a frame of `dtSeconds`. */
+  rollMeteorFire(dtSeconds: number): boolean {
+    if (!this.meteorsArmed) return false;
+    return rollFire(this.hazardRng, fireChancePerSecond(this.waveInRun, this.cfg), dtSeconds);
+  }
+
+  /** Shot travel speed (px/sec) for the current wave. */
+  bulletSpeed(): number {
+    return bulletSpeedForWave(this.waveInRun, this.cfg);
+  }
+
+  /**
+   * A meteor's shot connected. Costs HP but leaves the streak and the skill
+   * ratings alone — dodging is a reflex test, not a math attempt — and the miss
+   * shield stays reserved for problems the player failed to answer.
+   */
+  takeDamage(): void {
+    this.hp -= 1;
+    this.shotsTaken += 1;
   }
 
   /** Spawn gap in seconds for the current wave. */

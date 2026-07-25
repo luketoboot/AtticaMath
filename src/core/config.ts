@@ -75,6 +75,36 @@ export interface MeteorConfig {
   maxConcurrentMeteors: number;
 }
 
+/**
+ * Meteor gunfire and player dodging (Meteor Defense). Meteors take aimed shots
+ * at the cannon; the player slides left/right to get out of the way.
+ */
+export interface HazardConfig {
+  /** Run wave at which meteors start shooting. Placement waves are always safe. */
+  firstArmedWave: number;
+  /** Per-second odds one live meteor opens fire, at firstArmedWave. */
+  baseFireChancePerSecond: number;
+  /** Fire-chance multiplier per wave beyond firstArmedWave (compounding). */
+  fireChanceGrowthPerWave: number;
+  maxFireChancePerSecond: number;
+  /** A meteor cannot fire again within this many seconds. */
+  fireCooldownSeconds: number;
+  /** A meteor must fall this far before it can shoot — no point-blank spawns. */
+  armingFallPixels: number;
+  /** Shot travel speed (px/sec) at firstArmedWave, and its ramp. */
+  bulletSpeed: number;
+  bulletSpeedGrowthPerWave: number;
+  maxBulletSpeed: number;
+  /** A shot crossing the ground line within this many px of the cannon connects. */
+  bulletHitRadius: number;
+  /** Cannon traverse speed (px/sec). */
+  playerSpeed: number;
+  /** How close to either screen edge the cannon may get. */
+  playerEdgeMargin: number;
+  /** Invulnerability after taking a hit, so one shot can't chain into a death. */
+  invulnSeconds: number;
+}
+
 export interface ScoreConfig {
   /** Base points for a kill. */
   killBase: number;
@@ -186,6 +216,7 @@ export interface GameConfig {
   meteors: MeteorConfig;
   expression: ExpressionConfig;
   boss: BossConfig;
+  hazard: HazardConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
   juice: JuiceConfig;
@@ -266,6 +297,21 @@ export const CONFIG: GameConfig = {
     scorePerDamage: 3,
     defeatBonus: 1500,
     blockScore: 150,
+  },
+  hazard: {
+    firstArmedWave: 2,
+    baseFireChancePerSecond: 0.16,
+    fireChanceGrowthPerWave: 1.12,
+    maxFireChancePerSecond: 0.8,
+    fireCooldownSeconds: 2.4,
+    armingFallPixels: 120,
+    bulletSpeed: 250,
+    bulletSpeedGrowthPerWave: 1.03,
+    maxBulletSpeed: 460,
+    bulletHitRadius: 30,
+    playerSpeed: 520,
+    playerEdgeMargin: 44,
+    invulnSeconds: 1.2,
   },
   score: {
     killBase: 100,
