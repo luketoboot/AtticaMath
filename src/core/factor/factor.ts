@@ -35,12 +35,22 @@ export function isPrime(n: number): boolean {
 }
 
 /**
- * Numbers the player may legally type at a rock: its proper factors, which
- * split it, plus the rock's own value, which destroys it. 1 is excluded — it
- * divides everything and would split nothing.
+ * Numbers the player may legally type at a rock.
+ *
+ * A composite accepts only its proper factors, so it has to be broken down —
+ * typing the number printed on it does nothing. A prime accepts only itself,
+ * because there is nothing to break: naming it *is* the answer, and recognising
+ * that is the skill.
+ *
+ * This asymmetry is the whole mode. If a rock could always be destroyed by
+ * typing what it says, the fastest and highest-scoring play would be to copy
+ * the digits off the screen, and no arithmetic would happen at any point.
+ *
+ * 1 is never legal — it divides everything and would split nothing.
  */
 export function legalShots(n: number): number[] {
-  return [...properFactors(n), n];
+  const factors = properFactors(n);
+  return factors.length > 0 ? factors : [n];
 }
 
 /** The split closest to square, e.g. 84 → 12 × 7 rather than 84 → 2 × 42. */
@@ -62,7 +72,10 @@ export type ShotKind =
 /** What typing `shot` at a rock of `value` does. */
 export function resolveShot(value: number, shot: number): ShotKind {
   if (!Number.isInteger(shot) || shot < 2 || value % shot !== 0) return { kind: 'illegal' };
-  if (shot === value) return { kind: 'destroy', prime: isPrime(value) };
+  if (shot === value) {
+    // Naming a composite is refused: break it or leave it alone.
+    return isPrime(value) ? { kind: 'destroy', prime: true } : { kind: 'illegal' };
+  }
   return {
     kind: 'split',
     pieces: [shot, value / shot],
@@ -83,8 +96,11 @@ export function isViablePrefix(value: number, buffer: string): boolean {
 /** True when `buffer` is a legal shot and no longer shot starts with it. */
 export function isCompleteShot(value: number, buffer: string): boolean {
   const shot = Number(buffer);
-  if (!Number.isInteger(shot) || value % shot !== 0 || shot < 2) return false;
-  return !legalShots(value).some((s) => s !== shot && String(s).startsWith(buffer));
+  const shots = legalShots(value);
+  // Membership, not just divisibility: a composite's own value divides it but
+  // is not a legal shot, and firing it would only earn a misfire.
+  if (!Number.isInteger(shot) || !shots.includes(shot)) return false;
+  return !shots.some((s) => s !== shot && String(s).startsWith(buffer));
 }
 
 /**

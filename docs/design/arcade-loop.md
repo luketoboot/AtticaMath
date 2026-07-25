@@ -248,6 +248,14 @@ split; they are destroyed by typing the number itself, and they are worth the
 most. So the board *multiplies before it clears* — exactly the Asteroids
 pressure curve, except the fragments are a factor tree.
 
+**A composite can never be shot by name.** This rule is the mode. The first
+implementation let any rock be destroyed by typing its own value, which paid
+*more* than splitting and produced no fragments — so the best possible play was
+to read the number off the screen and copy it, and no arithmetic happened
+anywhere in the mode. Naming works only on a prime, where recognising primality
+is itself the answer. Reaching for a composite's own value dead-ends and says
+NOT PRIME — BREAK IT.
+
 **Why this mode earns its place.** Factorisation is the highest-leverage skill
 in the taxonomy: it is where times tables, exact division, and later fractions
 all meet. It is also the one thing the other two modes cannot drill, because

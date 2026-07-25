@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
-import { isCompleteShot, isViablePrefix } from '../../core/factor/factor';
+import { isCompleteShot, isPrime, isViablePrefix } from '../../core/factor/factor';
 import { FactorSession, type Rock } from '../../core/factor/session';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
@@ -250,6 +250,13 @@ export class FactorScene extends Phaser.Scene {
       // Nothing this rock accepts starts with what has been typed. Clear it for
       // the player and take the time out of the combo clock, never the combo.
       this.session.recordWrongDigit();
+      // Reaching for the number printed on a composite is the mistake everyone
+      // makes first. Catch it at the first digit — by the time the whole value
+      // is typed the buffer has long since been cleared — and say what the rule
+      // is rather than just buzzing.
+      if (String(target.rock.value).startsWith(value) && !isPrime(target.rock.value)) {
+        this.popup(target.x, target.y, 'NOT PRIME — BREAK IT', CSS.red);
+      }
       this.buffer.clear();
       getAudio(this)?.play('error');
       this.bufferText.setColor(CSS.red);
@@ -485,13 +492,13 @@ export class FactorScene extends Phaser.Scene {
     this.time.delayedCall(750, () => emitter.destroy());
   }
 
-  private popup(x: number, y: number, message: string): void {
+  private popup(x: number, y: number, message: string, color: string = CSS.yellow): void {
     const text = this.add
       .text(x, y - 20, message, {
         fontFamily: FONT,
         fontSize: '22px',
         fontStyle: 'bold',
-        color: CSS.yellow,
+        color,
         stroke: CSS.black,
         strokeThickness: 5,
       })
@@ -589,7 +596,7 @@ export class FactorScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(hud);
     this.add
-      .text(24, height - 40, 'WASD FLY  ·  TYPE A FACTOR TO SPLIT  ·  TYPE THE NUMBER TO DESTROY', {
+      .text(24, height - 40, 'WASD FLY  ·  TYPE A FACTOR TO SPLIT  ·  A PRIME DIES BY ITS OWN NAME', {
         fontFamily: FONT,
         fontSize: '14px',
         color: CSS.cyanDim,

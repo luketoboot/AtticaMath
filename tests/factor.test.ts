@@ -46,9 +46,17 @@ describe('shots', () => {
     expect(resolveShot(84, 7)).toEqual({ kind: 'split', pieces: [7, 12], balanced: true });
   });
 
-  it('destroys a rock named in full, and knows when that was a prime', () => {
+  it('destroys a prime named in full', () => {
     expect(resolveShot(13, 13)).toEqual({ kind: 'destroy', prime: true });
-    expect(resolveShot(12, 12)).toEqual({ kind: 'destroy', prime: false });
+    expect(resolveShot(2, 2)).toEqual({ kind: 'destroy', prime: true });
+  });
+
+  it('refuses to let a composite be named instead of broken', () => {
+    // The whole mode rests on this: if typing what the rock says worked, the
+    // best play would be to copy the digits and never factor anything.
+    expect(resolveShot(12, 12).kind).toBe('illegal');
+    expect(resolveShot(84, 84).kind).toBe('illegal');
+    expect(resolveShot(4, 4).kind).toBe('illegal');
   });
 
   it('rejects non-factors, 1, and nonsense', () => {
@@ -72,9 +80,10 @@ describe('shots', () => {
     }
   });
 
-  it('always leaves a prime exactly one legal shot: itself', () => {
+  it('gives a prime one legal shot and a composite only its factors', () => {
     expect(legalShots(13)).toEqual([13]);
-    expect(legalShots(12)).toEqual([2, 3, 4, 6, 12]);
+    expect(legalShots(12)).toEqual([2, 3, 4, 6]);
+    expect(legalShots(12)).not.toContain(12);
   });
 });
 
@@ -87,11 +96,23 @@ describe('typing rules', () => {
   });
 
   it('fires at once when nothing longer starts with the buffer', () => {
-    // 12's shots are 2, 3, 4, 6, 12 — nothing else starts with "2".
+    // 12's shots are 2, 3, 4, 6 — nothing else starts with "2".
     expect(isCompleteShot(12, '2')).toBe(true);
-    // ...but "1" is only ever the start of 12, never a shot itself.
-    expect(isCompleteShot(12, '1')).toBe(false);
-    expect(isViablePrefix(12, '1')).toBe(true);
+    // 96 reaches 12 and 16, so "1" has to wait for its second digit.
+    expect(isCompleteShot(96, '1')).toBe(false);
+    expect(isViablePrefix(96, '1')).toBe(true);
+    expect(isCompleteShot(96, '16')).toBe(true);
+  });
+
+  it('treats typing a composite own value as a dead end, not a shot', () => {
+    expect(isCompleteShot(12, '12')).toBe(false);
+    expect(isViablePrefix(12, '1')).toBe(false);
+    expect(isViablePrefix(12, '12')).toBe(false);
+  });
+
+  it('lets a prime be named', () => {
+    expect(isViablePrefix(13, '1')).toBe(true);
+    expect(isCompleteShot(13, '13')).toBe(true);
   });
 
   it('calls a dead end a dead end', () => {
@@ -183,15 +204,38 @@ describe('FactorSession', () => {
     expect(s.liveRocks.length).toBe(before + 1);
   });
 
-  it('can be played down to an empty board', () => {
+  it('clears only by factorising all the way down to primes', () => {
     const s = session();
     s.nextWave();
-    // Always shoot the whole value: composites destroy, primes destroy.
+    let splits = 0;
+    let primes = 0;
     for (let guard = 0; guard < 500 && !s.waveCleared; guard++) {
       const rock = s.liveRocks[0]!;
-      expect(s.shoot(rock.id, rock.value, 1000).result).toBe('destroyed');
+      const factors = properFactors(rock.value);
+      if (factors.length === 0) {
+        // Prime: naming it is the only move, and it ends that branch.
+        expect(s.shoot(rock.id, rock.value, 1000).result).toBe('destroyed');
+        primes += 1;
+      } else {
+        expect(s.shoot(rock.id, factors[0]!, 1000).result).toBe('split');
+        splits += 1;
+      }
     }
     expect(s.waveCleared).toBe(true);
+    expect(splits).toBeGreaterThan(0);
+    // Every rock ends as primes, so a cleared board has named more primes than
+    // it had rocks to begin with.
+    expect(primes).toBeGreaterThan(CONFIG.factor.baseRocks);
+  });
+
+  it('will not let a composite be shot by name, however tempting', () => {
+    const s = session();
+    const composite = s.nextWave().find((r) => properFactors(r.value).length > 0)!;
+    const before = s.liveRocks.length;
+    expect(s.shoot(composite.id, composite.value, 1000).result).toBe('illegal');
+    expect(s.liveRocks.length).toBe(before);
+    expect(s.score).toBe(0);
+    expect(s.misfires).toBe(1);
   });
 
   it('an illegal shot is a misfire and changes nothing else', () => {
