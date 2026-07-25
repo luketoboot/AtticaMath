@@ -59,11 +59,12 @@ export class ControlsScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(width / 2, height * 0.16, 'NUMBER KEYS TYPE ANSWERS — NOT REBINDABLE', {
-        fontFamily: FONT,
-        fontSize: '13px',
-        color: CSS.cyanDim,
-      })
+      .text(
+        width / 2,
+        height * 0.16,
+        'FLIGHT MODES THRUST AND TURN  ·  METEOR DEFENSE STRAFES  ·  NUMBER KEYS ARE FIXED',
+        { fontFamily: FONT, fontSize: '13px', color: CSS.cyanDim },
+      )
       .setOrigin(0.5)
       .setAlpha(0.85);
 

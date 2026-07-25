@@ -1,6 +1,8 @@
 /**
  * Every tunable in the game lives here. No magic numbers scattered in code.
  */
+import type { ChainConfig } from './collapse/chain';
+import type { FlightConfig } from './flight/newtonian';
 
 export interface RatingConfig {
   /** Starting rating for every skill before placement. */
@@ -235,11 +237,6 @@ export interface FactorConfig {
   /** Radius mapping: rocks scale with the digit count of their value. */
   minRadius: number;
   maxRadius: number;
-  /** Ship handling: acceleration, drag per second, and a speed ceiling. */
-  shipAccel: number;
-  shipDrag: number;
-  shipMaxSpeed: number;
-  shipRadius: number;
   /** Invulnerability after a collision. */
   invulnSeconds: number;
   /** Push applied to ship and rock when they collide. */
@@ -285,6 +282,13 @@ export interface EconomyConfig {
   prices: Readonly<Record<string, number>>;
 }
 
+/**
+ * Rotate-and-thrust flight shared by every free-flight mode, so Factor Storm
+ * and Collapse never drift apart in feel. Set drag to 0 for true frictionless
+ * Continuum coasting.
+ */
+export type { FlightConfig } from './flight/newtonian';
+
 /** Collapse: push fractions into their matching percentage. */
 export interface CollapseConfig {
   /** Pairs on the field at wave 1, and how many more each wave adds. */
@@ -301,28 +305,30 @@ export interface CollapseConfig {
   fastestDrift: number;
   fractionRadius: number;
   percentRadius: number;
-  /** Ship handling, matched to Factor Storm so flight feel carries over. */
-  shipAccel: number;
-  shipDrag: number;
-  shipMaxSpeed: number;
-  shipRadius: number;
+  /** Gunnery: one shot per cooldown, bolts expire rather than fly forever. */
+  fireCooldownSeconds: number;
+  projectileSpeed: number;
+  projectileRadius: number;
+  projectileLifeSeconds: number;
   /**
-   * The repulsor: a radial shove that only moves fractions. Standoff range is
-   * the whole point — you should never have to ride a fraction into a hazard.
+   * Swapping guns locks out fire for this long. The lockout is what makes the
+   * swap a decision instead of a free toggle — and it gives the reload its room.
    */
-  pulseRadius: number;
-  pulseImpulse: number;
-  pulseCooldownSeconds: number;
-  /** Speed ceiling on a shoved fraction, so a stacked pulse stays controllable. */
-  maxFractionSpeed: number;
-  /** Drag on fractions: they coast, but not forever. */
-  fractionDrag: number;
+  swapLockoutSeconds: number;
+  /** An armed token releases itself after this long, so a stall has a cost. */
+  armedSeconds: number;
+  /** Fire lockout after misreading an equivalence. */
+  mismatchLockoutSeconds: number;
   startingHp: number;
   invulnSeconds: number;
   collisionKnockback: number;
-  /** A wrong pairing bounces rather than killing the fraction. */
-  wrongBounceSpeed: number;
-  wrongLockoutSeconds: number;
+  /** Kickback the ship takes from its own gun, px/s per shot. */
+  recoilImpulse: number;
+  /** Passing this close to a solid token without touching it pays out. */
+  nearMissRadius: number;
+  nearMissBonus: number;
+  /** Chain meter — see core/collapse/chain.ts. */
+  chain: ChainConfig;
   /** Scoring. */
   matchBase: number;
   tierBonus: number;
@@ -401,6 +407,7 @@ export interface GameConfig {
   combo: ComboConfig;
   drops: DropConfig;
   expression: ExpressionConfig;
+  flight: FlightConfig;
   factor: FactorConfig;
   collapse: CollapseConfig;
   boss: BossConfig;
@@ -514,6 +521,16 @@ export const CONFIG: GameConfig = {
     misfireLockSeconds: 1.2,
     scrapPenaltySeconds: 1.5,
   },
+  flight: {
+    rotationSpeedDeg: 240,
+    thrustAccel: 496,
+    reverseScale: 0.5,
+    // Near-frictionless: the ship coasts and you fly by planning momentum.
+    // Set to 0 for literal Continuum physics.
+    drag: 0.08,
+    maxSpeed: 430,
+    shipRadius: 18,
+  },
   factor: {
     baseRocks: 3,
     rocksPerWave: 1,
@@ -526,10 +543,6 @@ export const CONFIG: GameConfig = {
     fastestDrift: 95,
     minRadius: 26,
     maxRadius: 62,
-    shipAccel: 1500,
-    shipDrag: 2.6,
-    shipMaxSpeed: 460,
-    shipRadius: 18,
     invulnSeconds: 1.4,
     collisionKnockback: 260,
     destroyBase: 120,
@@ -550,20 +563,26 @@ export const CONFIG: GameConfig = {
     fastestDrift: 46,
     fractionRadius: 34,
     percentRadius: 38,
-    shipAccel: 1500,
-    shipDrag: 2.6,
-    shipMaxSpeed: 460,
-    shipRadius: 18,
-    pulseRadius: 165,
-    pulseImpulse: 300,
-    pulseCooldownSeconds: 0.45,
-    maxFractionSpeed: 420,
-    fractionDrag: 0.55,
+    fireCooldownSeconds: 0.22,
+    projectileSpeed: 620,
+    projectileRadius: 7,
+    projectileLifeSeconds: 1.6,
+    swapLockoutSeconds: 0.36,
+    armedSeconds: 9,
+    mismatchLockoutSeconds: 0.45,
     startingHp: 3,
     invulnSeconds: 1.4,
     collisionKnockback: 300,
-    wrongBounceSpeed: 190,
-    wrongLockoutSeconds: 0.5,
+    recoilImpulse: 42,
+    nearMissRadius: 26,
+    nearMissBonus: 25,
+    chain: {
+      baseWindowSeconds: 7,
+      windowShrinkPerTier: 0.9,
+      minWindowSeconds: 3.5,
+      tierThresholds: [2, 4, 7, 11],
+      tierMultipliers: [1, 1.5, 2, 3, 4],
+    },
     matchBase: 150,
     tierBonus: 75,
     unreducedBonus: 50,

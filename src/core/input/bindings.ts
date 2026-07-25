@@ -8,7 +8,14 @@
  * Pure data + helpers, no Phaser. The game layer (KeyState) reads these.
  */
 
-export type BindableAction = 'up' | 'down' | 'left' | 'right' | 'launch' | 'pause';
+export type BindableAction =
+  | 'up'
+  | 'down'
+  | 'left'
+  | 'right'
+  | 'launch'
+  | 'switchWeapon'
+  | 'pause';
 
 export const BINDABLE_ACTIONS: readonly BindableAction[] = [
   'up',
@@ -16,6 +23,7 @@ export const BINDABLE_ACTIONS: readonly BindableAction[] = [
   'left',
   'right',
   'launch',
+  'switchWeapon',
   'pause',
 ];
 
@@ -28,15 +36,22 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   launch: ['Space', null],
+  switchWeapon: ['ShiftLeft', 'ShiftRight'],
   pause: ['Escape', null],
 };
 
+/**
+ * One binding drives different verbs per mode — in free flight `up` is thrust
+ * and `left`/`right` swing the nose, while Meteor Defense still strafes the
+ * cannon. Labels name both so neither reading is a surprise.
+ */
 export const ACTION_LABELS: Record<BindableAction, string> = {
-  up: 'MOVE UP',
-  down: 'MOVE DOWN',
-  left: 'MOVE LEFT',
-  right: 'MOVE RIGHT',
-  launch: 'LAUNCH / SKIP',
+  up: 'THRUST / UP',
+  down: 'REVERSE / DOWN',
+  left: 'TURN LEFT / LEFT',
+  right: 'TURN RIGHT / RIGHT',
+  launch: 'FIRE / LAUNCH',
+  switchWeapon: 'SWAP WEAPON',
   pause: 'PAUSE',
 };
 

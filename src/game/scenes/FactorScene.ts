@@ -3,6 +3,12 @@ import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
 import { isCompleteShot, isPrime, isViablePrefix } from '../../core/factor/factor';
 import { FactorSession, type Rock } from '../../core/factor/session';
+import {
+  newFlightState,
+  stepFlight,
+  withVelocity,
+  type FlightState,
+} from '../../core/flight/newtonian';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
@@ -35,9 +41,9 @@ const COMBO_BAR_WIDTH = 150;
  * Factor Storm: fly with the left hand, factor with the right.
  *
  * Type a factor of the locked rock and it splits into that factor and the
- * quotient, so the board multiplies before it clears. Rotation-and-thrust is
- * deliberately not the control scheme here: the right hand is on the number
- * row, so flying has to work with the left hand alone.
+ * quotient, so the board multiplies before it clears. Flight is Newtonian
+ * rotate-and-thrust (see core/flight): W drives along the nose, S backs off,
+ * A/D swing the nose, and momentum is yours to manage.
  */
 export class FactorScene extends Phaser.Scene {
   private session!: FactorSession;
@@ -49,10 +55,8 @@ export class FactorScene extends Phaser.Scene {
   private wave = 0;
 
   private ship!: Phaser.GameObjects.Container;
-  private shipX = 0;
-  private shipY = 0;
-  private shipVx = 0;
-  private shipVy = 0;
+  private flight!: FlightState;
+  private flame!: Phaser.GameObjects.Graphics;
   private invulnUntil = 0;
   private keys!: KeyState;
   private bindings!: KeyBindings;
@@ -75,7 +79,7 @@ export class FactorScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
-    getAudio(this)?.playMusic('game');
+    getAudio(this)?.playMusic('drift');
     applyCrt(this);
     clearHitStop(this);
     this.events.once('shutdown', () => clearHitStop(this));
@@ -85,10 +89,7 @@ export class FactorScene extends Phaser.Scene {
     this.wave = 0;
     this.lockedId = null;
     this.invulnUntil = 0;
-    this.shipX = width / 2;
-    this.shipY = height / 2;
-    this.shipVx = 0;
-    this.shipVy = 0;
+    this.flight = newFlightState(width / 2, height / 2);
 
     const save = this.saves.save;
     this.session = new FactorSession({
@@ -142,37 +143,34 @@ export class FactorScene extends Phaser.Scene {
   // --- flight ---
 
   private flyShip(dt: number): void {
-    const f = CONFIG.factor;
-    let ax = 0;
-    let ay = 0;
-    if (this.keys.isDown(this.bindings.left)) ax -= 1;
-    if (this.keys.isDown(this.bindings.right)) ax += 1;
-    if (this.keys.isDown(this.bindings.up)) ay -= 1;
-    if (this.keys.isDown(this.bindings.down)) ay += 1;
+    const thrust = this.keys.isDown(this.bindings.up);
+    const reverse = this.keys.isDown(this.bindings.down);
+    this.flight = stepFlight(
+      this.flight,
+      {
+        thrust,
+        reverse,
+        turnLeft: this.keys.isDown(this.bindings.left),
+        turnRight: this.keys.isDown(this.bindings.right),
+      },
+      CONFIG.flight,
+      dt,
+      { width: this.scale.width, height: this.scale.height },
+    );
 
-    // Normalised so diagonals are not faster than the cardinals.
-    const mag = Math.hypot(ax, ay);
-    if (mag > 0) {
-      this.shipVx += (ax / mag) * f.shipAccel * dt;
-      this.shipVy += (ay / mag) * f.shipAccel * dt;
-    }
-
-    // Drag rather than a hard stop: the ship has weight, but it answers at once.
-    const drag = Math.max(0, 1 - f.shipDrag * dt);
-    this.shipVx *= drag;
-    this.shipVy *= drag;
-
-    const speed = Math.hypot(this.shipVx, this.shipVy);
-    if (speed > f.shipMaxSpeed) {
-      this.shipVx = (this.shipVx / speed) * f.shipMaxSpeed;
-      this.shipVy = (this.shipVy / speed) * f.shipMaxSpeed;
-    }
-
-    this.shipX = this.wrapX(this.shipX + this.shipVx * dt);
-    this.shipY = this.wrapY(this.shipY + this.shipVy * dt);
-    this.ship.setPosition(this.shipX, this.shipY);
-    if (speed > 20) this.ship.setRotation(Math.atan2(this.shipVy, this.shipVx) + Math.PI / 2);
+    this.ship.setPosition(this.flight.x, this.flight.y);
+    // The hull art points up, so the sprite trails the facing by a quarter turn.
+    this.ship.setRotation(this.flight.facing + Math.PI / 2);
     this.ship.setAlpha(this.time.now < this.invulnUntil ? 0.45 : 1);
+    this.flame.setVisible(thrust && !reverse).setAlpha(Phaser.Math.FloatBetween(0.55, 1));
+  }
+
+  private get shipX(): number {
+    return this.flight.x;
+  }
+
+  private get shipY(): number {
+    return this.flight.y;
   }
 
   private wrapX(x: number): number {
@@ -393,7 +391,7 @@ export class FactorScene extends Phaser.Scene {
     const f = CONFIG.factor;
     for (const r of this.rocks) {
       const dist = Phaser.Math.Distance.Between(this.shipX, this.shipY, r.x, r.y);
-      if (dist > r.radius + f.shipRadius) continue;
+      if (dist > r.radius + CONFIG.flight.shipRadius) continue;
 
       this.session.takeDamage();
       this.invulnUntil = this.time.now + f.invulnSeconds * 1000;
@@ -408,8 +406,11 @@ export class FactorScene extends Phaser.Scene {
 
       // Shove both apart so the ship cannot be pinned inside a rock.
       const angle = Math.atan2(this.shipY - r.y, this.shipX - r.x);
-      this.shipVx = Math.cos(angle) * f.collisionKnockback;
-      this.shipVy = Math.sin(angle) * f.collisionKnockback;
+      this.flight = withVelocity(
+        this.flight,
+        Math.cos(angle) * f.collisionKnockback,
+        Math.sin(angle) * f.collisionKnockback,
+      );
       r.vx -= Math.cos(angle) * f.collisionKnockback * 0.3;
       r.vy -= Math.sin(angle) * f.collisionKnockback * 0.3;
 
@@ -549,7 +550,17 @@ export class FactorScene extends Phaser.Scene {
     g.fillTriangle(0, -8, -7, 10, 7, 10);
     g.fillStyle(PALETTE.magenta, 1);
     g.fillRect(-14, 14, 28, 4);
-    this.ship = this.add.container(this.shipX, this.shipY, [g]).setDepth(5);
+
+    // Exhaust behind the hull. With rotate-and-thrust the nose no longer
+    // follows the velocity, so the player needs to see where thrust is going.
+    this.flame = this.add.graphics();
+    this.flame.fillStyle(PALETTE.yellow, 1);
+    this.flame.fillTriangle(-8, 18, 8, 18, 0, 38);
+    this.flame.fillStyle(PALETTE.magentaHot, 1);
+    this.flame.fillTriangle(-4, 18, 4, 18, 0, 29);
+    this.flame.setVisible(false);
+
+    this.ship = this.add.container(this.shipX, this.shipY, [this.flame, g]).setDepth(5);
   }
 
   private createHud(): void {
@@ -589,7 +600,7 @@ export class FactorScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(hud);
     this.add
-      .text(24, height - 40, 'WASD FLY  ·  TYPE A FACTOR TO SPLIT  ·  A PRIME DIES BY ITS OWN NAME', {
+      .text(24, height - 40, 'W THRUST · S REVERSE · A/D TURN  ·  TYPE A FACTOR TO SPLIT  ·  A PRIME DIES BY ITS OWN NAME', {
         fontFamily: FONT,
         fontSize: '14px',
         color: CSS.cyanDim,

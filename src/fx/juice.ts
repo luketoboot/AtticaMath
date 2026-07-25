@@ -66,6 +66,19 @@ export function impact(scene: Phaser.Scene, opts: ImpactOptions): void {
   }
 }
 
+/**
+ * Snap the camera in and ease back out. Reads as the world flinching rather
+ * than the camera moving, so it stacks with shake instead of fighting it.
+ */
+export function cameraPunch(scene: Phaser.Scene, amount: number, durationMs: number): void {
+  const cam = scene.cameras.main;
+  const base = 1;
+  cam.zoomTo(base + amount, durationMs * 0.28, 'Cubic.easeOut');
+  scene.time.delayedCall(durationMs * 0.28, () => {
+    cam.zoomTo(base, durationMs * 0.72, 'Cubic.easeOut');
+  });
+}
+
 /** Expanding neon ring — reads as a concussion wave behind the particles. */
 export function shockwave(scene: Phaser.Scene, x: number, y: number, tint: number): void {
   const { shockwaveRadius, shockwaveMs } = CONFIG.juice;
