@@ -13,6 +13,7 @@ Owner-supplied music tracks. Files here are served at the site root, so
 | `game`    | Midnight_Interceptor.mp3  | GameScene (Meteor Defense), ExpressionScene                       |
 | `boss`    | Red_Room_Standoff.mp3     | BossScene                                                         |
 | `drift`   | Black_Glass_Horizon.mp3   | FactorScene (Factor Storm), CollapseScene                         |
+| `pulse`   | Chain_Reaction.mp3        | CollapseScene                                                     |
 | `debrief` | Rain_on_the_Pane.mp3      | DebriefScene                                                      |
 
 The free-flight modes take `drift` rather than `game`: meteors fall *at* you and
@@ -24,6 +25,19 @@ Scenes call `getAudio(this)?.playMusic('<track>')` in `create()`. Switching
 tracks crossfades over `CROSSFADE_MS`; re-requesting the playing track is a
 no-op, and missing files fail silently so the game runs with this directory
 empty.
+
+## Rotations
+
+`playMusic` also takes an array — `playMusic(['drift', 'pulse'])` — and the
+tracks hand off to each other at the end of each one, crossfading over the same
+`CROSSFADE_MS`, then wrapping. Collapse uses this: it has no wave structure to
+end a run, so sessions run long enough that one loop wears through.
+
+A rotation only loops the file when it is a rotation of one, so **tracks meant
+for rotation want a real ending, not a seamless loop point**. Re-requesting the
+same rotation is a no-op, so this is still safe to call in `create()`. If a file
+in a rotation is missing, that slot plays silence for its turn — the rotation
+does not skip it.
 
 Renaming a file here means updating `MUSIC_TRACKS`. Prefer seamless loops
 exported as compressed mp3/ogg — these files are streamed on demand, not part

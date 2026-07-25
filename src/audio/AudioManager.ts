@@ -43,7 +43,7 @@ export interface SfxOptions {
   gain?: number;
 }
 
-export type MusicTrack = 'menu' | 'game' | 'boss' | 'drift' | 'debrief';
+export type MusicTrack = 'menu' | 'game' | 'boss' | 'drift' | 'pulse' | 'debrief';
 
 /** Owner-supplied looping tracks in public/music/. Missing files are skipped. */
 const MUSIC_TRACKS: Record<MusicTrack, string> = {
@@ -52,6 +52,8 @@ const MUSIC_TRACKS: Record<MusicTrack, string> = {
   boss: 'music/Red_Room_Standoff.mp3',
   // Free-flight modes: weightless rather than driving.
   drift: 'music/Black_Glass_Horizon.mp3',
+  // The beat-driven counterpart to drift, for when a session needs a push.
+  pulse: 'music/Chain_Reaction.mp3',
   // Post-run: the comedown under the stats screen.
   debrief: 'music/Rain_on_the_Pane.mp3',
 };
@@ -218,6 +220,11 @@ interface ActiveLoop {
 const CROSSFADE_MS = 700;
 const FADE_STEP_MS = 40;
 
+/** Same tracks in the same order — a re-request of the running rotation. */
+function sameList(a: readonly MusicTrack[], b: readonly MusicTrack[]): boolean {
+  return a.length === b.length && a.every((track, i) => track === b[i]);
+}
+
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private sfxGain: GainNode | null = null;
@@ -236,8 +243,13 @@ export class AudioManager {
   private elements = new Map<MusicTrack, HTMLAudioElement>();
   private fades = new Map<MusicTrack, ReturnType<typeof setInterval>>();
   private current: MusicTrack | null = null;
+  /**
+   * The rotation the current track belongs to. A single-track request is a
+   * rotation of one, which loops; two or more hand off at the end of each track.
+   */
+  private playlist: readonly MusicTrack[] = [];
   /** Track requested before the autoplay unlock gesture arrived. */
-  private pending: MusicTrack | null = null;
+  private pending: readonly MusicTrack[] | null = null;
 
   sfxVolume: number;
   musicVolume: number;
@@ -510,32 +522,70 @@ export class AudioManager {
   // --- music ---
 
   /**
-   * Switch to a named track, crossfading from whatever is playing. Re-requesting
-   * the current track is a no-op, so scenes can call this in create() freely.
+   * Switch to a track, or to a rotation of them, crossfading from whatever is
+   * playing. Re-requesting what is already on is a no-op, so scenes can call
+   * this in create() freely — including on restart, where cutting the music back
+   * to the top of the same track would be the wrong answer.
+   *
+   * A rotation exists for the long modes: Collapse has no wave structure to end
+   * it, so a single loop wears through. Tracks hand off to each other at the end
+   * of each one rather than on any game event.
    */
-  playMusic(track: MusicTrack): void {
+  playMusic(track: MusicTrack | readonly MusicTrack[]): void {
+    const list = typeof track === 'string' ? [track] : track;
+    const first = list[0];
+    if (first === undefined) return;
     if (!this.unlocked) {
-      this.pending = track;
+      this.pending = list;
       return;
     }
     this.pending = null;
-    if (this.current === track) return;
+    // Already running this exact rotation: leave it where it is.
+    if (this.current !== null && sameList(this.playlist, list)) return;
 
-    const previous = this.current;
-    this.current = track;
-    if (previous) this.fadeOut(previous);
-
-    const el = this.element(track);
-    el.volume = 0;
-    void el.play().catch(() => undefined);
-    this.fadeTo(track, this.musicVolume);
+    this.playlist = list;
+    this.start(first);
   }
 
   /** Fade the current track out and leave nothing playing. */
   stopMusic(): void {
     if (this.current) this.fadeOut(this.current);
     this.current = null;
+    this.playlist = [];
     this.pending = null;
+  }
+
+  /** Crossfade to a track from within the current rotation. */
+  private start(track: MusicTrack): void {
+    const previous = this.current;
+    this.current = track;
+    if (previous !== null && previous !== track) this.fadeOut(previous);
+
+    const el = this.element(track);
+    // Only a rotation of one loops; the rest hand off in handoff().
+    el.loop = this.playlist.length <= 1;
+    el.currentTime = 0;
+    el.volume = 0;
+    void el.play().catch(() => undefined);
+    this.fadeTo(track, this.musicVolume);
+  }
+
+  /**
+   * Bring in the next track of the rotation as this one runs out. Driven by
+   * timeupdate so the two overlap for the crossfade, with `ended` as the backstop
+   * for streams that never report a duration.
+   */
+  private handoff(track: MusicTrack, ended: boolean): void {
+    // Fires ~4x/second: everything below is a cheap reject for the common case.
+    if (this.playlist.length < 2 || this.current !== track) return;
+    const el = this.elements.get(track);
+    if (!el) return;
+    if (!ended) {
+      if (!Number.isFinite(el.duration)) return;
+      if (el.duration - el.currentTime > CROSSFADE_MS / 1000) return;
+    }
+    const next = this.playlist[(this.playlist.indexOf(track) + 1) % this.playlist.length];
+    if (next !== undefined) this.start(next);
   }
 
   private element(track: MusicTrack): HTMLAudioElement {
@@ -544,6 +594,8 @@ export class AudioManager {
       el = new Audio(MUSIC_TRACKS[track]);
       el.loop = true;
       el.volume = 0;
+      el.addEventListener('timeupdate', () => this.handoff(track, false));
+      el.addEventListener('ended', () => this.handoff(track, true));
       this.elements.set(track, el);
     }
     return el;
