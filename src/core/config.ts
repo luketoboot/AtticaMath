@@ -105,12 +105,44 @@ export interface HazardConfig {
   invulnSeconds: number;
 }
 
+/**
+ * Combo meter and the pace it drives. See core/combo.ts — the multiplier is
+ * tiered rather than smooth so that each crossing is an event, and the pace
+ * coupling means good play speeds the game up.
+ */
+export interface ComboConfig {
+  /** Idle window at tier 0, shrinking per tier down to the floor. */
+  baseWindowSeconds: number;
+  windowShrinkPerTier: number;
+  minWindowSeconds: number;
+  /** Combo counts at which each tier begins. */
+  tierThresholds: readonly number[];
+  /** Score multiplier per tier; index 0 is "no combo". */
+  tierMultipliers: readonly number[];
+  /** Seconds a wrong digit knocks off the window. */
+  wrongDigitPenaltySeconds: number;
+  /** Fraction of the combo kept when a meteor's shot connects. */
+  damageKeepFraction: number;
+  /** Combo count (and every multiple of it) that triggers overdrive. */
+  overdriveAt: number;
+  overdriveSeconds: number;
+  /** Descent speed multiplier per pace tier. */
+  fallSpeedPerTier: number;
+  /** Spawn-gap multiplier per pace tier (below 1 = faster). */
+  spawnGapPerTier: number;
+  /** Extra concurrent targets per pace tier, floored. */
+  concurrentPerTier: number;
+  /** Pace stops climbing here even though the multiplier does not. */
+  maxPaceTier: number;
+}
+
 export interface ScoreConfig {
   /** Base points for a kill. */
   killBase: number;
   /** Extra points per difficulty point of the problem. */
   difficultyBonus: number;
-  /** Streak multiplier step per consecutive kill (1.0, 1.1, 1.2, ...). */
+  /** Streak multiplier step per consecutive kill (1.0, 1.1, 1.2, ...). Used by
+   * the modes that still run a plain streak; meteor mode uses the combo tiers. */
   streakStep: number;
   maxStreakMultiplier: number;
   /** Bonus multiplier for answering faster than target latency. */
@@ -214,6 +246,7 @@ export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
   meteors: MeteorConfig;
+  combo: ComboConfig;
   expression: ExpressionConfig;
   boss: BossConfig;
   hazard: HazardConfig;
@@ -258,16 +291,31 @@ export const CONFIG: GameConfig = {
     coachedSkillWeight: 3,
   },
   meteors: {
-    baseFallSeconds: 14,
+    baseFallSeconds: 10,
     fallSpeedupPerWave: 0.94,
-    minFallSeconds: 6,
+    minFallSeconds: 5,
     difficultySlowdownMs: 8,
-    baseSpawnGapSeconds: 3.2,
-    minSpawnGapSeconds: 1.4,
+    baseSpawnGapSeconds: 2.2,
+    minSpawnGapSeconds: 0.9,
     spawnGapShrinkPerWave: 0.93,
     baseHp: 5,
-    breatherSeconds: 6,
-    maxConcurrentMeteors: 4,
+    breatherSeconds: 3.5,
+    maxConcurrentMeteors: 5,
+  },
+  combo: {
+    baseWindowSeconds: 4.5,
+    windowShrinkPerTier: 0.5,
+    minWindowSeconds: 2,
+    tierThresholds: [4, 8, 12, 16],
+    tierMultipliers: [1, 1.5, 2, 3, 4],
+    wrongDigitPenaltySeconds: 0.5,
+    damageKeepFraction: 0.5,
+    overdriveAt: 20,
+    overdriveSeconds: 5,
+    fallSpeedPerTier: 0.08,
+    spawnGapPerTier: 0.92,
+    concurrentPerTier: 0.5,
+    maxPaceTier: 4,
   },
   expression: {
     baseTargetsPerWave: 5,

@@ -97,7 +97,7 @@ describe('session gunfire integration', () => {
     expect(armedSession().meteorsArmed).toBe(true);
   });
 
-  it('a shot costs hp but leaves the streak and the shield alone', () => {
+  it('a shot costs hp and half the combo, but leaves the shield alone', () => {
     const s = new RunSession({
       seed: 42,
       skills: {},
@@ -107,13 +107,15 @@ describe('session gunfire integration', () => {
       loadout: ['upgrade.shield'],
     });
     const plan = s.nextWave();
-    s.recordHit(plan.problems[0]!, 1200);
+    for (let i = 0; i < 6; i++) s.recordHit(plan.problems[i]!, 1200);
     const hp = s.hp;
     const streak = s.streak;
 
     s.takeDamage();
     expect(s.hp).toBe(hp - 1); // the miss shield is for math, not for dodging
-    expect(s.streak).toBe(streak);
+    // Halved, not cleared: dodging is a reflex test, not a math failure.
+    expect(s.streak).toBe(Math.floor(streak * CONFIG.combo.damageKeepFraction));
+    expect(s.streak).toBeGreaterThan(0);
     expect(s.shotsTaken).toBe(1);
 
     // ...and the shield is still there for the first meteor that lands.

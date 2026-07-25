@@ -14,6 +14,8 @@ import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 interface LiveMeteor {
   container: Phaser.GameObjects.Container;
+  /** Kept out of the container's child list so the prefix lock can recolour it. */
+  label: Phaser.GameObjects.Text;
   problem: Problem;
   spawnedAt: number;
   speed: number;
@@ -34,6 +36,8 @@ type Phase = 'wave' | 'breather' | 'over';
 const METEOR_START_Y = -50;
 /** glowdot is 32px wide, so this renders a shot roughly 24px across. */
 const BULLET_SCALE = 0.75;
+/** Full width of the combo drain bar under the multiplier readout. */
+const COMBO_BAR_WIDTH = 150;
 
 export class GameScene extends Phaser.Scene {
   private session!: RunSession;
@@ -63,6 +67,12 @@ export class GameScene extends Phaser.Scene {
   private streakText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private bufferText!: Phaser.GameObjects.Text;
+  private comboBar!: Phaser.GameObjects.Rectangle;
+  /** Previous frame's combo state, so tier crossings can be celebrated once. */
+  private lastComboTier = 0;
+  private overdriveWasActive = false;
+  /** Cancelled when the player skips the breather. */
+  private breatherTimer: Phaser.Time.TimerEvent | undefined;
 
   constructor() {
     super('Game');
@@ -123,6 +133,8 @@ export class GameScene extends Phaser.Scene {
     padToggle.on('pointerdown', () => numpad.setVisible(!numpad.visible));
 
     this.setupDodgeInput();
+    // SPACE skips the breather; capture it so the page never scrolls instead.
+    this.input.keyboard?.addCapture('SPACE');
 
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.phase === 'over') return;
@@ -142,25 +154,33 @@ export class GameScene extends Phaser.Scene {
     this.movePlayer(dt);
     if (this.phase !== 'wave') return;
 
+    // The combo clock only runs while a wave does; the breather is forced
+    // downtime and must not cost the player a combo they earned.
+    this.session.tick(dt);
+    this.syncCombo();
+
     this.sinceSpawn += dt;
     if (
       this.spawnQueue.length > 0 &&
-      this.meteors.length < CONFIG.meteors.maxConcurrentMeteors &&
+      this.meteors.length < this.session.maxConcurrentMeteors() &&
       this.sinceSpawn >= this.session.spawnGapSeconds()
     ) {
       this.sinceSpawn = 0;
       this.spawnMeteor(this.spawnQueue.shift()!);
     }
 
+    // Overdrive freezes the descent but not the spawning: the board fills up
+    // while you clear it for free, then everything resumes at once.
+    const descent = this.session.overdriveActive ? 0 : dt;
     for (const m of [...this.meteors]) {
-      m.container.y += m.speed * dt;
+      m.container.y += m.speed * descent;
       if (m.container.y >= this.groundY - 10) {
         this.landMeteor(m);
       }
     }
     if (this.phase !== 'wave') return; // a landing ended the run
 
-    this.updateGunfire(dt);
+    if (!this.session.overdriveActive) this.updateGunfire(dt);
     this.updateBullets(dt);
     if (this.phase !== 'wave') return; // a shot ended the run
 
@@ -234,7 +254,46 @@ export class GameScene extends Phaser.Scene {
       );
     }
 
-    this.time.delayedCall(CONFIG.meteors.breatherSeconds * 1000, () => {
+    // The combo survives a clean wave, so say so — it is the reason to care
+    // about the last meteor of a wave you have already won.
+    if (this.session.streak > 0) {
+      lines.push(
+        this.add
+          .text(width / 2, height * 0.4, `COMBO HELD  x${this.session.comboMultiplier}`, {
+            fontFamily: FONT,
+            fontSize: '20px',
+            fontStyle: 'bold',
+            color: CSS.yellow,
+          })
+          .setOrigin(0.5),
+      );
+    }
+
+    const skipHint = this.add
+      .text(width / 2, height * 0.62, '[ SPACE ]  LAUNCH NEXT WAVE', {
+        fontFamily: FONT,
+        fontSize: '16px',
+        color: CSS.cyanDim,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.85);
+    lines.push(skipHint);
+
+    const launch = (): void => {
+      if (this.phase !== 'breather') return;
+      this.breatherTimer?.remove();
+      this.breatherTimer = undefined;
+      this.input.keyboard?.off('keydown-SPACE', launch);
+      for (const l of lines) l.destroy();
+      this.startWave();
+    };
+    // Waiting out a breather you don't need is dead air; let the player set the
+    // tempo. The timer is the floor on the rest, not the rule.
+    this.input.keyboard?.once('keydown-SPACE', launch);
+
+    this.breatherTimer = this.time.delayedCall(CONFIG.meteors.breatherSeconds * 1000, () => {
+      this.breatherTimer = undefined;
+      this.input.keyboard?.off('keydown-SPACE', launch);
       for (const l of lines) l.destroy();
       if (this.phase !== 'over') this.startWave();
     });
@@ -264,14 +323,19 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: rock, angle: 360, duration: 9000, repeat: -1 });
 
     const distance = this.groundY - startY;
+    // Read once, at spawn: this meteor keeps the pace it was born with even if
+    // the combo climbs mid-fall.
     const speed = distance / this.session.fallSeconds(problem.difficulty);
     this.meteors.push({
       container,
+      label,
       problem,
       spawnedAt: this.time.now,
       speed,
       nextFireAt: this.time.now + CONFIG.hazard.fireCooldownSeconds * 1000,
     });
+    // A meteor that arrives mid-buffer still has to answer to it.
+    this.refreshLocks(this.buffer.value);
   }
 
   private removeMeteor(m: LiveMeteor): void {
@@ -317,9 +381,33 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryFire(buffer: string): void {
-    if (this.phase !== 'wave' || buffer.length === 0) return;
+    if (this.phase !== 'wave') return;
+    if (buffer.length === 0) {
+      this.refreshLocks('');
+      return;
+    }
     const matches = this.meteors.filter((m) => m.problem.answer === buffer);
-    if (matches.length === 0) return;
+    if (matches.length === 0) {
+      this.refreshLocks(buffer);
+      // A buffer no live answer even starts with is a dead end. Clearing it for
+      // the player beats making them find backspace mid-wave, and the cost is
+      // combo clock — mistakes cost time, never progress.
+      if (!this.meteors.some((m) => m.problem.answer.startsWith(buffer))) {
+        this.session.recordWrongDigit();
+        this.buffer.clear();
+        getAudio(this)?.play('error');
+        this.bufferText.setColor(CSS.red);
+        this.tweens.add({
+          targets: this.bufferText,
+          alpha: 0.2,
+          duration: 90,
+          yoyo: true,
+          onComplete: () => this.bufferText.setColor(CSS.cyan),
+        });
+        this.syncCombo();
+      }
+      return;
+    }
 
     // Closest to the ground first; spread cannon hits all matches.
     matches.sort((a, b) => b.container.y - a.container.y);
@@ -357,7 +445,21 @@ export class GameScene extends Phaser.Scene {
       hitStopMs: juice.hitStopMs,
     });
     this.buffer.clear();
+    this.refreshLocks('');
     this.updateHud();
+  }
+
+  /**
+   * Light up every meteor the current buffer could still become. Typing is the
+   * aiming in this game, so the field has to show what the buffer is aimed at
+   * before the shot goes off.
+   */
+  private refreshLocks(buffer: string): void {
+    for (const m of this.meteors) {
+      const locked = buffer.length > 0 && m.problem.answer.startsWith(buffer);
+      m.label.setColor(locked ? CSS.yellow : CSS.white);
+      m.container.setScale(locked ? 1.08 : 1);
+    }
   }
 
   // --- dodging & meteor gunfire ---
@@ -677,6 +779,13 @@ export class GameScene extends Phaser.Scene {
       .text(width - 24, 50, '', { ...style, color: CSS.yellow })
       .setOrigin(1, 0)
       .setDepth(hud);
+    // Drain bar under the combo readout. The combo is a clock, so it needs a
+    // clock's face — a number alone gives no warning that it is about to go.
+    this.comboBar = this.add
+      .rectangle(width - 24, 80, COMBO_BAR_WIDTH, 6, PALETTE.yellow)
+      .setOrigin(1, 0)
+      .setDepth(hud)
+      .setVisible(false);
     this.waveText = this.add
       .text(width / 2, 20, '', { ...style, color: CSS.cyanDim })
       .setOrigin(0.5, 0)
@@ -703,7 +812,55 @@ export class GameScene extends Phaser.Scene {
   private updateHud(): void {
     this.hpText.setText(`HP ${'█'.repeat(Math.max(0, this.session.hp))}`);
     this.scoreText.setText(`${this.session.score}`);
-    this.streakText.setText(this.session.streak > 1 ? `STREAK x${this.session.streak}` : '');
+    this.syncCombo();
+  }
+
+  /**
+   * Redraw the combo readout and fire the one-shot cues for crossing a tier or
+   * entering overdrive. Called every frame *and* after every kill, so both
+   * transitions are caught wherever they happen.
+   */
+  private syncCombo(): void {
+    const { session } = this;
+    const tier = session.comboTier;
+    const overdrive = session.overdriveActive;
+    const mult = session.comboMultiplier;
+
+    this.streakText.setText(session.streak > 0 ? `x${mult}  ${session.streak}` : '');
+    this.streakText.setColor(overdrive ? CSS.magentaHot : CSS.yellow);
+    this.comboBar
+      .setVisible(session.streak > 0)
+      .setFillStyle(overdrive ? PALETTE.magenta : PALETTE.yellow)
+      .setSize(Math.max(1, COMBO_BAR_WIDTH * session.comboFraction), 6);
+
+    const audio = getAudio(this);
+    if (tier > this.lastComboTier) {
+      // A pop on the readout, not a banner across the field — the player is
+      // reading meteors at this moment and must not be interrupted.
+      this.streakText.setScale(1);
+      this.tweens.add({
+        targets: this.streakText,
+        scale: 1.5,
+        duration: 110,
+        yoyo: true,
+        ease: 'Quad.easeOut',
+      });
+      audio?.play('fast', { pitch: 1 + tier * 0.12 });
+      glowPulse(this, CONFIG.juice.glowPulseKill);
+    }
+    this.lastComboTier = tier;
+
+    if (overdrive && !this.overdriveWasActive) {
+      this.banner('OVERDRIVE', CSS.magentaHot);
+      audio?.play('wave', { pitch: 1.4 });
+      this.cameras.main.flash(220, 255, 45, 149);
+      glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    } else if (!overdrive && this.overdriveWasActive) {
+      // Everything that piled up during the freeze starts falling at once.
+      audio?.play('slowfield', { pitch: 0.7 });
+      this.cameras.main.flash(160, 0, 220, 255);
+    }
+    this.overdriveWasActive = overdrive;
   }
 
   // --- end of run ---

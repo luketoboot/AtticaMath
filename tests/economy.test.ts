@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/core/config';
-import { creditsForRun, killScore, purchase, UPGRADES } from '../src/core/economy/economy';
+import {
+  creditsForRun,
+  killScore,
+  purchase,
+  streakMultiplier,
+  UPGRADES,
+} from '../src/core/economy/economy';
 
 const eco = CONFIG.economy;
 const score = CONFIG.score;
@@ -56,18 +62,25 @@ describe('purchase', () => {
 
 describe('killScore', () => {
   it('scales with difficulty', () => {
-    expect(killScore(800, 0, false, score)).toBeGreaterThan(killScore(200, 0, false, score));
+    expect(killScore(800, 1, false, score)).toBeGreaterThan(killScore(200, 1, false, score));
   });
 
-  it('scales with streak up to the cap', () => {
-    const none = killScore(500, 0, false, score);
-    const some = killScore(500, 5, false, score);
-    const capped = killScore(500, 500, false, score);
-    expect(some).toBeGreaterThan(none);
-    expect(capped).toBe(killScore(500, 1000, false, score));
+  it('scales with the multiplier it is handed', () => {
+    expect(killScore(500, 3, false, score)).toBe(3 * killScore(500, 1, false, score));
   });
 
   it('pays a speed bonus', () => {
-    expect(killScore(500, 0, true, score)).toBeGreaterThan(killScore(500, 0, false, score));
+    expect(killScore(500, 1, true, score)).toBeGreaterThan(killScore(500, 1, false, score));
+  });
+});
+
+describe('streakMultiplier', () => {
+  it('climbs with the streak', () => {
+    expect(streakMultiplier(5, score)).toBeGreaterThan(streakMultiplier(0, score));
+  });
+
+  it('caps', () => {
+    expect(streakMultiplier(500, score)).toBe(score.maxStreakMultiplier);
+    expect(streakMultiplier(1000, score)).toBe(streakMultiplier(500, score));
   });
 });

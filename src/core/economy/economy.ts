@@ -77,14 +77,24 @@ export function purchase(
   return { ok: true, credits: credits - price, owned: [...owned, upgradeId] };
 }
 
-/** Score for one kill given problem difficulty, current streak, and speed. */
+/**
+ * Score for one kill.
+ *
+ * The multiplier is passed in rather than derived from a streak, because the
+ * modes disagree about where it comes from: meteor mode uses the tiered combo
+ * meter, the others still run a plain streak through `streakMultiplier`.
+ */
 export function killScore(
   difficulty: number,
-  streak: number,
+  multiplier: number,
   beatTargetLatency: boolean,
   cfg: ScoreConfig,
 ): number {
-  const streakMult = Math.min(cfg.maxStreakMultiplier, 1 + streak * cfg.streakStep);
   const speedMult = beatTargetLatency ? cfg.speedBonusMultiplier : 1;
-  return Math.floor((cfg.killBase + difficulty * cfg.difficultyBonus) * streakMult * speedMult);
+  return Math.floor((cfg.killBase + difficulty * cfg.difficultyBonus) * multiplier * speedMult);
+}
+
+/** Smooth streak multiplier, capped. Used by the modes without a combo meter. */
+export function streakMultiplier(streak: number, cfg: ScoreConfig): number {
+  return Math.min(cfg.maxStreakMultiplier, 1 + streak * cfg.streakStep);
 }

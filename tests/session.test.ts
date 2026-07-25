@@ -138,3 +138,78 @@ describe('run flow', () => {
     expect(planA.problems.map((p) => p.prompt)).toEqual(planB.problems.map((p) => p.prompt));
   });
 });
+
+describe('combo in a run', () => {
+  const combo = CONFIG.combo;
+
+  function hitAll(s: RunSession, n: number): void {
+    const plan = s.nextWave();
+    for (let i = 0; i < n; i++) s.recordHit(plan.problems[i % plan.problems.length]!, 1200);
+  }
+
+  it('kills raise the multiplier and the multiplier raises the score', () => {
+    const s = freshSession({ placementDone: true });
+    const plan = s.nextWave();
+    const first = s.recordHit(plan.problems[0]!, 1200);
+    expect(s.comboMultiplier).toBe(1);
+
+    // Climb past the first tier, then score the same problem again.
+    for (let i = 0; i < combo.tierThresholds[0]!; i++) s.recordHit(plan.problems[0]!, 1200);
+    expect(s.comboMultiplier).toBeGreaterThan(1);
+    expect(s.recordHit(plan.problems[0]!, 1200)).toBeGreaterThan(first);
+  });
+
+  it('cools off when the window empties', () => {
+    const s = freshSession({ placementDone: true });
+    hitAll(s, 5);
+    expect(s.streak).toBe(5);
+    s.tick(combo.baseWindowSeconds + 1);
+    expect(s.streak).toBe(0);
+    expect(s.comboMultiplier).toBe(1);
+  });
+
+  it('wrong digits cost clock but not the combo', () => {
+    const s = freshSession({ placementDone: true });
+    hitAll(s, 3);
+    const before = s.comboFraction;
+    s.recordWrongDigit();
+    expect(s.streak).toBe(3);
+    expect(s.comboFraction).toBeLessThan(before);
+  });
+
+  it('carries the combo through a clean wave and drops it after a landing', () => {
+    const clean = freshSession({ placementDone: true });
+    hitAll(clean, 4);
+    clean.endWave();
+    expect(clean.streak).toBe(4);
+
+    const messy = freshSession({ placementDone: true });
+    const plan = messy.nextWave();
+    for (let i = 0; i < 4; i++) messy.recordHit(plan.problems[i]!, 1200);
+    messy.recordMiss(plan.problems[5]!, 9000);
+    messy.recordHit(plan.problems[6]!, 1200);
+    messy.endWave();
+    expect(messy.streak).toBe(0);
+  });
+
+  it('a hot combo speeds the board up', () => {
+    const s = freshSession({ placementDone: true });
+    s.nextWave();
+    const calmFall = s.fallSeconds(500);
+    const calmGap = s.spawnGapSeconds();
+    const calmBoard = s.maxConcurrentMeteors();
+
+    hitAll(s, combo.tierThresholds[combo.tierThresholds.length - 1]!);
+    expect(s.fallSeconds(500)).toBeLessThan(calmFall);
+    expect(s.spawnGapSeconds()).toBeLessThan(calmGap);
+    expect(s.maxConcurrentMeteors()).toBeGreaterThan(calmBoard);
+  });
+
+  it('reports the best combo in the run stats', () => {
+    const s = freshSession({ placementDone: true });
+    hitAll(s, 7);
+    s.tick(combo.baseWindowSeconds + 1);
+    expect(s.streak).toBe(0);
+    expect(s.stats().bestStreak).toBe(7);
+  });
+});

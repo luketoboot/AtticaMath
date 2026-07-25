@@ -2,6 +2,22 @@
  * RunSession: the pure simulation for one run of Meteor Defense.
  * The Phaser scene is a dumb renderer/driver around this object.
  */
+import {
+  comboBreak,
+  comboDamaged,
+  comboFraction,
+  comboHit,
+  comboMultiplier,
+  comboTier,
+  comboWrongDigit,
+  createCombo,
+  overdriveActive,
+  paceExtraConcurrent,
+  paceFallMultiplier,
+  paceSpawnGapMultiplier,
+  tickCombo,
+  type ComboState,
+} from './combo';
 import { CONFIG, type GameConfig } from './config';
 import { selectTip, type CoachPick } from './coach/select';
 import { creditsForRun, killScore, type RunStats } from './economy/economy';
@@ -51,8 +67,6 @@ export class RunSession {
   private readonly filter: SkillFilter;
 
   score = 0;
-  streak = 0;
-  bestStreak = 0;
   kills = 0;
   misses = 0;
   /** Meteor shots that connected — HP lost to dodging, not to math. */
@@ -60,6 +74,9 @@ export class RunSession {
   hp: number;
   readonly loadout: readonly string[];
   private shieldUsed = false;
+  private combo: ComboState = createCombo();
+  /** Landings this wave; a clean wave carries the combo through the breather. */
+  private missesThisWave = 0;
 
   constructor(init: RunSessionInit) {
     this.cfg = init.config ?? CONFIG;
@@ -94,6 +111,47 @@ export class RunSession {
     return this.hp <= 0;
   }
 
+  // --- combo ---
+
+  /** Consecutive answers. Named `streak` because that is what the HUD calls it. */
+  get streak(): number {
+    return this.combo.count;
+  }
+
+  get comboState(): Readonly<ComboState> {
+    return this.combo;
+  }
+
+  get comboTier(): number {
+    return comboTier(this.combo, this.cfg.combo);
+  }
+
+  get comboMultiplier(): number {
+    return comboMultiplier(this.combo, this.cfg.combo);
+  }
+
+  /** 0..1 of the combo window remaining, for the drain bar. */
+  get comboFraction(): number {
+    return comboFraction(this.combo, this.cfg.combo);
+  }
+
+  get overdriveActive(): boolean {
+    return overdriveActive(this.combo);
+  }
+
+  /** Bleed the combo clock. The scene calls this once per frame while a wave runs. */
+  tick(dtSeconds: number): void {
+    this.combo = tickCombo(this.combo, dtSeconds, this.cfg.combo);
+  }
+
+  /**
+   * A typed digit that no live problem can lead to. Costs combo clock, never
+   * the combo itself.
+   */
+  recordWrongDigit(): void {
+    this.combo = comboWrongDigit(this.combo, this.cfg.combo);
+  }
+
   /** Advance to the next wave and get its problem list. */
   nextWave(): WavePlan {
     this.waveInRun += 1;
@@ -114,8 +172,12 @@ export class RunSession {
     }
   }
 
-  /** Player killed a meteor (typed the right answer). */
-  recordHit(problem: Problem, responseMs: number): number {
+  /**
+   * Player killed a meteor (typed the right answer). `comboGain` is above 1 for
+   * bonus targets. Scores at the multiplier as it stands *before* this kill, so
+   * crossing a tier pays out from the next kill on.
+   */
+  recordHit(problem: Problem, responseMs: number, comboGain = 1): number {
     const attempt = { correct: true, responseMs, difficulty: problem.difficulty, wave: this.globalWave };
     this.skills = applyAttempt(this.skills, problem.skillIds, attempt, this.cfg.rating);
     if (!this.placementDone) {
@@ -125,9 +187,8 @@ export class RunSession {
     }
     this.kills += 1;
     const fast = responseMs <= targetLatencyMs(problem.difficulty, this.cfg.rating);
-    const points = killScore(problem.difficulty, this.streak, fast, this.cfg.score);
-    this.streak += 1;
-    this.bestStreak = Math.max(this.bestStreak, this.streak);
+    const points = killScore(problem.difficulty, this.comboMultiplier, fast, this.cfg.score);
+    this.combo = comboHit(this.combo, this.cfg.combo, comboGain);
     this.score += points;
     return points;
   }
@@ -142,7 +203,8 @@ export class RunSession {
       }
     }
     this.misses += 1;
-    this.streak = 0;
+    this.missesThisWave += 1;
+    this.combo = comboBreak(this.combo);
     if (this.loadout.includes('upgrade.shield') && !this.shieldUsed) {
       this.shieldUsed = true;
       return;
@@ -155,6 +217,10 @@ export class RunSession {
    * for the breather (if any), and quietly overweights that skill next wave.
    */
   endWave(): CoachPick | undefined {
+    // Clean wave, keep the combo through the breather; anything landed and it
+    // cools off with the wave. The carry is the reward for a perfect clear.
+    if (this.missesThisWave > 0) this.combo = comboBreak(this.combo);
+    this.missesThisWave = 0;
     this.maybeFinishPlacement();
     if (!this.placementDone) return undefined;
     const pick = selectTip(this.skills, this.globalWave, COACH_RECENCY_WAVES, this.lastTipSkill);
@@ -171,7 +237,7 @@ export class RunSession {
       wavesCleared: Math.max(0, this.waveInRun - (this.gameOver ? 1 : 0)),
       kills: this.kills,
       misses: this.misses,
-      bestStreak: this.bestStreak,
+      bestStreak: this.combo.best,
     };
   }
 
@@ -179,13 +245,26 @@ export class RunSession {
     return creditsForRun(this.stats(), this.cfg.economy);
   }
 
-  /** Meteor fall time in seconds for the current wave and a problem's difficulty. */
+  /**
+   * Meteor fall time in seconds for the current wave and a problem's
+   * difficulty. Read at spawn time, so a meteor keeps the pace it was born
+   * with — the combo speeds up what comes next, it does not yank what is
+   * already falling out from under the player.
+   */
   fallSeconds(difficulty: number): number {
     const m = this.cfg.meteors;
     let secs = m.baseFallSeconds * Math.pow(m.fallSpeedupPerWave, this.waveInRun - 1);
     secs += (difficulty * m.difficultySlowdownMs) / 1000;
     if (this.loadout.includes('upgrade.slowfield')) secs *= 1.15;
+    secs /= paceFallMultiplier(this.combo, this.cfg.combo);
     return Math.max(m.minFallSeconds, secs);
+  }
+
+  /** Simultaneous meteors allowed right now — the board widens with the combo. */
+  maxConcurrentMeteors(): number {
+    return (
+      this.cfg.meteors.maxConcurrentMeteors + paceExtraConcurrent(this.combo, this.cfg.combo)
+    );
   }
 
   // --- meteor gunfire ---
@@ -207,19 +286,21 @@ export class RunSession {
   }
 
   /**
-   * A meteor's shot connected. Costs HP but leaves the streak and the skill
-   * ratings alone — dodging is a reflex test, not a math attempt — and the miss
-   * shield stays reserved for problems the player failed to answer.
+   * A meteor's shot connected. Costs HP and halves the combo, but leaves the
+   * skill ratings alone — dodging is a reflex test, not a math attempt — and
+   * the miss shield stays reserved for problems the player failed to answer.
    */
   takeDamage(): void {
     this.hp -= 1;
     this.shotsTaken += 1;
+    this.combo = comboDamaged(this.combo, this.cfg.combo);
   }
 
   /** Spawn gap in seconds for the current wave. */
   spawnGapSeconds(): number {
     const m = this.cfg.meteors;
-    const gap = m.baseSpawnGapSeconds * Math.pow(m.spawnGapShrinkPerWave, this.waveInRun - 1);
+    let gap = m.baseSpawnGapSeconds * Math.pow(m.spawnGapShrinkPerWave, this.waveInRun - 1);
+    gap *= paceSpawnGapMultiplier(this.combo, this.cfg.combo);
     return Math.max(m.minSpawnGapSeconds, gap);
   }
 }

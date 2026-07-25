@@ -4,7 +4,7 @@
  */
 import { CONFIG, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
-import { creditsForRun, killScore, type RunStats } from '../economy/economy';
+import { creditsForRun, killScore, streakMultiplier, type RunStats } from '../economy/economy';
 import { createRng, type Rng } from '../rng';
 import { applyAttempt, targetLatencyMs, type SkillTable } from '../skills/rating';
 import type { SkillId } from '../skills/taxonomy';
@@ -129,7 +129,12 @@ export class ExpressionSession {
     this.kills += 1;
     const e = this.cfg.expression;
     const fast = responseMs <= targetLatencyMs(problem.difficulty, this.cfg.rating);
-    const base = killScore(problem.difficulty, this.streak, fast, this.cfg.score);
+    const base = killScore(
+      problem.difficulty,
+      streakMultiplier(this.streak, this.cfg.score),
+      fast,
+      this.cfg.score,
+    );
     const unusedChips = problem.hand.length - chipsUsed(tokens).length;
     const efficiencyBonus = Math.max(0, unusedChips) * e.efficiencyBonusPerChip;
     const varietyBonus = distinctOps(tokens).length > 1 ? distinctOps(tokens).length * e.varietyBonusPerOperator : 0;
