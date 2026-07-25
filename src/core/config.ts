@@ -540,7 +540,9 @@ export const CONFIG: GameConfig = {
     baseTargetsPerWave: 5,
     targetsPerWaveGrowth: 1,
     maxTargetsPerWave: 9,
-    handSize: 6,
+    // Four chips: the hand mirrors the four operators, so ASDF addresses
+    // either row completely and no chip ever hides on G or H.
+    handSize: 4,
     targetsOnScreen: 2,
     maxChips: 4,
     chipMin: 2,

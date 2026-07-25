@@ -233,9 +233,9 @@ export class ExpressionSession {
   }
 
   /**
-   * Deal a hand that can actually build something. A hand of six chips that
-   * reaches nothing in range is vanishingly rare, but "vanishingly rare" is
-   * still a locked game, so it is redealt rather than hoped about.
+   * Deal a hand that can actually build something. A hand that reaches
+   * nothing in range is vanishingly rare, but "vanishingly rare" is still a
+   * locked game, so it is redealt rather than hoped about.
    */
   private dealHand(): void {
     const e = this.cfg.expression;

@@ -16,8 +16,9 @@ const OP_KEYS: Record<string, Op> = { '+': '+', '-': '-', '*': '×', x: '×', X:
 const OPS: readonly Op[] = ['+', '-', '×', '÷'];
 
 /**
- * Home-row picks, left to right. ASDF covers the four operators and a typical
- * hand; G and H only ever light up when the hand runs to five or six chips.
+ * Home-row picks, left to right. ASDF covers the four operators and the
+ * standard four-chip hand exactly; G and H stay for modes that deal bigger
+ * hands (the benched boss fight deals five).
  */
 const HOME_KEYS = ['A', 'S', 'D', 'F', 'G', 'H'] as const;
 

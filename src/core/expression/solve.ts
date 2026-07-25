@@ -7,7 +7,7 @@
  * cannot reach the number falling at them. It also gives us par — the fewest
  * chips any solution needs — which is the thing worth chasing.
  *
- * The search space is tiny (a hand of six, at most four chips per expression,
+ * The search space is tiny (a handful of chips, at most four per expression,
  * four operators, no parentheses), so this is a plain exhaustive walk. It reuses
  * `evaluateTokens` rather than reimplementing the rules, which is the only way
  * the solver and the game can be guaranteed to agree about what is legal.

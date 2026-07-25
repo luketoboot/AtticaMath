@@ -4,6 +4,8 @@ import { num, op, type Token } from '../src/core/expression/expression';
 import { ExpressionSession } from '../src/core/expression/session';
 import { solveTarget } from '../src/core/expression/solve';
 import { skillsForTokens, type ExpressionProblem } from '../src/core/expression/generate';
+import { createSkillTable } from '../src/core/skills/rating';
+import { allSkillIds } from '../src/core/skills/taxonomy';
 
 function freshSession(
   overrides: Partial<ConstructorParameters<typeof ExpressionSession>[0]> = {},
@@ -51,6 +53,33 @@ describe('hand as the wave resource', () => {
       }
       s.endWave();
     }
+  });
+
+  it('stays solvable at ratings that demand whole-hand puzzles', () => {
+    // At fourChipRating the generator aims for par 4 — the entire hand, now
+    // that the hand is four chips. That is the tightest the solvability
+    // promise gets, so drive it hard and check every target is still makeable.
+    const skills = createSkillTable(allSkillIds(), CONFIG.rating);
+    for (const state of Object.values(skills)) {
+      state.rating = CONFIG.expression.fourChipRating + 100;
+      state.attempts = 5;
+    }
+    const s = freshSession({ seed: 13, skills });
+    let sawBigPar = false;
+    for (let wave = 0; wave < 6; wave++) {
+      s.nextWave();
+      let problem = s.spawnTarget();
+      while (problem) {
+        if (problem.par >= 3) sawBigPar = true;
+        expect(problem.par).toBeLessThanOrEqual(CONFIG.expression.handSize);
+        const tokens = solutionFor(s, problem);
+        expect(s.fire(tokens, 2000).result).toBe('hit');
+        problem = s.spawnTarget();
+      }
+      s.endWave();
+    }
+    // The point of the test is the high-par path; prove it actually engaged.
+    expect(sawBigPar).toBe(true);
   });
 
   it('spends the chips used and refills the hand', () => {
