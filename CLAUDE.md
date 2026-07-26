@@ -53,6 +53,8 @@ Math problems fall from the top as meteors. Player types the answer. The input b
 
 Input details matter: numpad and top row digits both work, backspace clears the buffer, buffer displays on screen as the current "charge". If two meteors share the same answer, the fired shot hits the closest one.
 
+Stamina is the price of a wrong answer beyond time. Because the buffer fires on match, mashing digits is otherwise a real strategy — spray enough at a full field and some land, and the only cost was combo clock. So a dead-end buffer (digits no live answer even begins with, which is this game's version of committing to a wrong answer) also costs stamina. It regenerates on its own after a short delay, so a player doing arithmetic never sees the meter move far; empty it and the buffer stops accepting digits until it recovers past a threshold. The lip on recovery is deliberate — unlocking at zero would let a masher tap one digit per frame forever. Rejected keys buzz; they are never silently swallowed. Tunables in `config.stamina`, logic in `core/stamina.ts`.
+
 ### Mode 2: Expression Builder (second)
 A target number falls. The player has ammunition: a hand of numbers and operators. They compose an expression that evaluates to the target and fire it. Multiple valid solutions exist; award bonuses for ammo efficiency and operator variety. This is Countdown numbers round as an action game. Same skill model feeds it, and which operators the player avoids is itself a rating signal.
 

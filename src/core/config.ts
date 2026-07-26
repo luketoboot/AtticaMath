@@ -202,6 +202,24 @@ export interface ComboConfig {
   maxPaceTier: number;
 }
 
+/**
+ * Stamina — the price of a wrong answer beyond time. See core/stamina.ts.
+ *
+ * Tuned so a player who is doing arithmetic never sees the meter move far, and
+ * a player mashing digits runs it dry in a handful of mistakes.
+ */
+export interface StaminaConfig {
+  /** Full tank. */
+  max: number;
+  /** Charged for a buffer no live answer begins with. */
+  costPerMistake: number;
+  regenPerSecond: number;
+  /** No regen for this long after a mistake, so a burst of them compounds. */
+  regenDelaySeconds: number;
+  /** Once empty, typing stays locked until the tank climbs back to this. */
+  recoverAt: number;
+}
+
 export interface ScoreConfig {
   /** Base points for a kill. */
   killBase: number;
@@ -550,6 +568,7 @@ export interface GameConfig {
   boss: BossConfig;
   exercise: ExerciseConfig;
   hazard: HazardConfig;
+  stamina: StaminaConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
   juice: JuiceConfig;
@@ -836,6 +855,16 @@ export const CONFIG: GameConfig = {
     invulnSeconds: 1.2,
     crushRadius: 46,
     crushHeight: 56,
+  },
+  stamina: {
+    // Five mistakes to empty, and a full tank back in eight seconds of not
+    // making them. A wave answered honestly costs a mistake or two at most.
+    max: 100,
+    costPerMistake: 20,
+    regenPerSecond: 12.5,
+    regenDelaySeconds: 0.6,
+    // A third of a tank: enough for a real attempt, too much to tap out of.
+    recoverAt: 34,
   },
   score: {
     killBase: 100,

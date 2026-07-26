@@ -13,7 +13,7 @@ import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs, type SkillTable } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { isTouchDevice, Numpad, PAD_CLAIMED_CODES } from '../../ui/Numpad';
 import { announceDrop, effectsLine, DROP_CSS } from '../DropGfx';
@@ -68,6 +68,8 @@ const METEOR_START_Y = -50;
 const BULLET_SCALE = 0.75;
 /** Full width of the combo drain bar under the multiplier readout. */
 const COMBO_BAR_WIDTH = 150;
+/** Full width of the stamina bar under the input buffer. */
+const STAMINA_BAR_WIDTH = 240;
 
 export class GameScene extends Phaser.Scene {
   private session!: RunSession;
@@ -100,6 +102,8 @@ export class GameScene extends Phaser.Scene {
   private streakText!: Phaser.GameObjects.Text;
   private waveText!: Phaser.GameObjects.Text;
   private bufferText!: Phaser.GameObjects.Text;
+  private staminaTrack!: Phaser.GameObjects.Rectangle;
+  private staminaBar!: Phaser.GameObjects.Rectangle;
   private comboBar!: Phaser.GameObjects.Rectangle;
   private effectsText!: Phaser.GameObjects.Text;
   /** Previous frame's combo state, so tier crossings can be celebrated once. */
@@ -171,10 +175,17 @@ export class GameScene extends Phaser.Scene {
         .setDepth(20);
     }
 
-    this.buffer = new InputBuffer(this, (value) => {
-      this.bufferText.setText(value.length > 0 ? value : '_');
-      this.tryFire(value);
-    });
+    this.buffer = new InputBuffer(
+      this,
+      (value) => {
+        this.paintBuffer();
+        this.tryFire(value);
+      },
+      {
+        canAccept: () => this.session.canType,
+        onRejected: () => this.rejectTyping(),
+      },
+    );
 
     const numpad = new Numpad(
       this,
@@ -752,6 +763,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * A digit arrived with the tank empty. Buzzes rather than swallowing it: a
+   * key that does nothing and says nothing reads as a broken game, and the
+   * whole point is that the player learns the meter is why.
+   */
+  private rejectTyping(): void {
+    getAudio(this)?.play('error', { pitch: 0.7 });
+    this.tweens.killTweensOf(this.staminaBar);
+    this.staminaBar.setScale(1);
+    this.tweens.add({
+      targets: this.staminaBar,
+      scaleY: 1.8,
+      duration: 90,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+    });
+    shake(this, 70, 0.004);
+  }
+
+  /**
    * Light up every meteor the current buffer could still become. Typing is the
    * aiming in this game, so the field has to show what the buffer is aimed at
    * before the shot goes off.
@@ -1101,6 +1131,16 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(hud);
 
+    // Stamina, directly under the buffer: it governs whether the buffer takes
+    // anything, so it belongs where the player is already looking when they
+    // type, not out at the edge of the screen with the run statistics.
+    this.staminaTrack = this.add
+      .rectangle(width / 2, height - 14, STAMINA_BAR_WIDTH, 7, PALETTE.deepPurple, 0.8)
+      .setDepth(hud);
+    this.staminaBar = this.add
+      .rectangle(width / 2 - STAMINA_BAR_WIDTH / 2, height - 14, STAMINA_BAR_WIDTH, 7, PALETTE.cyan)
+      .setOrigin(0, 0.5)
+      .setDepth(hud);
     this.add
       .text(24, height - 44, 'A / D  DODGE', { fontFamily: FONT, fontSize: '14px', color: CSS.cyanDim })
       .setAlpha(0.7)
@@ -1113,6 +1153,50 @@ export class GameScene extends Phaser.Scene {
     this.hpText.setText(`HP ${'█'.repeat(Math.max(0, this.session.hp))}`);
     this.scoreText.setText(`${this.session.score}`);
     this.syncCombo();
+    this.syncStamina();
+  }
+
+  /**
+   * The stamina bar. While the tank has anything in it the bar just shows the
+   * level; once it is empty the bar switches to showing progress back to the
+   * line where typing resumes, because that is the number the player is
+   * actually waiting on and a bar creeping off zero says nothing about it.
+   */
+  private syncStamina(): void {
+    const { session } = this;
+    const locked = !session.canType;
+    const fill = locked ? session.staminaRecovery : session.staminaFraction;
+    const low = session.staminaFraction < 0.35;
+
+    this.staminaBar
+      .setSize(Math.max(1, STAMINA_BAR_WIDTH * fill), 9)
+      .setFillStyle(locked ? PALETTE.red : low ? PALETTE.yellow : PALETTE.cyan);
+    // Full and unremarkable: fade it out rather than leave a permanent bar
+    // competing with the field for attention.
+    this.staminaTrack.setAlpha(session.staminaFraction >= 1 ? 0.25 : 0.8);
+    this.staminaBar.setAlpha(session.staminaFraction >= 1 ? 0.3 : 1);
+    this.paintBuffer();
+  }
+
+  /**
+   * The charge readout, which doubles as the lockout notice.
+   *
+   * A locked buffer is an empty buffer, so the readout has nothing else to say
+   * — and this is the one place on screen the player is certainly looking while
+   * they type, which makes it the only place the reason will actually be read.
+   */
+  private paintBuffer(): void {
+    if (!this.session.canType) {
+      this.bufferText.setText('OVERHEATED').setColor(CSS.red).setFontSize(26);
+      return;
+    }
+    // The HUD is built before the buffer exists, so the first paint has nothing
+    // to read yet.
+    const value = this.buffer?.value ?? '';
+    this.bufferText.setText(value.length > 0 ? value : '_').setFontSize(40);
+    // The miss flash owns the colour for its 90ms; do not fight it.
+    if (this.bufferText.style.color === CSS.red) return;
+    this.bufferText.setColor(CSS.cyan);
   }
 
   /**

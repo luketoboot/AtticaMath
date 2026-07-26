@@ -31,6 +31,15 @@ import {
 } from './hazard/gunfire';
 import { createRng, type Rng } from './rng';
 import { seedFromPlacement, type PlacementAttempt } from './skills/placement';
+import {
+  canType,
+  createStamina,
+  recoveryFraction,
+  spendStamina,
+  staminaFraction,
+  tickStamina,
+  type StaminaState,
+} from './stamina';
 import { applyAttempt, targetLatencyMs, type SkillTable } from './skills/rating';
 import type { SkillFilter, SkillId } from './skills/taxonomy';
 import { composePlacementWave, composeWave, OPEN_FILTER, type WavePlan } from './waves/compose';
@@ -80,6 +89,7 @@ export class RunSession {
   shotsTaken = 0;
   hp: number;
   private combo: ComboState = createCombo();
+  private stamina: StaminaState;
   /** Landings this wave; a clean wave carries the combo through the breather. */
   private missesThisWave = 0;
   /** Drops get their own stream for the same reason gunfire does. */
@@ -100,6 +110,7 @@ export class RunSession {
     this.placementDone = init.placementDone;
     this.hp = this.cfg.meteors.baseHp;
     this.maxHp = this.hp; // repair tops up to where the run started, never past it
+    this.stamina = createStamina(this.cfg.stamina);
     this.filter = init.filter ?? OPEN_FILTER;
     this.drillSkill = init.coachedSkill;
   }
@@ -153,18 +164,46 @@ export class RunSession {
     return overdriveActive(this.combo);
   }
 
+  // --- stamina ---
+
+  get staminaState(): Readonly<StaminaState> {
+    return this.stamina;
+  }
+
+  /** 0..1 of the tank, for the bar. */
+  get staminaFraction(): number {
+    return staminaFraction(this.stamina, this.cfg.stamina);
+  }
+
+  /** 0..1 out of the hole while locked out; 1 when not locked. */
+  get staminaRecovery(): number {
+    return recoveryFraction(this.stamina, this.cfg.stamina);
+  }
+
+  /** Whether the buffer should take a digit at all. */
+  get canType(): boolean {
+    return canType(this.stamina);
+  }
+
   /** Bleed the combo and drop clocks. Called once per frame while a wave runs. */
   tick(dtSeconds: number): void {
     this.combo = tickCombo(this.combo, dtSeconds, this.cfg.combo);
     this.drops.tick(dtSeconds);
+    this.stamina = tickStamina(this.stamina, dtSeconds, this.cfg.stamina);
   }
 
   /**
-   * A typed digit that no live problem can lead to. Costs combo clock, never
-   * the combo itself.
+   * A typed digit that no live problem can lead to. Costs combo clock and a
+   * bite of stamina, never the combo itself.
+   *
+   * Two costs because they punish different things. The clock costs a player
+   * who is thinking and got it wrong, which should sting a little. Stamina
+   * costs a player who is not thinking at all — it is the only one that can
+   * stop them, and it takes several mistakes in quick succession to bite.
    */
   recordWrongDigit(): void {
     this.combo = comboWrongDigit(this.combo, this.cfg.combo);
+    this.stamina = spendStamina(this.stamina, this.cfg.stamina);
   }
 
   // --- drops ---

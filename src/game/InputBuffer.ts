@@ -6,6 +6,17 @@ import { keyEventGate } from './input/freshKey';
  * clears. The owning scene checks the buffer against live answers after every
  * change and fires the moment it matches — no enter key.
  */
+export interface InputBufferOptions {
+  /**
+   * Gate on accepting digits. Meteor Defense closes it while stamina is out —
+   * see core/stamina. Backspace is deliberately not gated: clearing can only
+   * reduce input, and taking it away would strand a player mid-buffer.
+   */
+  canAccept?: () => boolean;
+  /** A digit arrived while the gate was shut. Buzz; never swallow it silently. */
+  onRejected?: () => void;
+}
+
 export class InputBuffer {
   private buffer = '';
   private readonly maxLen = 8;
@@ -14,10 +25,18 @@ export class InputBuffer {
   private readonly onChange: (value: string) => void;
   private readonly keydownHandler: (event: KeyboardEvent) => void;
   private readonly scene: Phaser.Scene;
+  private readonly canAccept: () => boolean;
+  private readonly onRejected: (() => void) | undefined;
 
-  constructor(scene: Phaser.Scene, onChange: (value: string) => void) {
+  constructor(
+    scene: Phaser.Scene,
+    onChange: (value: string) => void,
+    opts: InputBufferOptions = {},
+  ) {
     this.scene = scene;
     this.onChange = onChange;
+    this.canAccept = opts.canAccept ?? (() => true);
+    this.onRejected = opts.onRejected;
     this.keydownHandler = (event: KeyboardEvent) => this.handleKey(event);
     scene.input.keyboard?.on('keydown', this.keydownHandler);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
@@ -42,15 +61,18 @@ export class InputBuffer {
     }
     // event.key is '0'..'9' for both the top row and the numpad.
     if (event.key.length === 1 && event.key >= '0' && event.key <= '9') {
-      if (this.buffer.length >= this.maxLen) return;
-      this.buffer += event.key;
-      this.onChange(this.buffer);
+      this.push(event.key);
     }
   }
 
-  /** Append a digit from a non-keyboard source (future on-screen numpad). */
+  /** Append a digit, from the keyboard or the on-screen pad. */
   push(digit: string): void {
-    if (!/^\d$/.test(digit) || this.buffer.length >= this.maxLen) return;
+    if (!/^\d$/.test(digit)) return;
+    if (!this.canAccept()) {
+      this.onRejected?.();
+      return;
+    }
+    if (this.buffer.length >= this.maxLen) return;
     this.buffer += digit;
     this.onChange(this.buffer);
   }
