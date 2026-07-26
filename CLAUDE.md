@@ -61,7 +61,11 @@ The teaching mode, and the only one that is not a race — no HP, no clock, no c
 
 The point is to make base-10 structure something the player performs rather than reads. Every other mode can be beaten by recall; this one cannot. Its output is `scaffoldDepth` — how far out the player had to zoom before the problem looked solvable — which falls as a technique internalises and reaching zero means they are solving these whole. Rating updates are gentle (half K) and untimed, since a mode that invites you to think must not read your pace as slowness.
 
-Fractions get the same treatment later, with boxes and a RESLICE verb instead of a place-value dial; multiplication gets the area model. Neither is built yet.
+All four operations ride the dial, each truncating what it honestly can. A sum drops the same place from both operands. A product splits one factor and holds the other whole (`47 × 6` → `40 × 6`, never `40 × 0`), which is partial products from the left. Division cannot ladder its operands at all — `700 ÷ 6` is not a whole number — so it ladders the *answer*, and the dividend shows what that answer accounts for: `600 ÷ 6 = 100`, `720 ÷ 6 = 120`, `738 ÷ 6 = 123`. That is partial quotients, with the dividend filling in as the player claims it.
+
+Recall skills are deliberately withheld: the times tables and exact division can all be opened by the dial, but teaching a procedure for a fact that ought to be remembered is the opposite of what tracking them per-family is for. A test forces a ruling on every skill the dial can open, so omission is never a decision by default.
+
+Fractions get the same treatment later, with boxes and a RESLICE verb instead of a place-value dial. Not built yet.
 
 ### Later modes (design stubs only, do not build in MVP)
 - Boss fights: boss has an HP number, chip it with expressions, block boss attacks by answering problems

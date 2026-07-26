@@ -51,6 +51,8 @@ export const EXERCISE_SKILLS: readonly SkillId[] = [
   'mul.2x2',
   'mul.3x2',
   'mul.4x1',
+  'div.long',
+  'div.big',
 ] as const;
 
 /**
@@ -67,14 +69,23 @@ export const EXERCISE_SKILLS: readonly SkillId[] = [
  * already exercisable. Named rather than merely omitted so the eligibility test
  * can insist every openable skill has been ruled on, one way or the other.
  */
-export const EXERCISE_EXCLUDED: readonly SkillId[] = SKILLS.filter((s) =>
-  s.id.startsWith('mul.table.'),
-).map((s) => s.id);
+export const EXERCISE_EXCLUDED: readonly SkillId[] = [
+  ...SKILLS.filter((s) => s.id.startsWith('mul.table.')).map((s) => s.id),
+  // Exact division is the same argument wearing a different sign: "what times 8
+  // is 56" is a fact hunted out of a table, and the Playbook says so. Laddering
+  // it would teach a procedure for something meant to be recalled.
+  'div.exact',
+];
 
-/** The generator writes minus and times as true glyphs, not as - and x. */
-const PROMPT_PATTERN = /^(\d+) ([+−×]) (\d+)$/;
+/** The generator writes minus, times and divide as true glyphs, not -, x and /. */
+const PROMPT_PATTERN = /^(\d+) ([+−×÷]) (\d+)$/;
 
-const SIGN_OPS: Readonly<Record<string, ExerciseOp>> = { '+': 'add', '−': 'sub', '×': 'mul' };
+const SIGN_OPS: Readonly<Record<string, ExerciseOp>> = {
+  '+': 'add',
+  '−': 'sub',
+  '×': 'mul',
+  '÷': 'div',
+};
 
 /**
  * Read a generated problem as something the dial can open, or undefined if its
@@ -96,6 +107,9 @@ export function exerciseFromProblem(problem: Problem): ExerciseProblem | undefin
     // served splitting 47 than splitting 6, so put the places where the work is.
     return digitCount(b) > digitCount(a) ? { op, a: b, b: a } : { op, a, b };
   }
+  // Only exact division ladders — a remainder has no place in a quotient's
+  // places, and the generator asks for those separately anyway.
+  if (op === 'div' && (b === 0 || a % b !== 0)) return undefined;
   return { op, a, b };
 }
 

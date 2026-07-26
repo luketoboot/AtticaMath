@@ -37,7 +37,7 @@
  * Pure and side-effect free: the scene owns pixels, this owns the arithmetic.
  */
 
-export type ExerciseOp = 'add' | 'sub' | 'mul';
+export type ExerciseOp = 'add' | 'sub' | 'mul' | 'div';
 
 export interface ExerciseProblem {
   op: ExerciseOp;
@@ -99,16 +99,37 @@ export function maxDepthFor(problem: ExerciseProblem): number {
   // Only the truncated side needs a floor. A product holds its second factor
   // whole, so however small that factor is, it never runs out of places.
   if (problem.op === 'mul') return digitCount(problem.a) - 1;
+  // Division ladders the answer, so its places are the ones that run out.
+  if (problem.op === 'div') return digitCount(problem.a / problem.b) - 1;
   return Math.min(digitCount(problem.a), digitCount(problem.b)) - 1;
 }
 
 function evaluate(op: ExerciseOp, left: number, right: number): number {
   if (op === 'add') return left + right;
   if (op === 'sub') return left - right;
-  return left * right;
+  if (op === 'mul') return left * right;
+  return left / right;
 }
 
 export function layerAt(problem: ExerciseProblem, depth: number): Layer {
+  // Division cannot ladder its operands: 700 ÷ 6 is not a simpler version of
+  // 738 ÷ 6, it is not a whole number at all. So the ladder runs on the answer
+  // instead, and the dividend is whatever that answer accounts for — 600, then
+  // 720, then 738. The player is asked how many hundreds fit, then how many
+  // tens, which is partial quotients, and the dividend visibly fills in as they
+  // claim it. Nothing dims here: these operands genuinely change rather than
+  // being masked, and pretending otherwise would teach a false picture.
+  if (problem.op === 'div') {
+    const value = truncateTo(problem.a / problem.b, depth);
+    return {
+      depth,
+      left: value * problem.b,
+      right: problem.b,
+      leftDepth: 0,
+      rightDepth: 0,
+      value,
+    };
+  }
   const { left: leftDepth, right: rightDepth } = truncationDepths(problem.op, depth);
   const left = truncateTo(problem.a, leftDepth);
   const right = truncateTo(problem.b, rightDepth);
@@ -224,6 +245,12 @@ export function createWorkbench(problem: ExerciseProblem): WorkbenchState {
   }
   if (problem.op === 'mul' && problem.b === 0) {
     throw new Error('Exercise multiplication by zero has no ladder worth walking');
+  }
+  if (problem.op === 'div') {
+    if (problem.b === 0) throw new Error('Exercise division by zero');
+    if (problem.a % problem.b !== 0) {
+      throw new Error(`Exercise division must be exact: ${problem.a} / ${problem.b}`);
+    }
   }
   return {
     problem,

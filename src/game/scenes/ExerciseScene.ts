@@ -256,7 +256,7 @@ export class ExerciseScene extends Phaser.Scene {
     const gridW = cols * cell;
     const right = gridW / 2;
     const left = -right;
-    const sign = problem.op === 'add' ? '+' : problem.op === 'sub' ? '−' : '×';
+    const sign = { add: '+', sub: '−', mul: '×', div: '÷' }[problem.op];
 
     // The operator hangs outside the grid, so the frame has to be measured from
     // it rather than from the digits — otherwise a centred frame reads as
@@ -295,8 +295,11 @@ export class ExerciseScene extends Phaser.Scene {
         });
       };
 
-      operandRow(problem.a, layer.leftDepth, -rowH * 1.45);
-      operandRow(problem.b, layer.rightDepth, -rowH * 0.45);
+      // The layer's operands, not the problem's: a division rung's dividend is
+      // what its answer accounts for, so it genuinely differs from the one the
+      // problem was written with.
+      operandRow(layer.left, layer.leftDepth, -rowH * 1.45);
+      operandRow(layer.right, layer.rightDepth, -rowH * 0.45);
       // The operator sits outside the grid, left of the second operand, exactly
       // where it goes when this is written by hand.
       container.add(
@@ -342,7 +345,7 @@ export class ExerciseScene extends Phaser.Scene {
    */
   private currentBond(): ReturnType<typeof bondHint> {
     const problem = exerciseFromProblem(this.session.problem)!;
-    if (problem.op === 'mul') return undefined;
+    if (problem.op !== 'add' && problem.op !== 'sub') return undefined;
     return bondHint(problem.a, problem.b, problem.op, this.session.state.depth);
   }
 

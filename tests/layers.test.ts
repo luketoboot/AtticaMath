@@ -22,7 +22,7 @@ const add = (a: number, b: number): ExerciseProblem => ({ op: 'add', a, b });
 const sub = (a: number, b: number): ExerciseProblem => ({ op: 'sub', a, b });
 
 /** Read the layer in focus as the player sees it: "670 + 830 = 1500". */
-const SIGNS = { add: '+', sub: '-', mul: '*' } as const;
+const SIGNS = { add: '+', sub: '-', mul: '*', div: '/' } as const;
 
 const reads = (state: WorkbenchState): string => {
   const { left, right, value } = currentLayer(state);
@@ -189,6 +189,58 @@ describe('multiplication splits one factor', () => {
 
   it('refuses a factor of zero, which has no ladder', () => {
     expect(() => createWorkbench(mul(47, 0))).toThrow(/zero/);
+  });
+});
+
+describe('division ladders the answer', () => {
+  const div = (a: number, b: number): ExerciseProblem => ({ op: 'div', a, b });
+
+  it('fills the dividend in as the quotient is claimed', () => {
+    // 738 ÷ 6 = 123. The rungs ask how many hundreds, then tens, then ones —
+    // partial quotients — and the dividend shows what has been accounted for.
+    const problem = div(738, 6);
+    expect(ladderFor(problem)).toEqual([0, 1, 2]);
+    expect(layerAt(problem, 2)).toMatchObject({ left: 600, right: 6, value: 100 });
+    expect(layerAt(problem, 1)).toMatchObject({ left: 720, right: 6, value: 120 });
+    expect(layerAt(problem, 0)).toMatchObject({ left: 738, right: 6, value: 123 });
+  });
+
+  it('dims nothing, because these operands change rather than hide', () => {
+    const layer = layerAt(div(738, 6), 2);
+    expect(layer.leftDepth).toBe(0);
+    expect(layer.rightDepth).toBe(0);
+  });
+
+  it('measures its depth from the quotient, not the dividend', () => {
+    // A four-digit dividend over a big divisor can still have a short answer.
+    expect(maxDepthFor(div(738, 6))).toBe(2);
+    expect(maxDepthFor(div(3216, 8))).toBe(2);
+  });
+
+  it('runs the ladder end to end', () => {
+    let s = createWorkbench(div(738, 6));
+    s = deconstruct(s).state;
+    s = deconstruct(s).state;
+    expect(reads(s)).toBe('600 / 6 = 100');
+    s = submit(s, 100).state;
+    s = reconstruct(s).state;
+    expect(reads(s)).toBe('720 / 6 = 120');
+    s = submit(s, 120).state;
+    s = reconstruct(s).state;
+    expect(submit(s, 123).state.done).toBe(true);
+  });
+
+  it('skips a rung when the quotient has nothing at that place', () => {
+    // 3216 ÷ 8 = 402. Rounding that answer to tens already lands on 400, so the
+    // hundreds rung would ask the same question twice and is dropped.
+    expect(ladderFor(div(3216, 8))).toEqual([0, 1]);
+    expect(layerAt(div(3216, 8), 1)).toMatchObject({ left: 3200, value: 400 });
+    expect(layerAt(div(3216, 8), 0)).toMatchObject({ left: 3216, value: 402 });
+  });
+
+  it('refuses anything that does not divide out', () => {
+    expect(() => createWorkbench(div(47, 6))).toThrow(/exact/);
+    expect(() => createWorkbench(div(47, 0))).toThrow(/zero/);
   });
 });
 
