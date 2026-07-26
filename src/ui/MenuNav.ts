@@ -186,12 +186,38 @@ export class MenuNav {
       this.cursor.setVisible(false);
       return;
     }
-    const b = item.target.getBounds();
+    const b = frameOf(item.target);
     this.cursor
       .setPosition(b.centerX, b.centerY)
       .setSize(b.width + PAD_X, b.height + PAD_Y)
       .setVisible(true);
   }
+}
+
+/**
+ * The rectangle to frame.
+ *
+ * `Container.getBounds()` reports the union of its children's bounds, and
+ * Graphics carry no bounds at all — they have no GetBounds component. So a
+ * container holding nothing but Graphics measures as an *empty* rect stranded at
+ * the world origin: getBounds calls `setEmpty()` as soon as it sees it has
+ * children, then finds none it can measure, and returns `(0, 0, 0, 0)`. Union
+ * that into a parent and the frame stretches from the top-left of the screen out
+ * to the item. A shop tile — whose art is a nested container of Graphics — is
+ * exactly that shape, and every tile sits somewhere different, so every frame is
+ * differently wrong.
+ *
+ * Containers here set their own size and centre their content on their origin,
+ * so measure from that and fall back to getBounds() only for plain Text.
+ */
+function frameOf(target: Focusable): Phaser.Geom.Rectangle {
+  if (target instanceof Phaser.GameObjects.Container && target.width > 0 && target.height > 0) {
+    const m = target.getWorldTransformMatrix();
+    const w = target.width * m.scaleX;
+    const h = target.height * m.scaleY;
+    return new Phaser.Geom.Rectangle(m.tx - w / 2, m.ty - h / 2, w, h);
+  }
+  return target.getBounds();
 }
 
 /** Standard one-line control hint for menu screens. */
