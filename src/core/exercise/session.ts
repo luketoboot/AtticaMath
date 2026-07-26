@@ -15,10 +15,11 @@ import { generateProblem } from '../generator/generate';
 import type { Problem } from '../generator/problem';
 import { createRng, type Rng } from '../rng';
 import { applyAttempt, type SkillTable } from '../skills/rating';
-import { getSkill, type SkillId } from '../skills/taxonomy';
+import { getSkill, SKILLS, type SkillId } from '../skills/taxonomy';
 import {
   createWorkbench,
   deconstruct,
+  digitCount,
   ladderFor,
   reconstruct,
   submit,
@@ -46,10 +47,34 @@ export const EXERCISE_SKILLS: readonly SkillId[] = [
   'sub.zeros',
   'sub.triple',
   'sub.quad',
+  'mul.2x1',
+  'mul.2x2',
+  'mul.3x2',
+  'mul.4x1',
 ] as const;
 
-/** The generator writes subtraction with a true minus sign, not a hyphen. */
-const PROMPT_PATTERN = /^(\d+) ([+−]) (\d+)$/;
+/**
+ * Skills the dial *can* open but deliberately does not.
+ *
+ * Every times table qualifies on the mechanics — a family of 2 still deals
+ * `12 × 2`, and the dial will happily coarsen that to `10 × 2`. It is withheld
+ * anyway: the tables are recall, and teaching a method for a fact that ought to
+ * be remembered is the opposite of what tracking families per-skill is for. The
+ * Playbook already gives the awkward families their own moves, which a
+ * place-value ladder would quietly contradict.
+ *
+ * Derived from the taxonomy rather than listed, so a new family cannot arrive
+ * already exercisable. Named rather than merely omitted so the eligibility test
+ * can insist every openable skill has been ruled on, one way or the other.
+ */
+export const EXERCISE_EXCLUDED: readonly SkillId[] = SKILLS.filter((s) =>
+  s.id.startsWith('mul.table.'),
+).map((s) => s.id);
+
+/** The generator writes minus and times as true glyphs, not as - and x. */
+const PROMPT_PATTERN = /^(\d+) ([+−×]) (\d+)$/;
+
+const SIGN_OPS: Readonly<Record<string, ExerciseOp>> = { '+': 'add', '−': 'sub', '×': 'mul' };
 
 /**
  * Read a generated problem as something the dial can open, or undefined if its
@@ -59,10 +84,18 @@ export function exerciseFromProblem(problem: Problem): ExerciseProblem | undefin
   const match = PROMPT_PATTERN.exec(problem.prompt);
   if (!match) return undefined;
   const [, left, sign, right] = match;
+  const op = SIGN_OPS[sign ?? ''];
+  if (!op) return undefined;
   const a = Number(left);
   const b = Number(right);
-  const op: ExerciseOp = sign === '+' ? 'add' : 'sub';
   if (op === 'sub' && b > a) return undefined;
+  if (op === 'mul') {
+    if (a === 0 || b === 0) return undefined;
+    // The dial splits the first factor, so the wider one has to be first.
+    // Multiplication does not care about the order and the player is better
+    // served splitting 47 than splitting 6, so put the places where the work is.
+    return digitCount(b) > digitCount(a) ? { op, a: b, b: a } : { op, a, b };
+  }
   return { op, a, b };
 }
 

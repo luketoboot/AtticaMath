@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/core/config';
 import {
+  EXERCISE_EXCLUDED,
   EXERCISE_SKILLS,
   ExerciseSession,
   exerciseFromProblem,
@@ -56,14 +57,28 @@ describe('eligibility', () => {
     }
   });
 
-  it('no skill left off the list quietly qualifies', () => {
+  it('forces a ruling on every skill the dial can open', () => {
+    // Omission is not a decision. A skill whose problems the dial can take
+    // apart must be either offered or deliberately withheld — this is what
+    // stops a new taxonomy entry from silently becoming exercisable.
     const rng = createRng(23);
-    const unlisted = allSkillIds().filter((id) => hasRecipe(id) && !EXERCISE_SKILLS.includes(id));
-    for (const id of unlisted) {
+    const undecided = allSkillIds().filter(
+      (id) => hasRecipe(id) && !EXERCISE_SKILLS.includes(id) && !EXERCISE_EXCLUDED.includes(id),
+    );
+    for (const id of undecided) {
       for (let i = 0; i < 100; i++) {
         const problem = generateProblem(id, rng);
         expect(isExercisable(problem), `${id} produced an exercisable "${problem.prompt}"`).toBe(false);
       }
+    }
+  });
+
+  it('withholds the times tables, which are recall and not decomposition', () => {
+    for (const id of EXERCISE_EXCLUDED) {
+      expect(EXERCISE_SKILLS).not.toContain(id);
+      expect(
+        () => new ExerciseSession({ seed: 1, skills: table(), totalWavesBefore: 0, skillId: id }),
+      ).toThrow(/cannot be exercised/);
     }
   });
 
@@ -73,15 +88,24 @@ describe('eligibility', () => {
     // A hyphen is not the generator's minus sign.
     expect(exerciseFromProblem(fakeProblem('634 - 287'))).toBeUndefined();
     expect(exerciseFromProblem(fakeProblem('43 + ? = 100'))).toBeUndefined();
-    expect(exerciseFromProblem(fakeProblem('47 × 6'))).toBeUndefined();
     expect(exerciseFromProblem(fakeProblem('3 + 4 × 5'))).toBeUndefined();
     // Would go negative, so the workbench could not accept it.
     expect(exerciseFromProblem(fakeProblem('28 − 95'))).toBeUndefined();
   });
 
+  it('reads a product, splitting the wider factor', () => {
+    expect(exerciseFromProblem(fakeProblem('47 × 6'))).toEqual({ op: 'mul', a: 47, b: 6 });
+    // Order is the generator's business, not the dial's: the places have to be
+    // on the side that opens, so a narrow-first product is turned around.
+    expect(exerciseFromProblem(fakeProblem('6 × 47'))).toEqual({ op: 'mul', a: 47, b: 6 });
+    // Equal widths keep the order they arrived in.
+    expect(exerciseFromProblem(fakeProblem('23 × 14'))).toEqual({ op: 'mul', a: 23, b: 14 });
+    expect(exerciseFromProblem(fakeProblem('47 × 0'))).toBeUndefined();
+  });
+
   it('refuses to open a set on a skill the dial cannot serve', () => {
     expect(
-      () => new ExerciseSession({ seed: 1, skills: table(), totalWavesBefore: 0, skillId: 'mul.2x2' }),
+      () => new ExerciseSession({ seed: 1, skills: table(), totalWavesBefore: 0, skillId: 'add.single' }),
     ).toThrow(/cannot be exercised/);
   });
 });

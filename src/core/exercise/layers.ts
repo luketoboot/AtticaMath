@@ -25,10 +25,19 @@
  *    its ones dropped, so the dial steps straight past that stop rather than
  *    asking the player to solve the same thing twice.
  *
+ * Multiplication rides the same ladder with one factor held whole:
+ *
+ *   134 × 21  →  130 × 21  →  100 × 21  →  2100
+ *   130 × 21  →  2730
+ *   134 × 21  →  2814
+ *
+ * which is partial products accumulated from the left, the method `mul.3x2`
+ * already names — hundreds ride first, running total the whole way.
+ *
  * Pure and side-effect free: the scene owns pixels, this owns the arithmetic.
  */
 
-export type ExerciseOp = 'add' | 'sub';
+export type ExerciseOp = 'add' | 'sub' | 'mul';
 
 export interface ExerciseProblem {
   op: ExerciseOp;
@@ -42,8 +51,25 @@ export interface Layer {
   depth: number;
   left: number;
   right: number;
+  /** Places currently out of focus on each side; the scene dims exactly these. */
+  leftDepth: number;
+  rightDepth: number;
   /** What the player must type to fuse this layer. */
   value: number;
+}
+
+/**
+ * Which side the dial actually truncates.
+ *
+ * A sum drops the same place from both operands, because both contribute to
+ * that place of the answer. A product does not: `47 × 6` coarsens to `40 × 6`,
+ * never to `40 × 0`, which is not a simpler version of the problem but a
+ * different and emptier one. So multiplication splits one factor and holds the
+ * other whole — which is exactly the partial products the Playbook teaches,
+ * accumulated from the left.
+ */
+function truncationDepths(op: ExerciseOp, depth: number): { left: number; right: number } {
+  return op === 'mul' ? { left: depth, right: 0 } : { left: depth, right: depth };
 }
 
 /** One rendered digit position. Dimmed slots are the places currently out of focus. */
@@ -70,17 +96,37 @@ export function truncateTo(n: number, depth: number): number {
  * a simpler version of the problem — it is a different one.
  */
 export function maxDepthFor(problem: ExerciseProblem): number {
+  // Only the truncated side needs a floor. A product holds its second factor
+  // whole, so however small that factor is, it never runs out of places.
+  if (problem.op === 'mul') return digitCount(problem.a) - 1;
   return Math.min(digitCount(problem.a), digitCount(problem.b)) - 1;
 }
 
 function evaluate(op: ExerciseOp, left: number, right: number): number {
-  return op === 'add' ? left + right : left - right;
+  if (op === 'add') return left + right;
+  if (op === 'sub') return left - right;
+  return left * right;
 }
 
 export function layerAt(problem: ExerciseProblem, depth: number): Layer {
-  const left = truncateTo(problem.a, depth);
-  const right = truncateTo(problem.b, depth);
-  return { depth, left, right, value: evaluate(problem.op, left, right) };
+  const { left: leftDepth, right: rightDepth } = truncationDepths(problem.op, depth);
+  const left = truncateTo(problem.a, leftDepth);
+  const right = truncateTo(problem.b, rightDepth);
+  return { depth, left, right, leftDepth, rightDepth, value: evaluate(problem.op, left, right) };
+}
+
+/**
+ * Columns the answer needs, across every rung.
+ *
+ * Not simply the width of the final answer: a coarser rung can be *wider* than
+ * the problem it came from — `1000 − 900` is 100 where `1000 − 999` is 1 — so a
+ * grid sized to the last rung would clip the ones above it.
+ */
+export function resultWidth(problem: ExerciseProblem): number {
+  return ladderFor(problem).reduce(
+    (widest, depth) => Math.max(widest, digitCount(layerAt(problem, depth).value)),
+    1,
+  );
 }
 
 /**
@@ -100,7 +146,13 @@ export function ladderFor(problem: ExerciseProblem): number[] {
   return stops;
 }
 
-/** Digits of one operand at a depth, right-aligned into `width` columns. */
+/**
+ * Digits of one operand at a depth, right-aligned into `width` columns.
+ *
+ * `depth` here is the operand's *own* truncation depth, which is not always the
+ * rung's — a product's second factor is never truncated, so it is always drawn
+ * at depth 0 however far the dial has turned. Take it from the layer.
+ */
 export function slotsFor(operand: number, depth: number, width: number): DigitSlot[] {
   const text = String(truncateTo(operand, depth)).padStart(width, ' ');
   return [...text].map((char, i) => ({
@@ -169,6 +221,9 @@ export function createWorkbench(problem: ExerciseProblem): WorkbenchState {
   }
   if (problem.op === 'sub' && problem.b > problem.a) {
     throw new Error(`Exercise subtraction must not go negative: ${problem.a} - ${problem.b}`);
+  }
+  if (problem.op === 'mul' && problem.b === 0) {
+    throw new Error('Exercise multiplication by zero has no ladder worth walking');
   }
   return {
     problem,

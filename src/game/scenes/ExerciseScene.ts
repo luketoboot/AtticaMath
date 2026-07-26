@@ -3,7 +3,14 @@ import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
 import { creditsForRun } from '../../core/economy/economy';
 import { bondHint, frameCells } from '../../core/exercise/bonds';
-import { currentLayer, ladderFor, layerAt, slotWidth, slotsFor } from '../../core/exercise/layers';
+import {
+  currentLayer,
+  ladderFor,
+  layerAt,
+  resultWidth,
+  slotWidth,
+  slotsFor,
+} from '../../core/exercise/layers';
 import { EXERCISE_SKILLS, ExerciseSession, exerciseFromProblem } from '../../core/exercise/session';
 import { newMilestones } from '../../core/skills/milestones';
 import type { SkillId } from '../../core/skills/taxonomy';
@@ -235,9 +242,10 @@ export class ExerciseScene extends Phaser.Scene {
     const problem = exerciseFromProblem(this.session.problem)!;
     const depths = this.reachableDepths();
     const digits = slotWidth(problem);
-    // One extra column: a sum can carry into a new place, and a column layout
-    // has to leave that place standing empty rather than shift everything.
-    const cols = digits + 1;
+    // Wide enough for the widest rung's answer, never narrower than the
+    // operands. A sum carries into a new place and a product needs several, so
+    // the grid is measured rather than guessed.
+    const cols = Math.max(digits, resultWidth(problem));
 
     const block = Math.min(MAX_BLOCK, (BAND_BOTTOM - BAND_TOP) / depths.length);
     this.blockH = block;
@@ -248,7 +256,7 @@ export class ExerciseScene extends Phaser.Scene {
     const gridW = cols * cell;
     const right = gridW / 2;
     const left = -right;
-    const sign = problem.op === 'add' ? '+' : '−';
+    const sign = problem.op === 'add' ? '+' : problem.op === 'sub' ? '−' : '×';
 
     // The operator hangs outside the grid, so the frame has to be measured from
     // it rather than from the digits — otherwise a centred frame reads as
@@ -263,9 +271,17 @@ export class ExerciseScene extends Phaser.Scene {
       const y = BAND_BOTTOM - block * (fromBottom + 0.5);
       const container = this.add.container(width / 2, y);
 
-      /** Right-align a fixed-width operand into the shared column grid. */
-      const operandRow = (value: number, rowY: number): void => {
-        slotsFor(value, depth, digits).forEach((slot, col) => {
+      const layer = layerAt(problem, depth);
+
+      /**
+       * Right-align a fixed-width operand into the shared column grid.
+       *
+       * The dim depth is the operand's own, not the rung's: a product holds its
+       * second factor whole, so that factor stays fully lit however far the
+       * dial has turned.
+       */
+      const operandRow = (value: number, ownDepth: number, rowY: number): void => {
+        slotsFor(value, ownDepth, digits).forEach((slot, col) => {
           container.add(
             this.add
               .text(left + (cols - digits + col) * cell + cell / 2, rowY, slot.char, {
@@ -279,8 +295,8 @@ export class ExerciseScene extends Phaser.Scene {
         });
       };
 
-      operandRow(problem.a, -rowH * 1.45);
-      operandRow(problem.b, -rowH * 0.45);
+      operandRow(problem.a, layer.leftDepth, -rowH * 1.45);
+      operandRow(problem.b, layer.rightDepth, -rowH * 0.45);
       // The operator sits outside the grid, left of the second operand, exactly
       // where it goes when this is written by hand.
       container.add(
@@ -317,7 +333,21 @@ export class ExerciseScene extends Phaser.Scene {
 
   // --- bonds ---
 
+  /**
+   * The bond for the column in focus, if this problem has one to give.
+   *
+   * Number bonds are about a column of a sum. A product's column is not two
+   * digits meeting, so the frame has nothing true to say about one — better
+   * silent than inventing a reading.
+   */
+  private currentBond(): ReturnType<typeof bondHint> {
+    const problem = exerciseFromProblem(this.session.problem)!;
+    if (problem.op === 'mul') return undefined;
+    return bondHint(problem.a, problem.b, problem.op, this.session.state.depth);
+  }
+
   private toggleBonds(): void {
+    if (!this.currentBond()) return this.buzz(this.bondsBtn);
     this.bondsOpen = !this.bondsOpen;
     getAudio(this)?.play('ui');
     this.drawBonds();
@@ -334,9 +364,10 @@ export class ExerciseScene extends Phaser.Scene {
   private drawBonds(): void {
     this.bondsPanel.removeAll(true);
     const state = this.session.state;
-    const problem = exerciseFromProblem(this.session.problem)!;
-    this.bondsBtn.setAccent(this.bondsOpen ? PALETTE.cyan : PALETTE.purple);
-    const hint = bondHint(problem.a, problem.b, problem.op, state.depth);
+    const hint = this.currentBond();
+    // Dimmed when there is no bond to show, so the button reads as unavailable
+    // before it is pressed rather than only buzzing after.
+    this.bondsBtn.setAccent(!hint ? PALETTE.deepPurple : this.bondsOpen ? PALETTE.cyan : PALETTE.purple);
     this.bondsPanel.setVisible(this.bondsOpen && hint !== undefined && !state.done);
     if (!this.bondsOpen || !hint) return;
 

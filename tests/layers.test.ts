@@ -8,6 +8,7 @@ import {
   layerAt,
   maxDepthFor,
   reconstruct,
+  resultWidth,
   slotWidth,
   slotsFor,
   submit,
@@ -21,9 +22,11 @@ const add = (a: number, b: number): ExerciseProblem => ({ op: 'add', a, b });
 const sub = (a: number, b: number): ExerciseProblem => ({ op: 'sub', a, b });
 
 /** Read the layer in focus as the player sees it: "670 + 830 = 1500". */
+const SIGNS = { add: '+', sub: '-', mul: '*' } as const;
+
 const reads = (state: WorkbenchState): string => {
   const { left, right, value } = currentLayer(state);
-  return `${left} ${state.problem.op === 'add' ? '+' : '-'} ${right} = ${value}`;
+  return `${left} ${SIGNS[state.problem.op]} ${right} = ${value}`;
 };
 
 describe('truncateTo', () => {
@@ -133,6 +136,75 @@ describe('subtraction layers', () => {
 
   it('refuses to build a workbench that would go negative', () => {
     expect(() => createWorkbench(sub(28, 95))).toThrow(/negative/);
+  });
+});
+
+describe('multiplication splits one factor', () => {
+  const mul = (a: number, b: number): ExerciseProblem => ({ op: 'mul', a, b });
+
+  it('holds the second factor whole while the first coarsens', () => {
+    const problem = mul(47, 6);
+    expect(ladderFor(problem)).toEqual([0, 1]);
+    const coarse = layerAt(problem, 1);
+    expect(coarse.left).toBe(40);
+    expect(coarse.right).toBe(6);
+    expect(coarse.value).toBe(240);
+    expect(layerAt(problem, 0).value).toBe(282);
+  });
+
+  it('is not capped by the smaller factor, unlike a sum', () => {
+    // 6 has one digit, but it is never truncated, so the 47 still opens.
+    expect(maxDepthFor(mul(47, 6))).toBe(1);
+    expect(maxDepthFor(mul(2103, 4))).toBe(3);
+  });
+
+  it('walks partial products from the left', () => {
+    const problem = mul(134, 21);
+    expect(ladderFor(problem)).toEqual([0, 1, 2]);
+    expect(layerAt(problem, 2).value).toBe(2100);
+    expect(layerAt(problem, 1).value).toBe(2730);
+    expect(layerAt(problem, 0).value).toBe(2814);
+  });
+
+  it('reports which side is dimmed, so the factor held whole stays lit', () => {
+    const layer = layerAt(mul(134, 21), 2);
+    expect(layer.leftDepth).toBe(2);
+    expect(layer.rightDepth).toBe(0);
+    const sum = layerAt(add(679, 834), 2);
+    expect(sum.leftDepth).toBe(2);
+    expect(sum.rightDepth).toBe(2);
+  });
+
+  it('runs the ladder end to end', () => {
+    let s = createWorkbench(mul(134, 21));
+    s = deconstruct(s).state;
+    s = deconstruct(s).state;
+    expect(reads(s)).toBe('100 * 21 = 2100');
+    s = submit(s, 2100).state;
+    s = reconstruct(s).state;
+    s = submit(s, 2730).state;
+    s = reconstruct(s).state;
+    expect(submit(s, 2814).state.done).toBe(true);
+  });
+
+  it('refuses a factor of zero, which has no ladder', () => {
+    expect(() => createWorkbench(mul(47, 0))).toThrow(/zero/);
+  });
+});
+
+describe('resultWidth', () => {
+  it('is wide enough for a sum that carries into a new place', () => {
+    expect(resultWidth(add(679, 834))).toBe(4);
+  });
+
+  it('sizes to the widest rung, not the last one', () => {
+    // 1000 − 999 is 1, but the rung above it is 1000 − 900 = 100. A grid built
+    // for the final answer would clip the rungs that got there.
+    expect(resultWidth(sub(1000, 999))).toBe(3);
+  });
+
+  it('covers a product much wider than either factor', () => {
+    expect(resultWidth({ op: 'mul', a: 134, b: 21 })).toBe(4);
   });
 });
 
