@@ -339,6 +339,11 @@ export class ExerciseScene extends Phaser.Scene {
     this.barPickers?.forEach((chip, i) => chip.setChosen(i === bars.selected));
   }
 
+  /** Drive the bar animation. Nothing else in this mode needs a frame loop. */
+  override update(_time: number, delta: number): void {
+    this.barsUi?.tick(delta);
+  }
+
   // --- layout ---
 
   /** Ladder stops for the current problem, straight from core. */
@@ -611,6 +616,13 @@ export class ExerciseScene extends Phaser.Scene {
     this.buffer.clear();
     if (this.session.kind === 'dial') this.buildRungs();
     this.refresh();
+    // A new set of bars draws itself in — outline, then scoring, then the fill
+    // sweeping across — so the player watches the fraction being built rather
+    // than finding it already there.
+    if (this.session.kind === 'bars') {
+      const bars = this.session.bars;
+      this.barsUi?.intro(bars.bars, bars.selected);
+    }
   }
 
   /** What the buffer is racing towards, whichever bench is in play. */
