@@ -64,7 +64,7 @@ export class MenuScene extends Phaser.Scene {
 
     // The utility row sits over the sun's upper half, so the sun comes down to
     // atmosphere here — still synthwave, no longer a second thing to read.
-    drawBackdrop(this, { sunAlpha: 0.45 });
+    drawBackdrop(this, { sunAlpha: 0.45, horizon: 0.88, sunHorizon: 0.82 });
 
     titleLogo(this, width / 2, 86, 'METEOR MATH', {
       fontSize: 66,

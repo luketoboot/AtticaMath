@@ -12,6 +12,13 @@ import { PALETTE } from '../fx/palette';
 export interface BackdropOptions {
   /** Fraction of the screen height where the grid starts. */
   horizon?: number;
+  /**
+   * Fraction of the screen height the sun is anchored to, if the sun should not
+   * sit on the horizon line. Defaults to `horizon`. The menu drops its line
+   * below the sun's waist so the line reads as the sun's base rather than
+   * cutting across its face.
+   */
+  sunHorizon?: number;
   /** Draw the sun. Off for screens with content low on the glass. */
   sun?: boolean;
   /**
@@ -27,12 +34,13 @@ export interface BackdropOptions {
 export function drawBackdrop(scene: Phaser.Scene, opts: BackdropOptions = {}): void {
   const { width, height } = scene.scale;
   const horizon = height * (opts.horizon ?? 0.82);
+  const sunHorizon = height * (opts.sunHorizon ?? opts.horizon ?? 0.82);
 
   scene.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0).setDepth(-100);
 
   if (opts.stars !== false) drawStars(scene, horizon);
   if (opts.sun !== false) {
-    drawSun(scene, width / 2, horizon + 30, Math.min(210, height * 0.3), opts.sunAlpha ?? 1);
+    drawSun(scene, width / 2, sunHorizon + 30, Math.min(210, height * 0.3), opts.sunAlpha ?? 1);
   }
   drawGrid(scene, horizon);
 }
