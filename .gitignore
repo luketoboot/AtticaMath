@@ -3,3 +3,6 @@ dist/
 .playwright-mcp/
 *.png
 *.local
+
+# Golden scene shots are the one PNG set worth versioning.
+!shots/golden/*.png

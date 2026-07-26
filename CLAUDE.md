@@ -118,3 +118,7 @@ Expression Builder is milestone 2. Nothing else until both modes feel good.
 - `npm run dev` — Vite dev server
 - `npm run test` — Vitest unit tests (core/ only)
 - `npm run build` — typecheck + production bundle
+- `npm run shot -- <Scene|all>` — render a scene to `shots/*.png` in headless Chromium
+  (real WebGL, real CRT pipeline). `--kind=hull` passes scene data, `--save '{"credits":0}'`
+  overrides the save fixture. Shots are deterministic, so `--golden` blesses a baseline and
+  `--check` fails on any visual change. Use this to verify layout instead of guessing.
