@@ -709,6 +709,13 @@ function masteredCount(progress: CosmeticProgress): number {
 }
 
 export interface UnlockState {
+  /**
+   * Numeric progress toward the gate, for gates that accumulate. A locked item
+   * quoting only its requirement is a wall; quoting 6/8 is a countdown, and a
+   * countdown points the player back at play. Absent for binary gates.
+   */
+  current?: number;
+  target?: number;
   unlocked: boolean;
   /** Short requirement line for the shop, or undefined when money is the only gate. */
   requirement?: string;
@@ -727,16 +734,22 @@ export function unlockState(def: CosmeticDef, progress: CosmeticProgress): Unloc
       return {
         unlocked: progress.bestScore >= unlock.value,
         requirement: `BEST RUN ${unlock.value.toLocaleString('en-US')}`,
+        current: progress.bestScore,
+        target: unlock.value,
       };
     case 'waves':
       return {
         unlocked: progress.totalWaves >= unlock.value,
         requirement: `${unlock.value} WAVES CLEARED`,
+        current: progress.totalWaves,
+        target: unlock.value,
       };
     case 'mastery':
       return {
         unlocked: masteredCount(progress) >= unlock.count,
         requirement: `MASTER ${unlock.count} SKILLS`,
+        current: masteredCount(progress),
+        target: unlock.count,
       };
     case 'skill': {
       const def2 = findSkill(unlock.skillId);

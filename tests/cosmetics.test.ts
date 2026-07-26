@@ -173,6 +173,22 @@ describe('unlockState', () => {
     expect(unlockState({ ...stub, unlock: { kind: 'skill', skillId: 'mul.table.7' } }, progress).unlocked).toBe(false);
   });
 
+  it('reports numeric progress for the accumulating gates', () => {
+    const score = unlockState({ ...stub, unlock: { kind: 'score', value: 40_000 } }, progress);
+    expect({ current: score.current, target: score.target }).toEqual({ current: 12_000, target: 40_000 });
+    const waves = unlockState({ ...stub, unlock: { kind: 'waves', value: 120 } }, progress);
+    expect({ current: waves.current, target: waves.target }).toEqual({ current: 45, target: 120 });
+    const mastery = unlockState({ ...stub, unlock: { kind: 'mastery', count: 8 } }, progress);
+    expect({ current: mastery.current, target: mastery.target }).toEqual({ current: 2, target: 8 });
+  });
+
+  it('reports no numbers for binary gates — nothing to count down', () => {
+    expect(unlockState({ ...stub, unlock: { kind: 'open' } }, progress).target).toBeUndefined();
+    expect(
+      unlockState({ ...stub, unlock: { kind: 'skill', skillId: 'mul.table.7' } }, progress).target,
+    ).toBeUndefined();
+  });
+
   it('always says what a locked item is waiting for', () => {
     for (const c of COSMETICS) {
       const state = unlockState(c, emptyProgress());
