@@ -304,7 +304,11 @@ export class ShopScene extends Phaser.Scene {
       const col = i % GRID_COLS;
       const row = Math.floor(i / GRID_COLS);
       const x = left + shelf * ((col + 0.5) / GRID_COLS);
-      const y = 232 + row * 150;
+      // Starts below the shelf blurb rather than on top of it: a 132-tall tile
+      // centred at 232 has its top edge at 166, and the blurb sits at 164, so
+      // the grid — drawn afterwards — used to paint straight over it. The
+      // twelve-item shelf runs to three rows, which still clears BACK.
+      const y = 250 + row * 150;
 
       const container = this.add.container(x, y);
       const panel = this.add.graphics();

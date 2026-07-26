@@ -125,11 +125,17 @@ export class BrainScanScene extends Phaser.Scene {
     const barX = x0 + (x1 - x0) * 0.56;
     const barW = x1 - barX - 44;
 
-    this.add.text(x0, y, skill.label.toUpperCase(), {
+    const label = this.add.text(x0, y, skill.label.toUpperCase(), {
       fontFamily: FONT,
       fontSize: '12px',
       color: state ? CSS.white : CSS.cyanDim,
     });
+    // Nothing bounds a label to its share of the column, so the long ones —
+    // "one number as a percent of another" is 34 characters — ran under the bar
+    // and collided with the rating. Shrink to fit rather than wrap: a second
+    // line would break the fixed 26px row pitch and misalign the whole column.
+    const room = barX - x0 - 8;
+    if (label.width > room) label.setScale(room / label.width);
 
     if (!state || state.attempts === 0) {
       this.add.text(barX, y, 'NO SIGNAL', { fontFamily: FONT, fontSize: '12px', color: CSS.cyanDim });
