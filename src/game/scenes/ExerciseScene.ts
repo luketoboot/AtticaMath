@@ -869,6 +869,10 @@ export class ExerciseScene extends Phaser.Scene {
     save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
 
+    // RELAUNCH should mean this drill again, not whatever the table thinks is
+    // weakest by then — the player picked this one.
+    this.registry.set(EXERCISE_SKILL_KEY, this.session.skillId);
+
     this.scene.start('Debrief', {
       stats: {
         score: summary.score,
@@ -893,11 +897,11 @@ export class ExerciseScene extends Phaser.Scene {
     });
   }
 
-  /** Bank whatever the skill table learned, then out. */
+  /** Bank whatever the skill table learned, then back to the drill list. */
   private leave(): void {
     const save = this.saves.save;
     save.skills = this.session.skillTable;
     this.saves.persist();
-    this.scene.start('Menu');
+    this.scene.start('ExerciseSelect');
   }
 }

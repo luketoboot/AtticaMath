@@ -246,6 +246,67 @@ export function suggestedSkill(table: SkillTable): SkillId {
   return weakest ?? (EXERCISE_SKILLS[0] as SkillId);
 }
 
+/**
+ * The drill list, as the selection screen lays it out: one row per family, and
+ * a short name for each exercise because the taxonomy's labels ("Two digit x
+ * one digit") are written to be read one at a time, not nineteen at once.
+ *
+ * Data rather than code, and a test holds it against the skill lists in both
+ * directions — an exercise that exists but cannot be chosen is worse than one
+ * that does not exist.
+ */
+export interface ExerciseGroup {
+  title: string;
+  skills: readonly { id: SkillId; short: string }[];
+}
+
+export const EXERCISE_GROUPS: readonly ExerciseGroup[] = [
+  {
+    title: 'ADD',
+    skills: [
+      { id: 'add.double', short: '2 DIGIT' },
+      { id: 'add.triple', short: '3 DIGIT' },
+      { id: 'add.quad', short: '4 DIGIT' },
+    ],
+  },
+  {
+    title: 'SUBTRACT',
+    skills: [
+      { id: 'sub.double', short: '2 DIGIT' },
+      { id: 'sub.borrow', short: 'BORROWING' },
+      { id: 'sub.zeros', short: 'ACROSS ZEROS' },
+      { id: 'sub.triple', short: '3 DIGIT' },
+      { id: 'sub.quad', short: '4 DIGIT' },
+    ],
+  },
+  {
+    title: 'MULTIPLY',
+    skills: [
+      { id: 'mul.2x1', short: '2 × 1' },
+      { id: 'mul.2x2', short: '2 × 2' },
+      { id: 'mul.3x2', short: '3 × 2' },
+      { id: 'mul.4x1', short: '4 × 1' },
+    ],
+  },
+  {
+    title: 'DIVIDE',
+    skills: [
+      { id: 'div.long', short: '3 DIGIT' },
+      { id: 'div.big', short: '4 DIGIT' },
+    ],
+  },
+  {
+    title: 'FRACTIONS',
+    skills: [
+      { id: 'frac.add.same', short: 'ADD LIKE' },
+      { id: 'frac.add.unlike', short: 'ADD UNLIKE' },
+      { id: 'frac.lcd', short: 'COMMON DEN' },
+      { id: 'frac.percent', short: 'TO PERCENT' },
+      { id: 'frac.reduce', short: 'REDUCE' },
+    ],
+  },
+];
+
 /** What one finished problem cost the player. */
 export interface SolvedRecord {
   problem: Problem;

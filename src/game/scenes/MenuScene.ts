@@ -49,7 +49,7 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     tagline: 'BREAK IT DOWN. SOLVE IT SMALL. BUILD IT BACK.',
     icon: 'exercise',
     accent: PALETTE.cyan,
-    scene: 'Exercise',
+    scene: 'ExerciseSelect',
     onSelect: () => {},
   },
   // Boss Rush is benched, not deleted: with no target to hit, any expression

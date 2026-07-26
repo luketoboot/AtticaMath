@@ -84,6 +84,7 @@ const PRESETS = [
       },
     },
   },
+  { name: 'ExerciseSelect', scene: 'ExerciseSelect' },
   {
     // The one play scene worth a golden: it is all layout, it needs no live
     // session, and it seeds from Math.random — which this harness stubs — so

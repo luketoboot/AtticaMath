@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/core/config';
 import {
+  ALL_EXERCISE_SKILLS,
+  benchKindFor,
   EXERCISE_EXCLUDED,
+  EXERCISE_GROUPS,
   EXERCISE_SKILLS,
   ExerciseSession,
   exerciseFromProblem,
@@ -107,6 +110,29 @@ describe('eligibility', () => {
     expect(
       () => new ExerciseSession({ seed: 1, skills: table(), totalWavesBefore: 0, skillId: 'add.single' }),
     ).toThrow(/cannot be exercised/);
+  });
+});
+
+describe('the drill list', () => {
+  const listed = EXERCISE_GROUPS.flatMap((g) => g.skills.map((s) => s.id));
+
+  it('offers every exercise that exists, exactly once', () => {
+    // An exercise the dial can run but the menu cannot reach is unreachable in
+    // practice, which is the same as not having built it.
+    expect([...listed].sort()).toEqual([...ALL_EXERCISE_SKILLS].sort());
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  it('offers nothing a bench cannot hold', () => {
+    for (const id of listed) expect(benchKindFor(id), id).toBeDefined();
+  });
+
+  it('gives each one a short name that fits a chip', () => {
+    for (const group of EXERCISE_GROUPS) {
+      for (const skill of group.skills) {
+        expect(skill.short.length, `${skill.id}`).toBeLessThanOrEqual(12);
+      }
+    }
   });
 });
 
