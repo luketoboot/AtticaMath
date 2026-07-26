@@ -86,6 +86,8 @@ export interface MeteorConfig {
   hotComboGain: number;
   /** A hot meteor pays its bonus only while it has fallen less than this. */
   hotHighFraction: number;
+  /** Descent and spawn-clock multiplier while the fast-forward key is held. */
+  fastForwardMult: number;
 }
 
 /** Power-up drops. See core/drops.ts. */
@@ -148,6 +150,10 @@ export interface HazardConfig {
   playerEdgeMargin: number;
   /** Invulnerability after taking a hit, so one shot can't chain into a death. */
   invulnSeconds: number;
+  /** A falling rock within this many px of the cannon's centre crushes it. */
+  crushRadius: number;
+  /** Height of the crush zone above the ground line — roughly the cannon's silhouette. */
+  crushHeight: number;
 }
 
 /**
@@ -592,6 +598,7 @@ export const CONFIG: GameConfig = {
     hotScoreMultiplier: 3,
     hotComboGain: 2,
     hotHighFraction: 0.55,
+    fastForwardMult: 4,
   },
   drops: {
     carriersPerWave: 1,
@@ -768,6 +775,8 @@ export const CONFIG: GameConfig = {
     playerSpeed: 520,
     playerEdgeMargin: 44,
     invulnSeconds: 1.2,
+    crushRadius: 46,
+    crushHeight: 56,
   },
   score: {
     killBase: 100,

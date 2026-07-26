@@ -14,14 +14,17 @@ import { allSkillIds, getSkill, skillMatchesFilter } from '../src/core/skills/ta
 import { composeWave } from '../src/core/waves/compose';
 
 describe('the playbook covers the taxonomy', () => {
-  it('every skill has a technique with a title, a method and an example', () => {
+  it('every skill has a technique with a title, a method and worked examples', () => {
     for (const id of allSkillIds()) {
       const tech = techniqueForSkill(id);
       expect(tech, `no technique for ${id}`).toBeDefined();
       expect(tech!.title.length).toBeGreaterThan(0);
       expect(tech!.method.length).toBeGreaterThan(0);
       for (const line of tech!.method) expect(line.length).toBeGreaterThan(0);
-      expect(tech!.example.length).toBeGreaterThan(0);
+      // At least two gaze paths per move: one example reads as the trick's
+      // whole domain; two show the move surviving different numbers.
+      expect(tech!.examples.length, `${id} needs 2+ examples`).toBeGreaterThanOrEqual(2);
+      for (const line of tech!.examples) expect(line.length).toBeGreaterThan(0);
     }
   });
 

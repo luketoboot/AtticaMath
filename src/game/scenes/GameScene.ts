@@ -210,7 +210,14 @@ export class GameScene extends Phaser.Scene {
     this.session.tick(dt);
     this.syncCombo();
 
-    this.sinceSpawn += dt;
+    // Fast-forward: hurry the wave, not the danger. Descent and the spawn
+    // clock speed up; bullets and fire rolls stay on real time, so holding it
+    // is a wager on your own typing rather than a way to get shot faster.
+    const ff = this.keys.isDown(this.bindings.fastForward)
+      ? CONFIG.meteors.fastForwardMult
+      : 1;
+
+    this.sinceSpawn += dt * ff;
     if (
       this.spawnQueue.length > 0 &&
       this.meteors.length < this.session.maxConcurrentMeteors() &&
@@ -226,9 +233,17 @@ export class GameScene extends Phaser.Scene {
 
     // Overdrive and freeze pickups halt the descent but not the spawning: the
     // board fills up while you clear it for free, then it all resumes at once.
-    const descent = this.session.overdriveActive || this.session.descentFrozen ? 0 : dt;
+    // A freeze also outranks fast-forward — the pickup was paid for.
+    const descent = this.session.overdriveActive || this.session.descentFrozen ? 0 : dt * ff;
     for (const m of [...this.meteors]) {
       m.container.y += m.speed * descent;
+      // A rock on top of the cannon crushes it — dodging is part of the job,
+      // and doubly so with a thumb on fast-forward.
+      if (this.crushesCannon(m)) {
+        this.crushMeteor(m);
+        if (this.phase !== 'wave') return; // the crush ended the run
+        continue;
+      }
       if (m.container.y >= this.groundY - 10) {
         this.landMeteor(m);
       }
@@ -469,6 +484,33 @@ export class GameScene extends Phaser.Scene {
     this.meteors = this.meteors.filter((x) => x !== m);
     for (const t of m.tweens) t.stop();
     m.container.destroy();
+  }
+
+  /**
+   * Is this rock inside the cannon's silhouette? Skipped through the i-frames:
+   * during them rocks pass overhead, the same grace bullets get.
+   */
+  private crushesCannon(m: LiveMeteor): boolean {
+    if (this.time.now < this.invulnUntil) return false;
+    const h = CONFIG.hazard;
+    return (
+      m.container.y >= this.groundY - h.crushHeight &&
+      Math.abs(m.container.x - this.cannonX) <= h.crushRadius
+    );
+  }
+
+  /**
+   * A rock came down on the cannon. Reflex damage, same as a bullet — the
+   * problem was never answered, but positioning is not math, so the rock dies
+   * unrated and its cargo dies with it.
+   */
+  private crushMeteor(m: LiveMeteor): void {
+    const x = m.container.x;
+    const y = m.container.y;
+    this.removeMeteor(m);
+    this.explode(x, y, PALETTE.red, CONFIG.juice.landParticles);
+    shockwave(this, x, y, PALETTE.red);
+    this.playerHit();
   }
 
   private landMeteor(m: LiveMeteor): void {

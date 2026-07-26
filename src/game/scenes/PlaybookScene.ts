@@ -208,19 +208,22 @@ export class PlaybookScene extends Phaser.Scene {
       }),
     );
     push(
-      this.add.text(x, 424, 'ON THE GLASS', {
+      this.add.text(x, 408, 'ON THE GLASS', {
         fontFamily: FONT,
         fontSize: '13px',
         color: CSS.magentaHot,
       }),
     );
+    // Every example is a gaze path — problem → what you see → answer — so
+    // they render one per line, the way the eye is meant to run them.
     push(
-      this.add.text(x, 446, tech.example, {
+      this.add.text(x, 430, tech.examples.join('\n'), {
         fontFamily: FONT,
-        fontSize: '19px',
+        fontSize: '17px',
         fontStyle: 'bold',
         color: CSS.yellow,
         wordWrap: { width: wrap },
+        lineSpacing: 9,
       }),
     );
 
@@ -240,7 +243,7 @@ export class PlaybookScene extends Phaser.Scene {
       color = def.id === recommended ? CSS.yellow : CSS.white;
     }
     push(
-      this.add.text(x, 500, def.id === recommended ? `${standing}  ·  WEAKEST ON RECORD` : standing, {
+      this.add.text(x, 542, def.id === recommended ? `${standing}  ·  WEAKEST ON RECORD` : standing, {
         fontFamily: FONT,
         fontSize: '14px',
         color,

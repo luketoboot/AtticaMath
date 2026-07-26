@@ -80,7 +80,7 @@ export class ControlsScene extends Phaser.Scene {
 
     const rows: MenuItem[][] = [];
     BINDABLE_ACTIONS.forEach((action, i) => {
-      const y = height * (0.3 + i * 0.072);
+      const y = height * (0.295 + i * 0.063);
       this.add
         .text(width * 0.24, y, ACTION_LABELS[action], { fontFamily: FONT, fontSize: '20px', color: CSS.cyan })
         .setOrigin(0, 0.5);

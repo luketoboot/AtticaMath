@@ -15,6 +15,7 @@ export type BindableAction =
   | 'right'
   | 'launch'
   | 'switchWeapon'
+  | 'fastForward'
   | 'pause';
 
 export const BINDABLE_ACTIONS: readonly BindableAction[] = [
@@ -24,6 +25,7 @@ export const BINDABLE_ACTIONS: readonly BindableAction[] = [
   'right',
   'launch',
   'switchWeapon',
+  'fastForward',
   'pause',
 ];
 
@@ -37,6 +39,9 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   right: ['KeyD', 'ArrowRight'],
   launch: ['Space', null],
   switchWeapon: ['ShiftLeft', 'ShiftRight'],
+  // Shares Shift with the weapon swap deliberately: the two actions live in
+  // different modes, so one physical key serves both without ever colliding.
+  fastForward: ['ShiftLeft', 'ShiftRight'],
   pause: ['Escape', null],
 };
 
@@ -52,6 +57,7 @@ export const ACTION_LABELS: Record<BindableAction, string> = {
   right: 'TURN RIGHT / RIGHT',
   launch: 'FIRE / LAUNCH',
   switchWeapon: 'SWAP WEAPON',
+  fastForward: 'FAST FORWARD',
   pause: 'PAUSE',
 };
 
