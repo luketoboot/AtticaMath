@@ -4,7 +4,7 @@ import { CONFIG } from '../../core/config';
 import { hullFor, trailFor } from '../../core/cosmetics/cosmetics';
 import { isCompleteShot, isPrime, isViablePrefix } from '../../core/factor/factor';
 import { FactorSession, type Rock } from '../../core/factor/session';
-import { pickByNose } from '../../core/flight/aim';
+import { isDeadAhead, pickByNose } from '../../core/flight/aim';
 import {
   newFlightState,
   stepFlight,
@@ -314,21 +314,47 @@ export class FactorScene extends Phaser.Scene {
 
   /**
    * The rock the typing applies to: the one nearest the nose, so aiming is
-   * steering — point at a rock and it lights. Held while a buffer is being
-   * typed, so drifting cannot steal the shot halfway through a number.
+   * steering — point at a rock and it lights.
+   *
+   * A half-typed buffer pins the lock so drift cannot steal a shot mid-number.
+   * It does not pin it against the nose, though: swinging the ship onto a
+   * different rock is the player changing their mind out loud, and the digits
+   * they typed were meant for the rock they just turned away from, so those go
+   * with it. Silently, and at no cost — re-aiming is not a mistake.
    */
   private refreshLock(): void {
-    if (this.buffer.value !== '' && this.rocks.some((r) => r.rock.id === this.lockedId)) {
+    const bounds = { width: this.scale.width, height: this.scale.height };
+    const candidates = this.rocks.map((r) => ({ id: r.rock.id, x: r.x, y: r.y }));
+    const snapRad = Phaser.Math.DegToRad(CONFIG.factor.aimSnapDeg);
+    const typing = this.buffer.value !== '';
+
+    if (typing && this.rocks.some((r) => r.rock.id === this.lockedId)) {
+      const held = candidates.find((c) => c.id === this.lockedId);
+      const aimed = pickByNose(this.flight, candidates, bounds, this.lockedId, {
+        snapRad,
+        hysteresisRad: Phaser.Math.DegToRad(CONFIG.factor.aimHysteresisDeg),
+      });
+      const swung =
+        aimed !== null &&
+        aimed !== this.lockedId &&
+        // Only an open, deliberate aim breaks a buffer — never a near miss.
+        isDeadAhead(this.flight, candidates.find((c) => c.id === aimed)!, bounds, snapRad) &&
+        // ...and only when the nose has genuinely left the rock being typed at.
+        !(held && isDeadAhead(this.flight, held, bounds, snapRad));
+      if (!swung) {
+        this.paintLocks();
+        return;
+      }
+      this.buffer.clear();
+      this.lockedId = aimed;
       this.paintLocks();
       return;
     }
-    this.lockedId = pickByNose(
-      this.flight,
-      this.rocks.map((r) => ({ id: r.rock.id, x: r.x, y: r.y })),
-      { width: this.scale.width, height: this.scale.height },
-      this.lockedId,
-      Phaser.Math.DegToRad(CONFIG.factor.aimHysteresisDeg),
-    );
+
+    this.lockedId = pickByNose(this.flight, candidates, bounds, this.lockedId, {
+      snapRad,
+      hysteresisRad: Phaser.Math.DegToRad(CONFIG.factor.aimHysteresisDeg),
+    });
     this.paintLocks();
   }
 

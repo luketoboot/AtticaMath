@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { angularGap, pickByNose, wrappedDelta } from '../src/core/flight/aim';
+import { angularGap, isDeadAhead, pickByNose, wrappedDelta } from '../src/core/flight/aim';
 
 const BOUNDS = { width: 1280, height: 720 };
-const HYST = (6 * Math.PI) / 180;
+const deg = (d: number): number => (d * Math.PI) / 180;
+const OPTS = { snapRad: deg(14), hysteresisRad: deg(3) };
+/** Snap disabled, so the hysteresis rules can be tested on their own. */
+const NO_SNAP = { snapRad: 0, hysteresisRad: deg(6) };
 
 /** Ship at centre, nose along +x unless a test says otherwise. */
 function ship(facing = 0): { x: number; y: number; facing: number } {
@@ -39,7 +42,7 @@ describe('pickByNose', () => {
       ],
       BOUNDS,
       null,
-      HYST,
+      OPTS,
     );
     expect(picked).toBe(2);
   });
@@ -49,8 +52,8 @@ describe('pickByNose', () => {
       { id: 1, x: 640, y: 100 }, // above
       { id: 2, x: 640, y: 600 }, // below
     ];
-    expect(pickByNose(ship(-Math.PI / 2), rocks, BOUNDS, null, HYST)).toBe(1);
-    expect(pickByNose(ship(Math.PI / 2), rocks, BOUNDS, null, HYST)).toBe(2);
+    expect(pickByNose(ship(-Math.PI / 2), rocks, BOUNDS, null, OPTS)).toBe(1);
+    expect(pickByNose(ship(Math.PI / 2), rocks, BOUNDS, null, OPTS)).toBe(2);
   });
 
   it('sees through the wrap seam', () => {
@@ -64,7 +67,7 @@ describe('pickByNose', () => {
       ],
       BOUNDS,
       null,
-      HYST,
+      OPTS,
     );
     expect(picked).toBe(1);
   });
@@ -78,18 +81,19 @@ describe('pickByNose', () => {
       ],
       BOUNDS,
       null,
-      HYST,
+      OPTS,
     );
     expect(picked).toBe(2);
   });
 
-  it('keeps the lock against a challenger inside the hysteresis wedge', () => {
+  it('keeps the lock against drift-jitter outside the snap cone', () => {
+    // Both sit ~35° off, a hair apart: exactly the strobing hysteresis exists
+    // for, and far enough out that the snap cone has no say.
     const rocks = [
-      { id: 1, x: 1140, y: 380 }, // ~2.3° below the nose line
-      { id: 2, x: 1140, y: 340 }, // ~2.3° above — a hair better at times
+      { id: 1, x: 1000, y: 610 },
+      { id: 2, x: 1000, y: 600 },
     ];
-    // Rock 1 holds the lock; rock 2's edge is nowhere near 6°, so no steal.
-    expect(pickByNose(ship(0.01), rocks, BOUNDS, 1, HYST)).toBe(1);
+    expect(pickByNose(ship(0), rocks, BOUNDS, 1, NO_SNAP)).toBe(1);
   });
 
   it('yields the lock once the challenger clears the wedge', () => {
@@ -97,15 +101,51 @@ describe('pickByNose', () => {
       { id: 1, x: 1140, y: 500 }, // ~15° off
       { id: 2, x: 1140, y: 365 }, // dead ahead
     ];
-    expect(pickByNose(ship(0), rocks, BOUNDS, 1, HYST)).toBe(2);
+    expect(pickByNose(ship(0), rocks, BOUNDS, 1, NO_SNAP)).toBe(2);
+  });
+
+  it('REGRESSION: pointing straight at a rock beats a barely-better hold', () => {
+    // The complaint this encodes: rock 1 held the lock only ~5° better than
+    // the rock the player had swung the nose onto, and 5° lost to a 6° wedge,
+    // so aiming directly at something did nothing until the drift moved on.
+    const rocks = [
+      { id: 1, x: 1140, y: 288 }, // ~8.5° above the nose — the incumbent
+      { id: 2, x: 1140, y: 386 }, // ~2.6° below — what the player is aiming at
+    ];
+    expect(pickByNose(ship(0), rocks, BOUNDS, 1, NO_SNAP)).toBe(1); // old feel
+    expect(pickByNose(ship(0), rocks, BOUNDS, 1, OPTS)).toBe(2); // snap wins
+  });
+
+  it('snap only fires for the best bearing, never a merely-close one', () => {
+    const rocks = [
+      { id: 1, x: 1140, y: 300 }, // ~7° off, inside the cone
+      { id: 2, x: 1140, y: 361 }, // dead ahead, better
+    ];
+    expect(pickByNose(ship(0), rocks, BOUNDS, 1, OPTS)).toBe(2);
   });
 
   it('picks fresh when the held lock is gone, hysteresis or not', () => {
-    const picked = pickByNose(ship(0), [{ id: 7, x: 300, y: 360 }], BOUNDS, 99, HYST);
+    const picked = pickByNose(ship(0), [{ id: 7, x: 300, y: 360 }], BOUNDS, 99, OPTS);
     expect(picked).toBe(7); // behind the ship, but it is all there is
   });
 
   it('returns null on an empty field', () => {
-    expect(pickByNose(ship(0), [], BOUNDS, 3, HYST)).toBeNull();
+    expect(pickByNose(ship(0), [], BOUNDS, 3, OPTS)).toBeNull();
+  });
+});
+
+describe('isDeadAhead', () => {
+  it('is true inside the cone and false outside it', () => {
+    expect(isDeadAhead(ship(0), { id: 1, x: 1000, y: 362 }, BOUNDS, deg(14))).toBe(true);
+    expect(isDeadAhead(ship(0), { id: 1, x: 1000, y: 500 }, BOUNDS, deg(14))).toBe(false);
+  });
+
+  it('is false for something directly behind', () => {
+    expect(isDeadAhead(ship(0), { id: 1, x: 300, y: 360 }, BOUNDS, deg(14))).toBe(false);
+  });
+
+  it('reads through the wrap seam, like the picker does', () => {
+    const atEdge = { x: 1250, y: 360, facing: 0 };
+    expect(isDeadAhead(atEdge, { id: 1, x: 30, y: 360 }, BOUNDS, deg(14))).toBe(true);
   });
 });

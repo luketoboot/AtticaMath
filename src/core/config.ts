@@ -279,6 +279,12 @@ export interface FactorConfig {
    * lock instantly; only drift within this wedge is ignored.
    */
   aimHysteresisDeg: number;
+  /**
+   * Degrees off the nose inside which a rock takes the lock outright —
+   * skipping hysteresis, and taking it even mid-buffer. Pointing straight at
+   * something is the clearest input the mode has; nothing should argue.
+   */
+  aimSnapDeg: number;
 }
 
 export interface BossConfig {
@@ -708,7 +714,8 @@ export const CONFIG: GameConfig = {
     primeMultiplier: 2.5,
     balancedMultiplier: 2,
     splitSpeed: 90,
-    aimHysteresisDeg: 6,
+    aimHysteresisDeg: 3,
+    aimSnapDeg: 14,
   },
   collapse: {
     basePairs: 3,
