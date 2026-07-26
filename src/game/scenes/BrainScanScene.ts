@@ -31,6 +31,15 @@ const GROUPS: readonly { title: string; prefixes: readonly string[] }[] = [
 /** Column split, by group index. Three columns so 44 skills fit one screen. */
 const COLUMNS: readonly (readonly number[])[] = [[0, 1, 2], [3], [4, 5, 6]];
 
+/** Row rhythm. Named because they trade against each other for vertical room. */
+const ROW_H = 27;
+const HEADER_H = 28;
+const GROUP_GAP = 10;
+/** Share of the column given to the label before the bar starts. */
+const LABEL_SHARE = 0.62;
+/** Right-hand reserve for the gate hint. */
+const HINT_W = 44;
+
 /** Read-only visualization of the adaptive skill table. */
 export class BrainScanScene extends Phaser.Scene {
   constructor() {
@@ -52,18 +61,25 @@ export class BrainScanScene extends Phaser.Scene {
     this.add
       .text(width / 2 + 22, 42, 'BRAIN SCAN', { fontFamily: FONT, fontSize: '42px', fontStyle: 'bold', color: CSS.magenta })
       .setOrigin(0.5);
+    const anyReadings = Object.values(saves.save.skills).some((s) => s.attempts > 0);
     this.add
-      .text(width / 2, 78, 'WHAT THE MACHINE THINKS YOU KNOW', {
-        fontFamily: FONT,
-        fontSize: '14px',
-        color: CSS.cyanDim,
-      })
+      .text(
+        width / 2,
+        78,
+        anyReadings
+          ? 'WHAT THE MACHINE THINKS YOU KNOW'
+          : 'NO READINGS YET — PLAY A RUN AND THE TRACES COME UP',
+        { fontFamily: FONT, fontSize: '14px', color: anyReadings ? CSS.cyanDim : CSS.yellow },
+      )
       .setOrigin(0.5);
 
     const mastered = new Set(earnedMilestones(saves.save.skills, CONFIG).map((m) => m.id));
 
-    const margin = width * 0.035;
-    const span = (width - margin * 2) / COLUMNS.length;
+    // Whole pixels, so glyphs rasterise crisply rather than across a sub-pixel
+    // boundary. Worth having on a screen this dense, though it is not what fixed
+    // the headings — see the note on their colour below.
+    const margin = Math.round(width * 0.035);
+    const span = Math.round((width - margin * 2) / COLUMNS.length);
     COLUMNS.forEach((indices, i) => {
       const x0 = margin + span * i;
       this.renderColumn(
@@ -99,14 +115,46 @@ export class BrainScanScene extends Phaser.Scene {
     mastered: ReadonlySet<string>,
   ): void {
     let y = 112;
+    let band = 0;
     for (const group of groups) {
-      this.add.text(x0, y, group.title, { fontFamily: FONT, fontSize: '15px', fontStyle: 'bold', color: CSS.magentaHot });
-      y += 24;
+      // Cyan at 17px, not hot magenta at 15. Two reasons, and they agree.
+      //
+      // The CRT tore the old headings: magentaHot is the most saturated colour
+      // in the palette, it blooms hardest, and the scanline then cut a dark line
+      // straight through the caps — every heading read as struck out. Turning it
+      // down stops the bloom that the scanline had to bite into.
+      //
+      // It is also the better hierarchy. Seven headings in the loudest colour on
+      // screen competed with the handful of rows that actually carry a reading;
+      // the data should be the brightest thing here, and now it is.
+      this.add.text(x0, y, group.title, {
+        fontFamily: FONT,
+        fontSize: '17px',
+        fontStyle: 'bold',
+        color: CSS.cyan,
+      });
+      // A rule under the heading, so a group reads as a block with a lid rather
+      // than as one more row that happens to be a different colour.
+      this.add
+        .rectangle(x0, y + 22, x1 - x0, 1, PALETTE.cyan)
+        .setOrigin(0, 0.5)
+        .setAlpha(0.35);
+      y += HEADER_H;
       for (const skill of SKILLS.filter((s) => group.prefixes.some((p) => s.id.startsWith(p)))) {
+        // Banding carries the eye across the gap from a label to its bar. At
+        // this density a rule per row would out-shout the data, so it is a
+        // fill barely above the backdrop.
+        if (band % 2 === 1) {
+          this.add
+            .rectangle(x0 - 6, y + 8, x1 - x0 + 12, ROW_H - 2, PALETTE.deepPurple)
+            .setOrigin(0, 0.5)
+            .setAlpha(0.3);
+        }
         this.renderRow(skill, y, x0, x1, saves, mastered);
-        y += 26;
+        y += ROW_H;
+        band += 1;
       }
-      y += 10;
+      y += GROUP_GAP;
     }
   }
 
@@ -120,25 +168,33 @@ export class BrainScanScene extends Phaser.Scene {
   ): void {
     const state = saves.save.skills[skill.id];
     const isMastered = mastered.has(`mastery.${skill.id}`);
+    const attempted = state !== undefined && state.attempts > 0;
     // Proportional rather than a fixed 220px label gutter: three columns are
     // narrower than two, and a fixed offset left the bars too short to read.
-    const barX = x0 + (x1 - x0) * 0.56;
-    const barW = x1 - barX - 44;
+    const barX = x0 + (x1 - x0) * LABEL_SHARE;
+    const barW = x1 - barX - HINT_W;
 
     const label = this.add.text(x0, y, skill.label.toUpperCase(), {
       fontFamily: FONT,
-      fontSize: '12px',
-      color: state ? CSS.white : CSS.cyanDim,
+      fontSize: '13px',
+      color: attempted ? CSS.white : CSS.cyanDim,
     });
     // Nothing bounds a label to its share of the column, so the long ones —
     // "one number as a percent of another" is 34 characters — ran under the bar
     // and collided with the rating. Shrink to fit rather than wrap: a second
-    // line would break the fixed 26px row pitch and misalign the whole column.
+    // line would break the fixed row pitch and misalign the whole column.
     const room = barX - x0 - 8;
     if (label.width > room) label.setScale(room / label.width);
 
-    if (!state || state.attempts === 0) {
-      this.add.text(barX, y, 'NO SIGNAL', { fontFamily: FONT, fontSize: '12px', color: CSS.cyanDim });
+    if (!attempted) {
+      // A flatline, not the words NO SIGNAL. Thirty-eight of those rows say
+      // nothing at the same weight as the handful that say something, and on a
+      // brain scan a flat trace already means no activity — the shape carries
+      // it, so the words were only noise.
+      this.add
+        .rectangle(barX, y + 8, barW, 2, PALETTE.deepPurple)
+        .setOrigin(0, 0.5)
+        .setAlpha(0.9);
       return;
     }
 
@@ -148,9 +204,9 @@ export class BrainScanScene extends Phaser.Scene {
     const progress = masteryProgress(state, skill, CONFIG);
     const filled = Math.max(0.02, progress.overall);
 
-    this.add.rectangle(barX, y + 7, barW, 10, PALETTE.deepPurple).setOrigin(0, 0.5);
+    this.add.rectangle(barX, y + 8, barW, 11, PALETTE.deepPurple).setOrigin(0, 0.5);
     this.add
-      .rectangle(barX, y + 7, barW * filled, 10, isMastered ? PALETTE.yellow : PALETTE.cyan)
+      .rectangle(barX, y + 8, barW * filled, 11, isMastered ? PALETTE.yellow : PALETTE.cyan)
       .setOrigin(0, 0.5);
 
     // Naming the gate turns a short bar from a verdict into an instruction:
