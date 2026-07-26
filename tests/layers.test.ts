@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  areaPanesFor,
   createWorkbench,
   currentLayer,
   deconstruct,
@@ -241,6 +242,47 @@ describe('division ladders the answer', () => {
   it('refuses anything that does not divide out', () => {
     expect(() => createWorkbench(div(47, 6))).toThrow(/exact/);
     expect(() => createWorkbench(div(47, 0))).toThrow(/zero/);
+  });
+});
+
+describe('the area model', () => {
+  it('carves a product into slabs whose areas add to the whole', () => {
+    const panes = areaPanesFor({ op: 'mul', a: 134, b: 21 });
+    expect(panes).toEqual([
+      { place: 2, part: 100, area: 2100 },
+      { place: 1, part: 30, area: 630 },
+      { place: 0, part: 4, area: 84 },
+    ]);
+    expect(panes.reduce((s, p) => s + p.area, 0)).toBe(134 * 21);
+  });
+
+  it('carves a division into its partial quotients', () => {
+    // The block is the dividend, six tall and a hundred and twenty-three wide.
+    const panes = areaPanesFor({ op: 'div', a: 738, b: 6 });
+    expect(panes.map((p) => p.part)).toEqual([100, 20, 3]);
+    expect(panes.reduce((s, p) => s + p.area, 0)).toBe(738);
+  });
+
+  it('leaves out a place that contributes nothing', () => {
+    // 402 has no tens, and a zero-width slab is not a picture of anything.
+    expect(areaPanesFor({ op: 'mul', a: 402, b: 5 }).map((p) => p.part)).toEqual([400, 2]);
+  });
+
+  it('has nothing to draw for a sum', () => {
+    expect(areaPanesFor(add(679, 834))).toEqual([]);
+    expect(areaPanesFor(sub(634, 287))).toEqual([]);
+  });
+
+  it('lines its slabs up with the rungs that reveal them', () => {
+    // A slab's place is the depth at which its rung comes into focus, so the
+    // picture and the ladder can never disagree about what has been claimed.
+    const problem: ExerciseProblem = { op: 'mul', a: 134, b: 21 };
+    for (const pane of areaPanesFor(problem)) {
+      const claimed = areaPanesFor(problem)
+        .filter((p) => p.place >= pane.place)
+        .reduce((s, p) => s + p.area, 0);
+      expect(claimed).toBe(layerAt(problem, pane.place).value);
+    }
   });
 });
 

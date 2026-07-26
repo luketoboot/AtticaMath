@@ -167,6 +167,45 @@ export function ladderFor(problem: ExerciseProblem): number[] {
   return stops;
 }
 
+/** One slab of the area model: a place's own contribution to the product. */
+export interface AreaPane {
+  /** Place index — 2 for the hundreds slab. Compare against the rung's depth. */
+  place: number;
+  /** The part of the split factor this slab covers: 100, then 30, then 4. */
+  part: number;
+  /** Its area: what this slab adds to the total. */
+  area: number;
+}
+
+/**
+ * The product drawn as the rectangle it is.
+ *
+ * `134 × 21` is a block 134 wide and 21 tall; splitting the 134 by place cuts
+ * it into slabs of 100, 30 and 4 whose areas add back to the whole. That is the
+ * distributive law, and it is the one thing about multiplication that a column
+ * of digits cannot show — the digits are the answer's bookkeeping, the
+ * rectangle is the reason.
+ *
+ * Division reads the same drawing the other way: the block is the dividend, its
+ * height is the divisor, and the slabs are the partial quotients — 738 ÷ 6 is
+ * six tall and 123 wide, carved into 100, 20 and 3.
+ *
+ * Empty for sums, which have no area to draw. Places contributing nothing are
+ * left out: a zero-width slab is not a picture of anything.
+ */
+export function areaPanesFor(problem: ExerciseProblem): AreaPane[] {
+  if (problem.op !== 'mul' && problem.op !== 'div') return [];
+  const split = problem.op === 'mul' ? problem.a : problem.a / problem.b;
+  const height = problem.b;
+  const panes: AreaPane[] = [];
+  for (let place = digitCount(split) - 1; place >= 0; place--) {
+    const part = (Math.floor(split / 10 ** place) % 10) * 10 ** place;
+    if (part === 0) continue;
+    panes.push({ place, part, area: part * height });
+  }
+  return panes;
+}
+
 /**
  * Digits of one operand at a depth, right-aligned into `width` columns.
  *

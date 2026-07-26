@@ -4,6 +4,7 @@ import { CONFIG } from '../../core/config';
 import { creditsForRun } from '../../core/economy/economy';
 import { bondHint, frameCells } from '../../core/exercise/bonds';
 import {
+  areaPanesFor,
   currentLayer,
   ladderFor,
   layerAt,
@@ -20,6 +21,7 @@ import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
 import { CUT_FACTORS, sliceHint } from '../../core/exercise/slices';
+import { AreaModel } from '../../ui/AreaModel';
 import { FractionBars } from '../../ui/FractionBars';
 import { MenuNav, type MenuItem } from '../../ui/MenuNav';
 import { isTouchDevice, Numpad } from '../../ui/Numpad';
@@ -80,6 +82,10 @@ export class ExerciseScene extends Phaser.Scene {
   private barsUi?: FractionBars;
   private barsHint?: Phaser.GameObjects.Text;
   private barPickers?: NeonChip[];
+  /** Present only for products and quotients, which have an area to draw. */
+  private areaUi?: AreaModel;
+  /** Top of the ladder band; the area model pushes it down when it is present. */
+  private bandTop = BAND_TOP;
   private focusPanel!: Phaser.GameObjects.Graphics;
   private promptText!: Phaser.GameObjects.Text;
   private progressText!: Phaser.GameObjects.Text;
@@ -187,6 +193,21 @@ export class ExerciseScene extends Phaser.Scene {
     if (this.session.kind === 'bars') {
       this.buildBarsUi(quit);
     } else {
+      // A product or a quotient gets its rectangle, above the ladder, and the
+      // ladder makes room. A sum has no area to draw and keeps the full band.
+      const shape = exerciseFromProblem(this.session.problem)!;
+      if (shape.op === 'mul' || shape.op === 'div') {
+        this.areaUi = new AreaModel(this, width / 2, 214, 560, 104);
+        this.bandTop = 300;
+        this.add
+          .text(width / 2, 148, shape.op === 'mul' ? 'THE BLOCK' : 'THE BLOCK, SHARED OUT', {
+            fontFamily: FONT,
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: CSS.magentaHot,
+          })
+          .setOrigin(0.5);
+      }
       this.breakBtn = neonButton(this, width / 2, height * 0.915, 'BREAK IT DOWN', () => this.deconstruct(), {
         width: 330,
         height: 54,
@@ -342,6 +363,7 @@ export class ExerciseScene extends Phaser.Scene {
   /** Drive the bar animation. Nothing else in this mode needs a frame loop. */
   override update(_time: number, delta: number): void {
     this.barsUi?.tick(delta);
+    this.areaUi?.tick(delta);
   }
 
   // --- layout ---
@@ -375,7 +397,7 @@ export class ExerciseScene extends Phaser.Scene {
     // the grid is measured rather than guessed.
     const cols = Math.max(digits, resultWidth(problem));
 
-    const block = Math.min(MAX_BLOCK, (BAND_BOTTOM - BAND_TOP) / depths.length);
+    const block = Math.min(MAX_BLOCK, (BAND_BOTTOM - this.bandTop) / depths.length);
     this.blockH = block;
     const s = block / MAX_BLOCK;
     const cell = BASE_CELL * s;
@@ -826,6 +848,19 @@ export class ExerciseScene extends Phaser.Scene {
     const canBreak = !state.locked && state.depth < this.deepestReachable();
     this.breakBtn.setAccent(canBreak ? PALETTE.magenta : PALETTE.purple);
     this.drawBonds();
+
+    // A slab is claimed once its place has come into focus, so the lit part of
+    // the rectangle is always exactly the rung's answer. The dim remainder is
+    // what is still to come, which is what makes the block read as assembling
+    // rather than as appearing whole.
+    if (this.areaUi) {
+      const panes = areaPanesFor(problem).map((p) => ({
+        part: p.part,
+        area: p.area,
+        live: p.place >= state.depth,
+      }));
+      this.areaUi.show(panes, problem.b);
+    }
   }
 
   private hint(): string {
