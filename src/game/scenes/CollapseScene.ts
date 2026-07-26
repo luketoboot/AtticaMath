@@ -38,7 +38,8 @@ import {
 } from '../../core/flight/newtonian';
 import { createRng } from '../../core/rng';
 import { newMilestones } from '../../core/skills/milestones';
-import { applyAttempt } from '../../core/skills/rating';
+import { applyAttempt, type SkillTable } from '../../core/skills/rating';
+import { runDeltas } from '../../core/skills/report';
 import { generateAsteroid, hitsCircle, maxRadius, type AsteroidShape } from '../../core/shapes/asteroid';
 import { applyCrt } from '../../fx/applyCrt';
 import { cameraPunch, clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '../../fx/juice';
@@ -187,6 +188,8 @@ export class CollapseScene extends Phaser.Scene {
   private carriersLeft = 0;
   private nearMissed = new Set<number>();
   private saves!: SaveManager;
+  /** Skill table as the run began, for the debrief's brain-delta column. */
+  private skillsAtLaunch: SkillTable = {};
 
   private ship!: Phaser.GameObjects.Container;
   private flight!: FlightState;
@@ -256,6 +259,9 @@ export class CollapseScene extends Phaser.Scene {
     this.pickups = [];
     this.nearMissed.clear();
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    // Collapse rates as it goes, straight into the save — so the run report's
+    // "before" is this reference, held from launch. Tables update immutably.
+    this.skillsAtLaunch = this.saves.save.skills;
     this.hullDef = hullFor(this.saves.save.equipped.hull);
     this.trail = trailFor(this.saves.save.equipped.trail);
     this.starLayers = [];
@@ -1438,6 +1444,7 @@ export class CollapseScene extends Phaser.Scene {
     const unlocked = newMilestones(save.skills, save.milestones, CONFIG);
     save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
+    const deltas = runDeltas(this.skillsAtLaunch, save.skills, CONFIG);
 
     getAudio(this)?.play('gameover');
     this.cameras.main.flash(400, 255, 45, 149);
@@ -1450,6 +1457,7 @@ export class CollapseScene extends Phaser.Scene {
         title: 'COLLAPSE FAILED',
         killsLabel: 'PAIRED',
         streakLabel: 'BEST CHAIN',
+        deltas,
       });
     });
   }

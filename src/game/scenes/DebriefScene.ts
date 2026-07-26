@@ -10,6 +10,7 @@ import {
   type LeaderboardMode,
 } from '../../core/leaderboard/leaderboard';
 import type { LeaderboardStore } from '../../core/leaderboard/store';
+import { topMovers, type SkillDelta } from '../../core/skills/report';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -34,6 +35,8 @@ interface DebriefData {
    */
   killsLabel?: string;
   streakLabel?: string;
+  /** Rating movement over the run, for the brain-delta column. */
+  deltas?: SkillDelta[];
 }
 
 export class DebriefScene extends Phaser.Scene {
@@ -65,11 +68,15 @@ export class DebriefScene extends Phaser.Scene {
       [data.streakLabel ?? 'BEST STREAK', `x${s.bestStreak}`],
       ['CREDITS EARNED', `+${data.credits}`],
     ];
+    // Stats keep the left half; the rating movement takes the right, so a run
+    // reads as two ledgers side by side — what you scored, what it rewired.
+    const movers = topMovers(data.deltas ?? [], rows.length);
+    const statsMid = movers.length > 0 ? 0.31 : 0.5;
     rows.forEach(([label, value], i) => {
       const y = height * 0.3 + i * 36;
-      this.add.text(width * 0.32, y, label!, { fontFamily: FONT, fontSize: '22px', color: CSS.cyanDim });
+      this.add.text(width * (statsMid - 0.18), y, label!, { fontFamily: FONT, fontSize: '22px', color: CSS.cyanDim });
       this.add
-        .text(width * 0.68, y, value!, {
+        .text(width * (statsMid + 0.18), y, value!, {
           fontFamily: FONT,
           fontSize: '22px',
           fontStyle: 'bold',
@@ -77,6 +84,7 @@ export class DebriefScene extends Phaser.Scene {
         })
         .setOrigin(1, 0);
     });
+    this.drawDeltas(movers);
 
     const unlocked = data.milestones ?? [];
     unlocked.slice(0, 3).forEach((label, i) => {
@@ -110,6 +118,38 @@ export class DebriefScene extends Phaser.Scene {
     // A qualifying score gets the initials prompt first; the buttons appear
     // once it is answered, so ENTER cannot relaunch out from under the entry.
     void this.offerHighScore(data);
+  }
+
+  /** The right-hand ledger: what the run did to the ratings behind the game. */
+  private drawDeltas(movers: readonly SkillDelta[]): void {
+    if (movers.length === 0) return;
+    const { width, height } = this.scale;
+    this.add
+      .text(width * 0.715, height * 0.265, 'BRAIN DELTA', {
+        fontFamily: FONT,
+        fontSize: '14px',
+        fontStyle: 'bold',
+        color: CSS.magentaHot,
+      })
+      .setOrigin(0.5);
+    movers.forEach((m, i) => {
+      const y = height * 0.3 + i * 36;
+      const up = m.delta > 0;
+      const label = m.label.toUpperCase();
+      this.add.text(width * 0.56, y + 3, label, {
+        fontFamily: FONT,
+        fontSize: label.length > 26 ? '13px' : '16px',
+        color: CSS.cyanDim,
+      });
+      this.add
+        .text(width * 0.87, y, `${up ? '+' : '−'}${Math.abs(m.delta)}`, {
+          fontFamily: FONT,
+          fontSize: '22px',
+          fontStyle: 'bold',
+          color: up ? CSS.cyan : CSS.red,
+        })
+        .setOrigin(1, 0);
+    });
   }
 
   /**

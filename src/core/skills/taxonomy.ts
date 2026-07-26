@@ -99,6 +99,11 @@ export function getSkill(id: SkillId): SkillDef {
   return def;
 }
 
+/** Tolerant lookup for walking saves, which may hold ids the taxonomy retired. */
+export function findSkill(id: SkillId): SkillDef | undefined {
+  return byId.get(id);
+}
+
 export function allSkillIds(): SkillId[] {
   return SKILLS.map((s) => s.id);
 }

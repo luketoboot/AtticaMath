@@ -5,6 +5,7 @@ import { evaluateTokens, type Token } from '../../core/expression/expression';
 import type { ExpressionProblem } from '../../core/expression/generate';
 import { ExpressionSession, type Recalibration } from '../../core/expression/session';
 import { newMilestones } from '../../core/skills/milestones';
+import { runDeltas } from '../../core/skills/report';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
@@ -514,6 +515,7 @@ export class ExpressionScene extends Phaser.Scene {
     clearHitStop(this);
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
+    const deltas = runDeltas(save.skills, this.session.skillTable, CONFIG);
     save.skills = this.session.skillTable;
     save.totalWaves += this.session.currentWaveNumber;
     save.credits += credits;
@@ -530,6 +532,7 @@ export class ExpressionScene extends Phaser.Scene {
         credits,
         mode: 'Expression',
         milestones: unlocked.map((m) => m.label),
+        deltas,
       });
     });
   }

@@ -15,6 +15,7 @@ import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { createRng } from '../../core/rng';
 import { generateAsteroid, hitsCircle, type AsteroidShape } from '../../core/shapes/asteroid';
 import { newMilestones } from '../../core/skills/milestones';
+import { runDeltas } from '../../core/skills/report';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
@@ -786,6 +787,7 @@ export class FactorScene extends Phaser.Scene {
     getAudio(this)?.stopAllLoops();
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
+    const deltas = runDeltas(save.skills, this.session.skillTable, CONFIG);
     save.skills = this.session.skillTable;
     save.totalWaves += this.session.currentWaveNumber;
     save.credits += credits;
@@ -803,6 +805,7 @@ export class FactorScene extends Phaser.Scene {
         credits,
         mode: 'Factor',
         milestones: unlocked.map((m) => m.label),
+        deltas,
       });
     });
   }

@@ -4,10 +4,11 @@ import { applyDifficulty, CONFIG, type DifficultyId } from '../../core/config';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import type { Problem } from '../../core/generator/problem';
 import { RunSession } from '../../core/session';
+import { crossedFluent, runDeltas } from '../../core/skills/report';
 import type { SkillFilter } from '../../core/skills/taxonomy';
 import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
-import { targetLatencyMs } from '../../core/skills/rating';
+import { targetLatencyMs, type SkillTable } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
@@ -85,6 +86,8 @@ export class GameScene extends Phaser.Scene {
   private pointerTargetX: number | null = null;
   private invulnUntil = 0;
   private warnedArmed = false;
+  /** Skill table as the wave began, for the breather's fluency callout. */
+  private waveStartSkills: SkillTable = {};
 
   private hpText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
@@ -228,6 +231,9 @@ export class GameScene extends Phaser.Scene {
   // --- wave flow ---
 
   private startWave(): void {
+    // Snapshot for the breather's "went fluent" callout. Tables update
+    // immutably, so holding the reference is holding the moment.
+    this.waveStartSkills = this.session.skillTable;
     const plan = this.session.nextWave();
     this.spawnQueue = plan.problems.map((problem, i) => ({
       problem,
@@ -282,6 +288,27 @@ export class GameScene extends Phaser.Scene {
             fontFamily: FONT,
             fontSize: '20px',
             color: CSS.white,
+            wordWrap: { width: width * 0.7 },
+            align: 'center',
+          })
+          .setOrigin(0.5),
+      );
+    }
+
+    // The model just promoted something the player earned this wave — say it
+    // out loud. This is the one moment rating movement is allowed on screen
+    // mid-run, and it only ever fires on attempted skills, never on seeding.
+    const fluent = crossedFluent(this.waveStartSkills, this.session.skillTable, CONFIG);
+    if (fluent.length > 0) {
+      getAudio(this)?.play('comboUp');
+      const names = fluent.map((def) => def.label.toUpperCase()).join('  ·  ');
+      lines.push(
+        this.add
+          .text(width / 2, height * 0.56, `${names} — NOW FLUENT`, {
+            fontFamily: FONT,
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: CSS.yellow,
             wordWrap: { width: width * 0.7 },
             align: 'center',
           })
@@ -1082,6 +1109,9 @@ export class GameScene extends Phaser.Scene {
     const save = this.saves.save;
     const credits = this.session.creditsEarned();
 
+    // Diff before the session table replaces the save's — that pair of
+    // snapshots is the whole run report.
+    const deltas = runDeltas(save.skills, this.session.skillTable, CONFIG);
     save.skills = this.session.skillTable;
     save.totalWaves += this.session.currentWaveNumber;
     save.placementDone = !this.session.inPlacement;
@@ -1103,6 +1133,7 @@ export class GameScene extends Phaser.Scene {
         stats: this.session.stats(),
         credits,
         milestones: unlocked.map((m) => m.label),
+        deltas,
       });
     });
   }
