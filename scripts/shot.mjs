@@ -68,13 +68,42 @@ const PRESETS = [
   { name: 'Leaderboard', scene: 'Leaderboard' },
   { name: 'Playbook', scene: 'Playbook' },
   { name: 'BrainScan', scene: 'BrainScan' },
+  {
+    // A profile mid-climb, so the goldens actually cover the mastery bars. The
+    // empty-save shot above is all NO SIGNAL and would not notice them break.
+    // One skill per gate: barely started, ground out but slow, and mastered.
+    name: 'BrainScan-progress',
+    scene: 'BrainScan',
+    save: {
+      skills: {
+        'add.single': { rating: 540, attempts: 3, correct: 3, fluency: 2.1, lastAttemptWave: 5 },
+        'add.bridge': { rating: 760, attempts: 220, correct: 200, fluency: 0.7, lastAttemptWave: 5 },
+        'add.double': { rating: 900, attempts: 70, correct: 62, fluency: 1.8, lastAttemptWave: 5 },
+        'mul.table.7': { rating: 1100, attempts: 130, correct: 118, fluency: 1.7, lastAttemptWave: 5 },
+        'mul.table.8': { rating: 700, attempts: 40, correct: 33, fluency: 1.1, lastAttemptWave: 5 },
+      },
+    },
+  },
   { name: 'Settings', scene: 'Settings' },
   { name: 'Controls', scene: 'Controls' },
   { name: 'Video', scene: 'Video' },
 ];
 
-/** Enough credits and history that shelves and boards are not all empty. */
-const DEFAULT_SAVE = { credits: 9999, bestScore: 42000, totalWaves: 120, placementDone: true };
+/**
+ * Enough credits and history that shelves and boards are not all empty.
+ *
+ * Applied in full before every shot, not just the first: one browser serves the
+ * whole batch, so a preset that seeds a skill table would otherwise leave it
+ * behind for everything after it and make a shot depend on preset order.
+ */
+const DEFAULT_SAVE = {
+  credits: 9999,
+  bestScore: 42000,
+  totalWaves: 120,
+  placementDone: true,
+  skills: {},
+  milestones: [],
+};
 
 function parseArgs(argv) {
   const positional = [];
@@ -136,6 +165,7 @@ function resolveOne(target, opts) {
     scene: preset.scene,
     name: overrides.length ? [preset.scene, ...overrides].join('-') : preset.name,
     data: { ...preset.data, ...opts.data },
+    save: preset.save,
   };
 }
 
@@ -143,12 +173,13 @@ function resolveOne(target, opts) {
  * Boot the game, install a fixture, run one scene, and read the canvas back.
  * Reused across every shot in a batch so one browser serves the whole sweep.
  */
-async function shoot(page, { name, scene, data }, opts) {
-  const settings = { ...DEFAULT_SAVE, ...opts.save };
+async function shoot(page, { name, scene, data, save }, opts) {
+  const settings = { ...DEFAULT_SAVE, ...save, ...opts.save };
 
   await page.evaluate(
     async ([sceneKey, sceneData, saveOverrides, freeze]) => {
       const game = window.__game;
+      window.__reseed();
       // The SaveManager the scenes read is a live object in the registry, so a
       // fixture is an assignment — no save file to write or schema to mirror.
       const saves = game.registry.get('saveManager');
@@ -247,11 +278,17 @@ async function main() {
     // Procedural art and star fields run off Math.random. Pinning it means two
     // shots of an untouched screen are the same picture.
     await page.addInitScript(() => {
-      let seed = 0x2f6e2b1;
+      const SEED = 0x2f6e2b1;
+      let seed = SEED;
       Math.random = () => {
         seed = (seed * 1103515245 + 12345) & 0x7fffffff;
         return seed / 0x7fffffff;
       };
+      // Rewound before every shot. One page serves the whole batch and each
+      // scene draws its star field from this one stream, so without a rewind
+      // inserting a preset would shift the stars of every scene after it and
+      // churn goldens that nothing touched.
+      window.__reseed = () => void (seed = SEED);
     });
 
     const errors = [];
