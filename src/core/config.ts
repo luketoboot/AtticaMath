@@ -328,6 +328,31 @@ export interface BossConfig {
   blockScore: number;
 }
 
+/**
+ * Exercise: the focus dial. Deliberately not a race — no HP, no clock, no
+ * combo. The only pressure is that a rung has one right answer.
+ */
+export interface ExerciseConfig {
+  /** Problems in one set. */
+  problemsPerSet: number;
+  /**
+   * K multiplier for the attempt a solved problem reports. Scaffolded practice
+   * is real evidence but weak evidence, and a mode you can sit and think in
+   * should not move a rating as hard as a meteor bearing down does.
+   */
+  ratingKMultiplier: number;
+  /** Rerolls allowed while looking for a problem the dial can actually open. */
+  maxGenerateAttempts: number;
+  /** Score per solved problem, and the bonus for solving one with no misses. */
+  solveScore: number;
+  cleanBonus: number;
+  /**
+   * Average scaffold depth at or below which a set counts as graduated: the
+   * player is solving these whole and no longer needs the dial for this skill.
+   */
+  graduationScaffold: number;
+}
+
 export interface EconomyConfig {
   /** Currency per point of score, end of run. */
   creditsPerScore: number;
@@ -523,6 +548,7 @@ export interface GameConfig {
   factor: FactorConfig;
   collapse: CollapseConfig;
   boss: BossConfig;
+  exercise: ExerciseConfig;
   hazard: HazardConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
@@ -785,6 +811,14 @@ export const CONFIG: GameConfig = {
     nukeFraction: 0.18,
     attacksPerCarrier: 4,
     blockScore: 150,
+  },
+  exercise: {
+    problemsPerSet: 8,
+    ratingKMultiplier: 0.5,
+    maxGenerateAttempts: 24,
+    solveScore: 120,
+    cleanBonus: 80,
+    graduationScaffold: 0.5,
   },
   hazard: {
     firstArmedWave: 2,

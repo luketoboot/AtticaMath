@@ -37,6 +37,14 @@ export interface AttemptResult {
   difficulty: number;
   /** Global wave counter at time of attempt. */
   wave: number;
+  /**
+   * The clock on this attempt carries no information — set by modes that are
+   * deliberately not races, like Exercise. Such an attempt still moves the
+   * rating, but at its unscaled size, and it leaves fluency untouched: a mode
+   * that invites the player to take their time cannot also read their pace as
+   * evidence they are slow.
+   */
+  untimed?: boolean;
 }
 
 /** Probability the player (rating r) answers a problem of given difficulty correctly. */
@@ -79,14 +87,15 @@ export function updateSkill(state: SkillState, attempt: AttemptResult, cfg: Rati
   const expected = expectedScore(state.rating, attempt.difficulty, cfg);
   const actual = attempt.correct ? 1 : 0;
   const target = targetLatencyMs(attempt.difficulty, cfg);
+  const timed = attempt.untimed !== true;
   let delta = k * (actual - expected);
-  if (attempt.correct) delta *= speedFactor(attempt.responseMs, target, cfg);
+  if (attempt.correct && timed) delta *= speedFactor(attempt.responseMs, target, cfg);
   const rating = Math.min(cfg.maxRating, Math.max(cfg.minRating, state.rating + delta));
 
   // Only correct answers carry speed information: the clock on a miss measures
   // how long the player stared at it, which says nothing about recall.
   let fluency = state.fluency;
-  if (attempt.correct) {
+  if (attempt.correct && timed) {
     const sample = fluencySample(attempt.responseMs, target, cfg);
     // Seed on the first timed answer rather than easing up from zero, or a
     // skill would spend its opening dozen answers climbing out of a hole that

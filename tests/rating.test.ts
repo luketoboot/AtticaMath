@@ -66,6 +66,32 @@ describe('updateSkill', () => {
     expect(slow.rating).toBeGreaterThan(base.rating); // slow correct is still positive
   });
 
+  it('takes an untimed answer at face value, however long it took', () => {
+    // Exercise mode invites the player to think. Answering slowly there must
+    // not read as answering slowly.
+    const slow = updateSkill(base, { correct: true, responseMs: 60000, difficulty: 500, wave: 5 }, cfg);
+    const untimed = updateSkill(
+      base,
+      { correct: true, responseMs: 60000, difficulty: 500, wave: 5, untimed: true },
+      cfg,
+    );
+    expect(untimed.rating).toBeGreaterThan(slow.rating);
+    // Neither faster nor slower than target — just unscaled.
+    const unscaled = updateSkill(base, { correct: true, responseMs: 4000, difficulty: 500, wave: 5 }, cfg);
+    expect(untimed.rating).toBeCloseTo(unscaled.rating, 6);
+  });
+
+  it('leaves fluency untouched on an untimed answer', () => {
+    const state = { ...base, fluency: 2.4 };
+    const next = updateSkill(
+      state,
+      { correct: true, responseMs: 60000, difficulty: 500, wave: 5, untimed: true },
+      cfg,
+    );
+    expect(next.fluency).toBe(2.4);
+    expect(next.correct).toBe(state.correct + 1);
+  });
+
   it('provisional skills move faster', () => {
     const fresh = freshSkillState(cfg);
     const seasoned = { ...fresh, attempts: cfg.provisionalAttempts + 5 };
