@@ -8,6 +8,7 @@ import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
 import { MenuNav, navHint } from '../../ui/MenuNav';
 import { neonButton, neonChip, type NeonChip } from '../../ui/panels';
+import { METEOR_DRILL_KEY } from './PlaybookScene';
 
 /** Registry key for the meteor-defense practice filter (persists across runs). */
 export const METEOR_FILTER_KEY = 'meteorFilter';
@@ -227,6 +228,8 @@ export class ModeSelectScene extends Phaser.Scene {
     getAudio(this)?.play('ui');
     this.registry.set(METEOR_FILTER_KEY, { ...this.filter });
     this.registry.set(METEOR_DIFFICULTY_KEY, this.difficulty);
+    // An ordinary launch is not a Playbook drill; never inherit a stale one.
+    this.registry.remove(METEOR_DRILL_KEY);
     this.scene.start('Game');
   }
 }

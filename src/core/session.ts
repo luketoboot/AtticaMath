@@ -44,6 +44,11 @@ export interface RunSessionInit {
   config?: GameConfig;
   /** Practice-mode restriction; omitted = full adaptive mix. */
   filter?: SkillFilter;
+  /**
+   * A Playbook drill: this skill is overweighted in every wave of the run,
+   * not just the one after a tip. Tip picks still take a wave when they land.
+   */
+  coachedSkill?: SkillId;
 }
 
 const COACH_RECENCY_WAVES = 3;
@@ -63,6 +68,8 @@ export class RunSession {
   private placementDone: boolean;
   private readonly placementLog: PlacementAttempt[] = [];
   private coached: SkillId | undefined;
+  /** Standing overweight for the whole run (Playbook drills); tips override per wave. */
+  private readonly drillSkill: SkillId | undefined;
   private lastTipSkill: SkillId | undefined;
   private readonly filter: SkillFilter;
 
@@ -94,6 +101,7 @@ export class RunSession {
     this.hp = this.cfg.meteors.baseHp;
     this.maxHp = this.hp; // repair tops up to where the run started, never past it
     this.filter = init.filter ?? OPEN_FILTER;
+    this.drillSkill = init.coachedSkill;
   }
 
   /** Global wave counter (lifetime), used for recency in the skill table. */
@@ -218,7 +226,14 @@ export class RunSession {
       const plan = composePlacementWave(this.waveInRun, this.cfg, this.rng, this.filter);
       return { ...plan, wave: this.waveInRun };
     }
-    const plan = composeWave(this.skills, this.globalWave, this.cfg, this.rng, this.coached, this.filter);
+    const plan = composeWave(
+      this.skills,
+      this.globalWave,
+      this.cfg,
+      this.rng,
+      this.coached ?? this.drillSkill,
+      this.filter,
+    );
     this.coached = undefined;
     return { ...plan, wave: this.waveInRun };
   }

@@ -23,7 +23,8 @@ export type IconName =
   | 'hangar'
   | 'leaderboard'
   | 'brainscan'
-  | 'settings';
+  | 'settings'
+  | 'playbook';
 
 type Pt = readonly [number, number];
 
@@ -301,6 +302,32 @@ function settings(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameOb
   return [g];
 }
 
+function playbook(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameObject[] {
+  const s = st.size / 2;
+  const g = scene.add.graphics();
+  // An open book: two winged pages meeting at the spine.
+  const left: readonly Pt[] = [
+    [-0.9, -0.5],
+    [-0.06, -0.68],
+    [-0.06, 0.62],
+    [-0.9, 0.44],
+  ];
+  const right: readonly Pt[] = [
+    [0.9, -0.5],
+    [0.06, -0.68],
+    [0.06, 0.62],
+    [0.9, 0.44],
+  ];
+  stroked(g, left, s, st.color, 2.5, true, { color: st.color, alpha: 0.14 });
+  stroked(g, right, s, st.color, 2.5, true, { color: st.color, alpha: 0.14 });
+  // Rule lines on the left page; the right page carries the mark.
+  g.lineStyle(2, st.dim, 1);
+  g.lineBetween(-0.7 * s, -0.3 * s, -0.24 * s, -0.4 * s);
+  g.lineBetween(-0.7 * s, -0.02 * s, -0.24 * s, -0.12 * s);
+  g.lineBetween(-0.7 * s, 0.26 * s, -0.24 * s, 0.16 * s);
+  return [g, glyph(scene, 0.46 * s, -0.1 * s, '×', s * 0.56, st.dim)];
+}
+
 const PAINTERS: Readonly<
   Record<IconName, (scene: Phaser.Scene, st: IconStyle) => Phaser.GameObjects.GameObject[]>
 > = {
@@ -313,6 +340,7 @@ const PAINTERS: Readonly<
   leaderboard,
   brainscan,
   settings,
+  playbook,
 };
 
 /**

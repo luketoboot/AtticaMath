@@ -80,37 +80,46 @@ export class MenuScene extends Phaser.Scene {
       y: 322,
     }));
 
+    // Five across: slightly narrower buttons than the four-wide row had, so
+    // the Playbook fits without the row crowding the screen edges.
+    const util = { width: 206, height: 54, fontSize: 17 };
     const utility = [
-      neonButton(this, spread(width / 2, 980, 0, 4), 470, 'HANGAR', () => this.scene.start('Shop'), {
-        width: 230,
-        height: 54,
-        fontSize: 19,
+      neonButton(this, spread(width / 2, 1120, 0, 5), 470, 'HANGAR', () => this.scene.start('Shop'), {
+        ...util,
         icon: 'hangar',
         sub: 'SHIPS & COLOURS',
       }),
       neonButton(
         this,
-        spread(width / 2, 980, 1, 4),
+        spread(width / 2, 1120, 1, 5),
         470,
         'SCORES',
         () => this.scene.start('Leaderboard'),
-        { width: 230, height: 54, fontSize: 19, icon: 'leaderboard', sub: 'HALL OF FAME' },
+        { ...util, icon: 'leaderboard', sub: 'HALL OF FAME' },
       ),
       neonButton(
         this,
-        spread(width / 2, 980, 2, 4),
+        spread(width / 2, 1120, 2, 5),
+        470,
+        'PLAYBOOK',
+        () => this.scene.start('Playbook'),
+        { ...util, icon: 'playbook', sub: 'MENTAL MATH MOVES' },
+      ),
+      neonButton(
+        this,
+        spread(width / 2, 1120, 3, 5),
         470,
         'BRAIN SCAN',
         () => this.scene.start('BrainScan'),
-        { width: 230, height: 54, fontSize: 19, icon: 'brainscan', sub: 'YOUR SKILL MAP' },
+        { ...util, icon: 'brainscan', sub: 'YOUR SKILL MAP' },
       ),
       neonButton(
         this,
-        spread(width / 2, 980, 3, 4),
+        spread(width / 2, 1120, 4, 5),
         470,
         'SETTINGS',
         () => this.scene.start('Settings'),
-        { width: 230, height: 54, fontSize: 19, icon: 'settings', sub: 'CRT · AUDIO · KEYS' },
+        { ...util, icon: 'settings', sub: 'CRT · AUDIO · KEYS' },
       ),
     ];
 

@@ -12,6 +12,7 @@ import { LeaderboardScene } from './game/scenes/LeaderboardScene';
 import { MenuScene } from './game/scenes/MenuScene';
 import { ModeSelectScene } from './game/scenes/ModeSelectScene';
 import { PauseScene } from './game/scenes/PauseScene';
+import { PlaybookScene } from './game/scenes/PlaybookScene';
 import { SettingsScene } from './game/scenes/SettingsScene';
 import { ShopScene } from './game/scenes/ShopScene';
 import { VideoScene } from './game/scenes/VideoScene';
@@ -39,6 +40,7 @@ const game = new Phaser.Game({
     LeaderboardScene,
     ShopScene,
     BrainScanScene,
+    PlaybookScene,
     SettingsScene,
     ControlsScene,
     VideoScene,

@@ -3,9 +3,11 @@ import { getAudio } from '../../audio/getAudio';
 import { applyDifficulty, CONFIG, type DifficultyId } from '../../core/config';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import type { Problem } from '../../core/generator/problem';
+import { drillFilterFor } from '../../core/coach/techniques';
 import { RunSession } from '../../core/session';
 import { crossedFluent, runDeltas } from '../../core/skills/report';
-import type { SkillFilter } from '../../core/skills/taxonomy';
+import { getSkill, type SkillFilter, type SkillId } from '../../core/skills/taxonomy';
+import { METEOR_DRILL_KEY } from './PlaybookScene';
 import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs, type SkillTable } from '../../core/skills/rating';
@@ -127,7 +129,13 @@ export class GameScene extends Phaser.Scene {
     this.cannonX = width / 2;
 
     const save = this.saves.save;
-    const filter = this.registry.get('meteorFilter') as SkillFilter | undefined;
+    // A Playbook drill outranks the sector-select filter: it derives its own
+    // from the technique's family, and keeps the skill overweighted all run.
+    // Deliberately not cleared here, so RELAUNCH from the debrief re-drills.
+    const drill = this.registry.get(METEOR_DRILL_KEY) as SkillId | undefined;
+    const filter = drill
+      ? drillFilterFor(drill)
+      : (this.registry.get('meteorFilter') as SkillFilter | undefined);
     // The pace level is a derived config, not session state: the session just
     // reads whatever pacing numbers it is handed.
     const level = this.registry.get('meteorDifficulty') as DifficultyId | undefined;
@@ -138,12 +146,25 @@ export class GameScene extends Phaser.Scene {
       placementDone: save.placementDone,
       config: applyDifficulty(CONFIG, level ?? CONFIG.difficulty.fallback),
       ...(filter ? { filter } : {}),
+      ...(drill ? { coachedSkill: drill } : {}),
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
     this.drawGround();
     this.drawCannon();
     this.createHud();
+    if (drill) {
+      // Standing readout under the wave counter: this run has an agenda.
+      this.add
+        .text(width / 2, 48, `DRILL // ${getSkill(drill).label.toUpperCase()}`, {
+          fontFamily: FONT,
+          fontSize: '13px',
+          fontStyle: 'bold',
+          color: CSS.magentaHot,
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(20);
+    }
 
     this.buffer = new InputBuffer(this, (value) => {
       this.bufferText.setText(value.length > 0 ? value : '_');
