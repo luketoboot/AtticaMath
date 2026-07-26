@@ -90,7 +90,7 @@ export class ModeSelectScene extends Phaser.Scene {
       // The row leaves room for the fractions toggle on its right flank —
       // digits cap the integers, the toggle owns the fraction family, and
       // putting them side by side is what says the two do not overlap.
-      const x = width / 2 - 160 + i * 96;
+      const x = width / 2 - 250 + i * 96;
       this.digitChips.push(
         neonChip(this, x, height * 0.44, String(digits), () => this.chooseDigits(digits), {
           size: 58,
@@ -101,7 +101,7 @@ export class ModeSelectScene extends Phaser.Scene {
     });
     this.fractionChip = neonChip(
       this,
-      width / 2 + 208,
+      width / 2 + 200,
       height * 0.44,
       'FRACTIONS',
       () => this.toggleFractions(),
