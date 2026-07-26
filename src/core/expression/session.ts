@@ -261,16 +261,21 @@ export class ExpressionSession {
   /**
    * Discard one chip for a fresh one. Free in resources, paid for in combo
    * clock — the targets are still falling while you fish for a better chip.
+   *
+   * Returns the re-rolls the swap forced (a scrapped chip may have been a
+   * live target's only route), or null if the index was not scrappable.
+   * Scrap changes the hand exactly like firing does, so it owes the same
+   * recalibration promise.
    */
-  scrapChip(index: number): boolean {
-    if (index < 0 || index >= this.hand.length) return false;
+  scrapChip(index: number): Recalibration[] | null {
+    if (index < 0 || index >= this.hand.length) return null;
     this.hand.splice(index, 1);
     this.refill();
     this.combo = comboWrongDigit(this.combo, {
       ...this.cfg.combo,
       wrongDigitPenaltySeconds: this.cfg.expression.scrapPenaltySeconds,
     });
-    return true;
+    return this.recalibrate();
   }
 
   /** Average rating over attempted skills; drives how many chips targets want. */
@@ -404,20 +409,30 @@ export class ExpressionSession {
   }
 
   /**
-   * Re-roll any target the new hand can no longer reach. The promise is that
-   * every number falling at you is solvable with what you hold; when spending
-   * chips breaks that, the target changes rather than the player being asked to
-   * do the impossible.
+   * Re-roll any target the current hand can no longer reach. The promise is
+   * that every number falling at you is solvable with what you hold; when a
+   * hand change breaks that, the target changes rather than the player being
+   * asked to do the impossible.
+   *
+   * Runs to a fixed point: replacing one target can force a full redeal
+   * (makeTarget's last resort), which can strand a target vetted moments
+   * earlier in the same pass. Chained changes share the pass's order, so a
+   * scene applying them by fromId lands on the final problem.
    */
   private recalibrate(): Recalibration[] {
     const changes: Recalibration[] = [];
-    this.live = this.live.map((target) => {
-      if (this.reach.has(target.target)) return target;
-      const replacement = this.makeTarget();
-      if (!replacement) return target;
-      changes.push({ fromId: target.id, problem: replacement });
-      return replacement;
-    });
+    for (let pass = 0; pass < MAX_REDEALS; pass++) {
+      let changed = false;
+      this.live = this.live.map((target) => {
+        if (this.reach.has(target.target)) return target;
+        const replacement = this.makeTarget();
+        if (!replacement) return target;
+        changed = true;
+        changes.push({ fromId: target.id, problem: replacement });
+        return replacement;
+      });
+      if (!changed) break;
+    }
     return changes;
   }
 

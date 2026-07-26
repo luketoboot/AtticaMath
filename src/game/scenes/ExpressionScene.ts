@@ -301,8 +301,12 @@ export class ExpressionScene extends Phaser.Scene {
 
   private scrap(index: number): boolean {
     if (this.phase !== 'wave' || this.lockedUntil > 0) return false;
-    if (!this.session.scrapChip(index)) return false;
+    const recalibrated = this.session.scrapChip(index);
+    if (recalibrated === null) return false;
     this.composer.dealHand(this.session.handChips);
+    // The swapped chip may have been a falling target's only route; the
+    // session already re-rolled those, so re-label their sprites too.
+    this.applyRecalibrations(recalibrated);
     this.syncCombo();
     return true;
   }

@@ -112,14 +112,42 @@ describe('hand as the wave resource', () => {
     s.fire(solutionFor(s, problem), 1000); // get a combo going
     const clockBefore = s.comboFraction;
 
-    expect(s.scrapChip(0)).toBe(true);
+    expect(s.scrapChip(0)).not.toBeNull();
     expect(s.handChips).toHaveLength(CONFIG.expression.handSize);
     expect(s.comboFraction).toBeLessThan(clockBefore);
-    expect(s.scrapChip(99)).toBe(false);
+    expect(s.scrapChip(99)).toBeNull();
   });
 });
 
 describe('recalibration', () => {
+  it('scrapping a chip never strands a falling target', () => {
+    // Scrap is the third way the hand changes (fire and redeal are the
+    // others), and it must honour the same promise: every number in the air
+    // stays makeable with the chips in the tray.
+    const s = freshSession({ seed: 17 });
+    for (let wave = 0; wave < 8; wave++) {
+      s.nextWave();
+      while (s.liveTargets.length < CONFIG.expression.targetsOnScreen && s.spawnTarget()) {
+        /* fill the air */
+      }
+      let step = 0;
+      while (s.liveTargets.length > 0 && step < 30) {
+        s.scrapChip(step % CONFIG.expression.handSize);
+        step += 1;
+        for (const live of s.liveTargets) {
+          expect(
+            solveTarget(s.handChips, live.target, CONFIG.expression.maxChips),
+            `after scrap, target ${live.target} unreachable from ${s.handChips.join(',')}`,
+          ).not.toBeNull();
+        }
+        const target = s.liveTargets[0]!;
+        expect(s.fire(solutionFor(s, target), 2000).result).toBe('hit');
+        if (s.liveTargets.length < CONFIG.expression.targetsOnScreen) s.spawnTarget();
+      }
+      s.endWave();
+    }
+  });
+
   it('re-rolls a live target the spent chips put out of reach', () => {
     // Drive many hits with two targets in the air and assert the invariant that
     // matters: every live target is always solvable with the current hand.
