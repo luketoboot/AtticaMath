@@ -115,7 +115,7 @@ const DEFAULT_SAVE = {
 
 function parseArgs(argv) {
   const positional = [];
-  const opts = { data: {}, save: {}, settle: 900, freeze: true };
+  const opts = { data: {}, save: {}, settle: 900, after: 250, freeze: true };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (!arg.startsWith('--')) {
@@ -131,6 +131,12 @@ function parseArgs(argv) {
         break;
       case 'settle':
         opts.settle = Number(value);
+        break;
+      case 'after':
+        // Wait after the keys land. A scene that answers a keypress with a
+        // delayed transition needs longer than the default to be caught
+        // mid-flight, or the shot shows the state before the change.
+        opts.after = Number(value);
         break;
       case 'no-freeze':
         opts.freeze = false;
@@ -241,7 +247,7 @@ async function shoot(page, { name, scene, data, save }, opts) {
 
   if (opts.keys) {
     for (const key of opts.keys) await page.keyboard.press(key);
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(opts.after);
   }
 
   const dir = opts.golden ? GOLDEN_DIR : OUT_DIR;

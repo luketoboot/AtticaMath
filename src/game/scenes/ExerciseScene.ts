@@ -78,16 +78,17 @@ export class ExerciseScene extends Phaser.Scene {
   private progressText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private breakBtn!: ReturnType<typeof neonButton>;
-  private buildBtn!: ReturnType<typeof neonButton>;
   private bondsBtn!: ReturnType<typeof neonButton>;
   /** The five/ten frame, drawn only while summoned. */
   private bondsPanel!: Phaser.GameObjects.Container;
   private bondsOpen = false;
   /** Block height of the current problem's rungs, for sizing the focus frame. */
   private blockH = MAX_BLOCK;
-  /** Content bounds of a rung, relative to screen centre, so the frame can hug it. */
+  /** Content bounds of a rung, relative to its centre, so the frame can hug it. */
   private frameDx = 0;
+  private frameDy = 0;
   private frameW = 420;
+  private frameH = MAX_BLOCK;
   /** Blocks input between banking a problem and dealing the next one. */
   private busy = false;
 
@@ -170,33 +171,26 @@ export class ExerciseScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.breakBtn = neonButton(this, width / 2 - 190, height * 0.915, 'BREAK IT', () => this.deconstruct(), {
-      width: 290,
-      height: 52,
-      fontSize: 21,
+    this.breakBtn = neonButton(this, width / 2, height * 0.915, 'BREAK IT DOWN', () => this.deconstruct(), {
+      width: 330,
+      height: 54,
+      fontSize: 22,
       accent: PALETTE.magenta,
       sub: 'Q  ·  DROP A PLACE',
     });
-    this.buildBtn = neonButton(this, width / 2 + 190, height * 0.915, 'BUILD IT BACK', () => this.reconstruct(), {
-      width: 290,
-      height: 52,
-      fontSize: 21,
-      accent: PALETTE.cyan,
-      sub: 'E  ·  BRING A PLACE BACK',
-    });
-    this.bondsBtn = neonButton(this, 150, height * 0.915, 'BONDS', () => this.toggleBonds(), {
-      width: 210,
-      height: 52,
-      fontSize: 19,
+    this.bondsBtn = neonButton(this, 178, height * 0.915, 'BONDS', () => this.toggleBonds(), {
+      width: 230,
+      height: 54,
+      fontSize: 20,
       accent: PALETTE.purple,
       sub: 'F  ·  FRIENDS OF 5 & 10',
     });
-    const quit = neonButton(this, width - 110, height * 0.915, 'LEAVE', () => this.leave(), {
-      width: 150,
-      height: 52,
-      fontSize: 17,
+    const quit = neonButton(this, width - 130, height * 0.915, 'LEAVE', () => this.leave(), {
+      width: 170,
+      height: 54,
+      fontSize: 18,
     });
-    new MenuNav(this, [[this.bondsBtn, this.breakBtn, this.buildBtn, quit]]);
+    new MenuNav(this, [[this.bondsBtn, this.breakBtn, quit]]);
 
     this.bondsPanel = this.add.container(width * 0.845, 300).setVisible(false);
 
@@ -209,7 +203,6 @@ export class ExerciseScene extends Phaser.Scene {
     this.numpad.applySessionDefault(isTouchDevice());
 
     this.input.keyboard?.on('keydown-Q', () => this.deconstruct());
-    this.input.keyboard?.on('keydown-E', () => this.reconstruct());
     this.input.keyboard?.on('keydown-F', () => this.toggleBonds());
     this.input.keyboard?.once('keydown-ESC', () => this.leave());
 
@@ -251,8 +244,10 @@ export class ExerciseScene extends Phaser.Scene {
     this.blockH = block;
     const s = block / MAX_BLOCK;
     const cell = BASE_CELL * s;
-    const font = BASE_FONT * s;
-    const rowH = block * 0.3;
+    // Glyphs run a little under the cell so four rows of them clear each other
+    // inside one block, and so the frame that hugs them fits between rungs.
+    const font = BASE_FONT * s * 0.88;
+    const rowH = block * 0.26;
     const gridW = cols * cell;
     const right = gridW / 2;
     const left = -right;
@@ -264,6 +259,16 @@ export class ExerciseScene extends Phaser.Scene {
     const contentLeft = left - cell * 1.2;
     this.frameDx = (contentLeft + right) / 2;
     this.frameW = right - contentLeft + 56;
+
+    // Measured from the glyphs, not guessed from the block. A digit is drawn
+    // from its centre, so the top row reaches half a glyph above its own line —
+    // sizing the frame to the block alone sliced the tops off the numbers.
+    const yTop = -rowH * 1.45;
+    const yResult = rowH;
+    const contentTop = yTop - font * 0.62;
+    const contentBottom = yResult + font * 0.62;
+    this.frameDy = (contentTop + contentBottom) / 2;
+    this.frameH = contentBottom - contentTop + 18;
 
     depths.forEach((depth, i) => {
       // Coarsest at the top: reading order is solving order.
@@ -298,7 +303,7 @@ export class ExerciseScene extends Phaser.Scene {
       // The layer's operands, not the problem's: a division rung's dividend is
       // what its answer accounts for, so it genuinely differs from the one the
       // problem was written with.
-      operandRow(layer.left, layer.leftDepth, -rowH * 1.45);
+      operandRow(layer.left, layer.leftDepth, yTop);
       operandRow(layer.right, layer.rightDepth, -rowH * 0.45);
       // The operator sits outside the grid, left of the second operand, exactly
       // where it goes when this is written by hand.
@@ -320,7 +325,7 @@ export class ExerciseScene extends Phaser.Scene {
 
       const resultSlots = Array.from({ length: cols }, (_, col) =>
         this.add
-          .text(left + col * cell + cell / 2, rowH * 1.0, '', {
+          .text(left + col * cell + cell / 2, yResult, '', {
             fontFamily: FONT,
             fontSize: `${font}px`,
             fontStyle: 'bold',
@@ -495,13 +500,40 @@ export class ExerciseScene extends Phaser.Scene {
     }
   }
 
-  private reconstruct(): void {
-    if (this.busy) return;
+  /**
+   * Bring the next place back, on the game's own initiative.
+   *
+   * Rebuilding used to be a keypress, and it was the wrong thing to ask for:
+   * there is only ever one place to bring back and only one moment to do it, so
+   * the button was a formality standing between the player and the next rung.
+   * Breaking a problem down is the decision worth making; putting it back
+   * together is a consequence, and it reads far better as something that
+   * happens than as something to press.
+   */
+  private rebuild(): void {
     const event = this.session.reconstruct();
-    if (event.kind === 'refused') return this.buzz(this.buildBtn);
+    if (event.kind === 'refused') return;
     getAudio(this)?.play('reload');
     this.buffer.clear();
     this.refresh();
+
+    const live = this.rungs.find((r) => r.depth === this.session.state.depth);
+    if (!live) return;
+    // The frame travels to the rung rather than cutting to it, so the eye is
+    // carried down the ladder instead of having to find its place again.
+    this.tweens.add({
+      targets: this.focusPanel,
+      y: { from: live.y + this.frameDy - this.blockH, to: live.y + this.frameDy },
+      duration: 260,
+      ease: 'Cubic.easeOut',
+    });
+    this.tweens.add({
+      targets: live.container,
+      alpha: { from: 0.42, to: 1 },
+      scale: { from: 0.94, to: 1 },
+      duration: 260,
+      ease: 'Back.easeOut',
+    });
   }
 
   /**
@@ -561,6 +593,9 @@ export class ExerciseScene extends Phaser.Scene {
     getAudio(this)?.play('prime');
     impact(this, { shakeMs: 110, shakeIntensity: 0.006, glow: CONFIG.juice.glowPulseKill * 0.6 });
     this.refresh();
+    // Let the solved rung land before the next one opens; back to back they
+    // read as one event and the player loses which number they just banked.
+    this.time.delayedCall(420, () => this.rebuild());
   }
 
   private advance(): void {
@@ -598,10 +633,10 @@ export class ExerciseScene extends Phaser.Scene {
     const live = this.rungs.find((r) => r.depth === state.depth);
     this.focusPanel.setVisible(!this.busy && live !== undefined);
     if (live) {
-      this.focusPanel.setPosition(this.scale.width / 2 + this.frameDx, live.y);
+      this.focusPanel.setPosition(this.scale.width / 2 + this.frameDx, live.y + this.frameDy);
       paintPanel(this.focusPanel, {
         width: this.frameW,
-        height: this.blockH - 8,
+        height: this.frameH,
         accent: state.layerSolved ? PALETTE.cyan : PALETTE.yellow,
         chamfer: 12,
         fillAlpha: 0.26,
@@ -620,14 +655,13 @@ export class ExerciseScene extends Phaser.Scene {
 
     const canBreak = !state.locked && state.depth < this.deepestReachable();
     this.breakBtn.setAccent(canBreak ? PALETTE.magenta : PALETTE.purple);
-    this.buildBtn.setAccent(state.layerSolved && state.depth > 0 ? PALETTE.yellow : PALETTE.purple);
     this.drawBonds();
   }
 
   private hint(): string {
     const state = this.session.state;
     if (state.done) return 'SOLVED';
-    if (state.layerSolved) return 'BUILD IT BACK — BRING THE NEXT PLACE INTO FOCUS';
+    if (state.layerSolved) return 'BUILDING THE NEXT PLACE BACK…';
     if (state.locked) return 'ANSWER THIS RUNG';
     return 'TYPE THE ANSWER, OR BREAK IT DOWN UNTIL YOU CAN SEE IT';
   }
