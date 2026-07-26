@@ -15,6 +15,8 @@ export function sceneBindings(scene: Phaser.Scene): KeyBindings {
  */
 export class KeyState {
   private readonly held = new Set<string>();
+  /** Codes currently claimed by an overlay (the on-screen pad steals arrows). */
+  private readonly masked = new Set<string>();
   private readonly onDown: (e: KeyboardEvent) => void;
   private readonly onUp: (e: KeyboardEvent) => void;
   private readonly onBlur: () => void;
@@ -35,7 +37,20 @@ export class KeyState {
 
   /** True while any of the action's bound keys is physically down. */
   isDown(slots: readonly (string | null)[]): boolean {
-    return slots.some((code) => code !== null && this.held.has(code));
+    return slots.some((code) => code !== null && this.held.has(code) && !this.masked.has(code));
+  }
+
+  /**
+   * Claim or release codes for an overlay. While claimed they read as not-held,
+   * so the on-screen pad can steer by arrows without the ship also strafing —
+   * and only the claimed codes go quiet: WASD keeps flying while the pad has
+   * the arrows, which is exactly the two-handed split a padless keyboard needs.
+   */
+  setMask(codes: readonly string[], on: boolean): void {
+    for (const code of codes) {
+      if (on) this.masked.add(code);
+      else this.masked.delete(code);
+    }
   }
 
   destroy(): void {

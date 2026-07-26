@@ -69,6 +69,17 @@ export class ControlsScene extends Phaser.Scene {
       )
       .setOrigin(0.5)
       .setAlpha(0.85);
+    // The pad is for keyboards without a numpad, so it cannot be a secret the
+    // player has to already own a numpad to avoid needing.
+    this.add
+      .text(
+        width / 2,
+        height * 0.16 + 22,
+        'NO NUMPAD?  TAB POPS AN ON-SCREEN PAD IN PLAY  ·  ARROWS OR HJKL STEER IT  ·  ENTER TYPES',
+        { fontFamily: FONT, fontSize: '13px', color: CSS.yellow },
+      )
+      .setOrigin(0.5)
+      .setAlpha(0.85);
 
     // Column headers.
     this.add

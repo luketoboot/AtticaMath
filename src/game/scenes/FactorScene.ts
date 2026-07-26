@@ -24,6 +24,7 @@ import { announceDrop, carrierRing, effectsLine, pickupPod } from '../DropGfx';
 import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
+import { isTouchDevice, Numpad, PAD_CLAIMED_CODES } from '../../ui/Numpad';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 import type { KeyBindings } from '../../core/input/bindings';
 
@@ -148,7 +149,18 @@ export class FactorScene extends Phaser.Scene {
 
     this.bindings = sceneBindings(this);
     this.keys = new KeyState(this);
-    this.input.keyboard?.addCapture('UP,DOWN,LEFT,RIGHT,SPACE');
+    this.input.keyboard?.addCapture('UP,DOWN,LEFT,RIGHT,SPACE,TAB');
+
+    // Padless keyboards: TAB summons an on-screen pad steered by arrows or
+    // HJKL. Arrows are masked out of flight while it is open — the left hand
+    // keeps flying on WASD, the right hand types on the pad.
+    const numpad = new Numpad(
+      this,
+      (digit) => this.buffer.push(digit),
+      () => this.buffer.clear(),
+      { onOpenChange: (open) => this.keys?.setMask(PAD_CLAIMED_CODES, open) },
+    );
+    numpad.applySessionDefault(isTouchDevice());
 
     onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;

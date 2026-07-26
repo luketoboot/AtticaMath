@@ -133,6 +133,13 @@ function parseArgs(argv) {
       case 'check':
         opts.check = true;
         break;
+      case 'keys':
+        // Keys to press after the scene settles, comma-separated Playwright
+        // names ("Tab,ArrowLeft,Enter"). For overlays a scene only shows on
+        // input. Key-driven shots are for eyeballing, not goldens: what a
+        // keypress does mid-scene is the scene's business, not the harness's.
+        opts.keys = value.split(',');
+        break;
       case 'data':
         Object.assign(opts.data, JSON.parse(value));
         break;
@@ -223,6 +230,11 @@ async function shoot(page, { name, scene, data, save }, opts) {
   );
 
   await page.waitForTimeout(opts.settle);
+
+  if (opts.keys) {
+    for (const key of opts.keys) await page.keyboard.press(key);
+    await page.waitForTimeout(250);
+  }
 
   const dir = opts.golden ? GOLDEN_DIR : OUT_DIR;
   const file = resolve(dir, opts.out ?? `${name}.png`);

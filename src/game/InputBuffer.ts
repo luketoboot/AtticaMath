@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { keyEventGate } from './input/freshKey';
 
 /**
  * Continuous digit buffer. Numpad and top-row digits both append; backspace
@@ -8,6 +9,8 @@ import Phaser from 'phaser';
 export class InputBuffer {
   private buffer = '';
   private readonly maxLen = 8;
+  /** Drops Phaser's queue-replay duplicates; see input/freshKey. */
+  private readonly fresh = keyEventGate();
   private readonly onChange: (value: string) => void;
   private readonly keydownHandler: (event: KeyboardEvent) => void;
   private readonly scene: Phaser.Scene;
@@ -31,6 +34,8 @@ export class InputBuffer {
   }
 
   private handleKey(event: KeyboardEvent): void {
+    // One physical press must append exactly one digit.
+    if (!this.fresh(event)) return;
     if (event.key === 'Backspace' || event.key === 'Delete') {
       this.clear();
       return;

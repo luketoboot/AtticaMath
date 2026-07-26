@@ -15,7 +15,7 @@ import { targetLatencyMs, type SkillTable } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
 import { clearHitStop, glowPulse, impact, shockwave, streakPitch, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
-import { isTouchDevice, Numpad } from '../../ui/Numpad';
+import { isTouchDevice, Numpad, PAD_CLAIMED_CODES } from '../../ui/Numpad';
 import { announceDrop, effectsLine, DROP_CSS } from '../DropGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
@@ -180,17 +180,21 @@ export class GameScene extends Phaser.Scene {
       this,
       (digit) => this.buffer.push(digit),
       () => this.buffer.clear(),
+      // While the pad is open the arrows steer it, so they must stop strafing
+      // the cannon. keys is built by setupDodgeInput below, hence the guard;
+      // applySessionDefault re-fires the mask once it exists.
+      { onOpenChange: (open) => this.keys?.setMask(PAD_CLAIMED_CODES, open) },
     );
-    numpad.setVisible(isTouchDevice());
     const padToggle = this.add
       .text(24, 54, '[ PAD ]', { fontFamily: FONT, fontSize: '16px', color: CSS.cyanDim })
       .setInteractive({ useHandCursor: true });
     padToggle.on('pointerdown', () => numpad.setVisible(!numpad.visible));
 
     this.setupDodgeInput();
-    // The launch key skips the breather; capture arrows/space so bound keys
-    // never scroll the page instead.
-    this.input.keyboard?.addCapture('SPACE,LEFT,RIGHT');
+    numpad.applySessionDefault(isTouchDevice());
+    // The launch key skips the breather; capture arrows/space/tab so bound
+    // keys never scroll the page or walk the browser's focus instead.
+    this.input.keyboard?.addCapture('SPACE,LEFT,RIGHT,UP,DOWN,TAB');
 
     onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
