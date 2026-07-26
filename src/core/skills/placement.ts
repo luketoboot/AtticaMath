@@ -5,7 +5,7 @@
  * UNATTEMPTED skill relative to that tier so the first real waves land close.
  */
 import type { GameConfig } from '../config';
-import { targetLatencyMs } from './rating';
+import { freshSkillState, targetLatencyMs } from './rating';
 import type { SkillTable } from './rating';
 import { getSkill, maxTier, SKILLS } from './taxonomy';
 
@@ -94,7 +94,7 @@ export function reconcileTable(table: SkillTable, cfg: GameConfig): SkillTable {
     } else {
       rating = Math.max(cfg.rating.minRating, skill.baseDifficulty - cfg.waves.fluentMargin);
     }
-    next[skill.id] = { rating, attempts: 0, lastAttemptWave: -1 };
+    next[skill.id] = { ...freshSkillState(cfg.rating), rating };
   }
   return next;
 }
@@ -118,7 +118,7 @@ export function seedFromPlacement(
     } else {
       rating = Math.max(cfg.rating.minRating, skill.baseDifficulty - cfg.waves.fluentMargin);
     }
-    next[skill.id] = { rating, attempts: 0, lastAttemptWave: -1 };
+    next[skill.id] = { ...freshSkillState(cfg.rating), rating };
   }
   return next;
 }

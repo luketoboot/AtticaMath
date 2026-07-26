@@ -4,6 +4,7 @@ import {
   applyAttempt,
   createSkillTable,
   expectedScore,
+  fluencySample,
   freshSkillState,
   speedFactor,
   targetLatencyMs,
@@ -44,7 +45,7 @@ describe('speedFactor', () => {
 });
 
 describe('updateSkill', () => {
-  const base = { rating: 500, attempts: 20, lastAttemptWave: 0 };
+  const base = { rating: 500, attempts: 20, correct: 20, fluency: 1, lastAttemptWave: 0 };
 
   it('raises rating on a correct answer', () => {
     const next = updateSkill(base, { correct: true, responseMs: 3000, difficulty: 500, wave: 5 }, cfg);
@@ -81,7 +82,7 @@ describe('updateSkill', () => {
   });
 
   it('clamps to configured bounds', () => {
-    const low = { rating: cfg.minRating + 1, attempts: 50, lastAttemptWave: 0 };
+    const low = { rating: cfg.minRating + 1, attempts: 50, correct: 50, fluency: 1, lastAttemptWave: 0 };
     const next = updateSkill(low, { correct: false, responseMs: 5000, difficulty: 2000, wave: 1 }, cfg);
     expect(next.rating).toBeGreaterThanOrEqual(cfg.minRating);
   });
@@ -107,5 +108,45 @@ describe('applyAttempt', () => {
     const next = applyAttempt({}, ['div.exact'], { correct: true, responseMs: 2000, difficulty: 600, wave: 1 }, cfg);
     expect(next['div.exact']).toBeDefined();
     expect(next['div.exact']!.attempts).toBe(1);
+  });
+});
+
+describe('fluency', () => {
+  const target = targetLatencyMs(500, cfg);
+
+  it('seeds on the first correct answer rather than easing up from zero', () => {
+    const fresh = freshSkillState(cfg);
+    const next = updateSkill(fresh, { correct: true, responseMs: target / 2, difficulty: 500, wave: 1 }, cfg);
+    // Twice as fast as target, and nothing to average against yet.
+    expect(next.fluency).toBeCloseTo(2, 5);
+    expect(next.correct).toBe(1);
+  });
+
+  it('ignores the clock on a miss — staring time is not recall time', () => {
+    const state = { ...freshSkillState(cfg), correct: 3, fluency: 1.8 };
+    const next = updateSkill(state, { correct: false, responseMs: 60_000, difficulty: 500, wave: 1 }, cfg);
+    expect(next.fluency).toBe(1.8);
+    expect(next.correct).toBe(3);
+    expect(next.attempts).toBe(1);
+  });
+
+  it('moves slowly, so one lucky answer cannot buy fluency', () => {
+    let state = { ...freshSkillState(cfg), correct: 1, fluency: 1 };
+    state = updateSkill(state, { correct: true, responseMs: 1, difficulty: 500, wave: 1 }, cfg);
+    // A single implausibly fast answer is capped and then heavily damped.
+    expect(state.fluency).toBeLessThan(1 + cfg.maxFluencySample * cfg.fluencyAlpha);
+  });
+
+  it('converges on sustained pace', () => {
+    let state = freshSkillState(cfg);
+    for (let i = 0; i < 400; i++) {
+      state = updateSkill(state, { correct: true, responseMs: target / 2, difficulty: 500, wave: i }, cfg);
+    }
+    expect(state.fluency).toBeCloseTo(2, 1);
+  });
+
+  it('caps a single sample so a zero-time answer cannot dominate', () => {
+    expect(fluencySample(0, target, cfg)).toBe(cfg.maxFluencySample);
+    expect(fluencySample(1, target, cfg)).toBe(cfg.maxFluencySample);
   });
 });

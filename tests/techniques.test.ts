@@ -68,16 +68,16 @@ describe('drillFilterFor', () => {
 describe('weakestAttempted', () => {
   it('picks the lowest-rated skill the player has met', () => {
     const table: SkillTable = {
-      'add.single': { rating: 700, attempts: 9, lastAttemptWave: 4 },
-      'sub.borrow': { rating: 380, attempts: 3, lastAttemptWave: 4 },
-      'mul.table.7': { rating: 350, attempts: 0, lastAttemptWave: -1 }, // seeded, never met
+      'add.single': { rating: 700, attempts: 9, correct: 9, fluency: 1, lastAttemptWave: 4 },
+      'sub.borrow': { rating: 380, attempts: 3, correct: 3, fluency: 1, lastAttemptWave: 4 },
+      'mul.table.7': { rating: 350, attempts: 0, correct: 0, fluency: 1, lastAttemptWave: -1 }, // seeded, never met
     };
     expect(weakestAttempted(table)).toBe('sub.borrow');
   });
 
   it('returns undefined with nothing attempted', () => {
     expect(weakestAttempted({})).toBeUndefined();
-    expect(weakestAttempted({ 'add.single': { rating: 500, attempts: 0, lastAttemptWave: -1 } }))
+    expect(weakestAttempted({ 'add.single': { rating: 500, attempts: 0, correct: 0, fluency: 1, lastAttemptWave: -1 } }))
       .toBeUndefined();
   });
 });

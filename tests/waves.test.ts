@@ -11,6 +11,8 @@ function tableWith(overrides: Record<string, { rating: number; attempts?: number
     table[id] = {
       rating: o.rating,
       attempts: o.attempts ?? 10,
+      correct: o.attempts ?? 10,
+      fluency: 1,
       lastAttemptWave: o.lastAttemptWave ?? 10,
     };
   }

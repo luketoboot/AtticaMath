@@ -28,8 +28,23 @@ export interface RatingConfig {
   fallbackTargetMs: number;
   /** Rating margin above a skill's base difficulty that counts as mastery. */
   masteryMargin: number;
-  /** Attempts required before a mastery milestone can fire. */
-  masteryMinAttempts: number;
+  /** Correct answers required before a mastery milestone can fire. */
+  masteryMinCorrect: number;
+  /**
+   * Sustained speed required for mastery, as a multiple of the band's target
+   * latency: 1.5 means averaging answers in two thirds of the target time.
+   * Mastery means a fact is recalled, not worked out, and only the clock can
+   * tell those apart — a correct-but-slow answer proves the method, not fluency.
+   */
+  masteryFluency: number;
+  /**
+   * EWMA weight for each new answer's speed. Low, because fluency is a claim
+   * about the long run: one lucky fast answer should barely move it, and one
+   * slow one should not undo a month.
+   */
+  fluencyAlpha: number;
+  /** Cap on a single answer's speed ratio, so a 50ms fluke cannot dominate. */
+  maxFluencySample: number;
 }
 
 export interface WaveConfig {
@@ -534,7 +549,10 @@ export const CONFIG: GameConfig = {
     ],
     fallbackTargetMs: 12000,
     masteryMargin: 250,
-    masteryMinAttempts: 10,
+    masteryMinCorrect: 100,
+    masteryFluency: 1.5,
+    fluencyAlpha: 0.08,
+    maxFluencySample: 3,
   },
   waves: {
     fluentShare: 0.7,

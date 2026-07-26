@@ -86,7 +86,7 @@ describe('reconcileTable', () => {
 
   it('handles a retired skill id in the table without exploding', () => {
     const table = elderTable(50);
-    table['mul.table.13'] = { rating: 900, attempts: 3, lastAttemptWave: 4 };
+    table['mul.table.13'] = { rating: 900, attempts: 3, correct: 3, fluency: 1, lastAttemptWave: 4 };
     const next = reconcileTable(table, CONFIG);
     expect(next['mul.table.13']).toBe(table['mul.table.13']); // kept, just not rated
     for (const id of LATE) expect(next[id]).toBeDefined();

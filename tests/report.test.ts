@@ -5,7 +5,7 @@ import { crossedFluent, runDeltas, topMovers } from '../src/core/skills/report';
 import { getSkill } from '../src/core/skills/taxonomy';
 
 function state(rating: number, attempts: number): SkillTable[string] {
-  return { rating, attempts, lastAttemptWave: 1 };
+  return { rating, attempts, correct: attempts, fluency: 1, lastAttemptWave: 1 };
 }
 
 describe('runDeltas', () => {

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
-import { earnedMilestones } from '../../core/skills/milestones';
+import { earnedMilestones, masteryProgress } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
@@ -142,19 +142,24 @@ export class BrainScanScene extends Phaser.Scene {
       return;
     }
 
-    // Bar spans from "struggling" (base - 300) to mastery (base + masteryMargin).
-    const floor = skill.baseDifficulty - 300;
-    const ceiling = skill.baseDifficulty + CONFIG.rating.masteryMargin;
-    const progress = Phaser.Math.Clamp((state.rating - floor) / (ceiling - floor), 0.02, 1);
+    // The bar tracks mastery, not rating. Rating saturates almost immediately on
+    // the easy half of the taxonomy — the seed already clears their mastery line
+    // — so a rating bar read as full before the player had proved anything.
+    const progress = masteryProgress(state, skill, CONFIG);
+    const filled = Math.max(0.02, progress.overall);
 
     this.add.rectangle(barX, y + 7, barW, 10, PALETTE.deepPurple).setOrigin(0, 0.5);
     this.add
-      .rectangle(barX, y + 7, barW * progress, 10, isMastered ? PALETTE.yellow : PALETTE.cyan)
+      .rectangle(barX, y + 7, barW * filled, 10, isMastered ? PALETTE.yellow : PALETTE.cyan)
       .setOrigin(0, 0.5);
+
+    // Naming the gate turns a short bar from a verdict into an instruction:
+    // more reps, harder problems, or the same problems faster.
+    const HINT: Readonly<Record<string, string>> = { volume: 'REPS', rating: 'RATING', speed: 'SPEED' };
     this.add
-      .text(x1, y, isMastered ? '★' : String(Math.round(state.rating)), {
+      .text(x1, y, isMastered ? '★' : HINT[progress.limiting]!, {
         fontFamily: FONT,
-        fontSize: '13px',
+        fontSize: isMastered ? '13px' : '10px',
         fontStyle: 'bold',
         color: isMastered ? CSS.yellow : CSS.cyanDim,
       })

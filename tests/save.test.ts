@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { CONFIG } from '../src/core/config';
+import { earnedMilestones } from '../src/core/skills/milestones';
 import {
   CURRENT_SAVE_VERSION,
   defaultSave,
@@ -23,7 +25,7 @@ describe('save round trip', () => {
     save.credits = 420;
     save.ownedCosmetics = ['hull.wedge', 'trail.ember'];
     save.equipped = { ...defaultEquipped(), hull: 'hull.wedge', trail: 'trail.ember' };
-    save.skills['add.single'] = { rating: 777, attempts: 12, lastAttemptWave: 4 };
+    save.skills['add.single'] = { rating: 777, attempts: 12, correct: 12, fluency: 1, lastAttemptWave: 4 };
     writeSave(storage, save);
     expect(loadSave(storage)).toEqual(save);
   });
@@ -90,7 +92,15 @@ describe('migrate', () => {
     expect(migrated.credits).toBe(300 + 200 + 400);
     expect(migrated.ownedCosmetics).toEqual([]);
     expect(migrated.equipped).toEqual(defaultSave().equipped);
-    expect(migrated.skills).toEqual(v1.skills);
+    // The rating survives untouched; the mastery fields v1 never recorded are
+    // filled in by the v5 → v6 step.
+    expect(migrated.skills['add.single']).toEqual({
+      rating: 700,
+      attempts: 9,
+      correct: 9,
+      fluency: 0,
+      lastAttemptWave: 3,
+    });
     expect(migrated.bestScore).toBe(9000);
     expect(migrated.keybindings).toEqual(defaultSave().keybindings);
   });
@@ -167,5 +177,32 @@ describe('migrate', () => {
 
   it('current version constant matches defaultSave', () => {
     expect(defaultSave().version).toBe(CURRENT_SAVE_VERSION);
+  });
+});
+
+describe('v5 → v6 skill migration', () => {
+  it('credits past attempts as correct but makes speed be earned', () => {
+    const v5 = {
+      ...defaultSave(),
+      version: 5,
+      skills: { 'add.single': { rating: 900, attempts: 42, lastAttemptWave: 7 } },
+    };
+    const out = migrate(v5);
+    expect(out.version).toBe(6);
+    const state = out.skills['add.single']!;
+    expect(state.rating).toBe(900);
+    expect(state.correct).toBe(42);
+    // Fluency cannot be reconstructed from a save that never recorded it, so a
+    // migrated profile has to re-prove pace rather than inherit mastery.
+    expect(state.fluency).toBe(0);
+  });
+
+  it('leaves a migrated profile short of mastery until it is quick again', () => {
+    const v5 = {
+      ...defaultSave(),
+      version: 5,
+      skills: { 'mul.table.7': { rating: 3000, attempts: 5000, lastAttemptWave: 7 } },
+    };
+    expect(earnedMilestones(migrate(v5).skills, CONFIG)).toEqual([]);
   });
 });

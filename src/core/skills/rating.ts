@@ -7,6 +7,22 @@ import type { SkillId } from './taxonomy';
 export interface SkillState {
   rating: number;
   attempts: number;
+  /**
+   * Correct answers only. Mastery counts these rather than attempts, so
+   * repeatedly missing a skill can never grind out a milestone.
+   */
+  correct: number;
+  /**
+   * Running average of answer speed, as a multiple of the target latency for
+   * the difficulty attempted: 1 is exactly on target, 2 is twice as fast.
+   *
+   * Rating alone cannot carry this. A skill whose base difficulty sits below
+   * the seed rating starts above its own mastery line, so for easy facts the
+   * rating gate is satisfied before the player has answered anything — the
+   * clock is the only remaining evidence that a fact is recalled rather than
+   * worked out. Zero means no correct answer has been timed yet.
+   */
+  fluency: number;
   /** Wave counter of the last attempt (monotonic across a profile's lifetime). */
   lastAttemptWave: number;
 }
@@ -46,20 +62,43 @@ export function speedFactor(responseMs: number, targetMs: number, cfg: RatingCon
   return Math.min(cfg.maxSpeedFactor, Math.max(cfg.minSpeedFactor, ratio));
 }
 
+/**
+ * How fast one answer was, relative to what that difficulty should take.
+ * Uncapped by the rating engine's speed bounds — those exist to limit how far
+ * one answer can shove a rating, whereas fluency is the raw measurement.
+ */
+export function fluencySample(responseMs: number, targetMs: number, cfg: RatingConfig): number {
+  if (responseMs <= 0) return cfg.maxFluencySample;
+  return Math.min(cfg.maxFluencySample, targetMs / responseMs);
+}
+
 /** Apply one attempt to one skill state, returning the new state. Pure. */
 export function updateSkill(state: SkillState, attempt: AttemptResult, cfg: RatingConfig): SkillState {
   const provisional = state.attempts < cfg.provisionalAttempts;
   const k = cfg.kFactor * (provisional ? cfg.provisionalKMultiplier : 1);
   const expected = expectedScore(state.rating, attempt.difficulty, cfg);
   const actual = attempt.correct ? 1 : 0;
+  const target = targetLatencyMs(attempt.difficulty, cfg);
   let delta = k * (actual - expected);
-  if (attempt.correct) {
-    delta *= speedFactor(attempt.responseMs, targetLatencyMs(attempt.difficulty, cfg), cfg);
-  }
+  if (attempt.correct) delta *= speedFactor(attempt.responseMs, target, cfg);
   const rating = Math.min(cfg.maxRating, Math.max(cfg.minRating, state.rating + delta));
+
+  // Only correct answers carry speed information: the clock on a miss measures
+  // how long the player stared at it, which says nothing about recall.
+  let fluency = state.fluency;
+  if (attempt.correct) {
+    const sample = fluencySample(attempt.responseMs, target, cfg);
+    // Seed on the first timed answer rather than easing up from zero, or a
+    // skill would spend its opening dozen answers climbing out of a hole that
+    // reflects no evidence at all.
+    fluency = state.correct === 0 ? sample : fluency + cfg.fluencyAlpha * (sample - fluency);
+  }
+
   return {
     rating,
     attempts: state.attempts + 1,
+    correct: state.correct + (attempt.correct ? 1 : 0),
+    fluency,
     lastAttemptWave: attempt.wave,
   };
 }
@@ -80,7 +119,7 @@ export function applyAttempt(
 }
 
 export function freshSkillState(cfg: RatingConfig): SkillState {
-  return { rating: cfg.initialRating, attempts: 0, lastAttemptWave: -1 };
+  return { rating: cfg.initialRating, attempts: 0, correct: 0, fluency: 0, lastAttemptWave: -1 };
 }
 
 export function createSkillTable(ids: readonly SkillId[], cfg: RatingConfig): SkillTable {

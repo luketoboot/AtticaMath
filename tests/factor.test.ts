@@ -263,11 +263,11 @@ describe('FactorSession', () => {
 
   it('builds rocks from the families the player is weakest on', () => {
     // Everything strong except the 7s: 7 should show up far more than 3.
-    const skills: Record<string, { rating: number; attempts: number; lastAttemptWave: number }> = {};
+    const skills: Record<string, { rating: number; attempts: number; correct: number; fluency: number; lastAttemptWave: number }> = {};
     for (let n = 2; n <= 12; n++) {
-      skills[`mul.table.${n}`] = { rating: 1200, attempts: 20, lastAttemptWave: 1 };
+      skills[`mul.table.${n}`] = { rating: 1200, attempts: 20, correct: 20, fluency: 1, lastAttemptWave: 1 };
     }
-    skills['mul.table.7'] = { rating: 120, attempts: 20, lastAttemptWave: 1 };
+    skills['mul.table.7'] = { rating: 120, attempts: 20, correct: 20, fluency: 1, lastAttemptWave: 1 };
 
     const s = new FactorSession({
       seed: 5,

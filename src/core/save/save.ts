@@ -21,7 +21,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 5;
+export const CURRENT_SAVE_VERSION = 6;
 
 export interface SaveV1 {
   version: 1;
@@ -66,7 +66,16 @@ export interface SaveV5 extends Omit<SaveV4, 'version' | 'settings'> {
   settings: SaveV4['settings'] & { video: VideoSettings };
 }
 
-export type Save = SaveV5;
+/**
+ * Mastery stopped being a rating check. Skills now carry how many answers were
+ * actually right and how fast they came, because rating alone declared the easy
+ * half of the taxonomy mastered before the player had answered anything.
+ */
+export interface SaveV6 extends Omit<SaveV5, 'version'> {
+  version: 6;
+}
+
+export type Save = SaveV6;
 
 export function defaultSave(): Save {
   return {
@@ -146,6 +155,20 @@ export function migrate(raw: unknown): Save {
       version: 5,
       settings: { ...v4.settings, video: defaultVideoSettings() },
     };
+  }
+  if (save.version === 5) {
+    const v5 = save as unknown as SaveV5;
+    // Existing profiles have no record of how fast anything was answered, and
+    // that cannot be reconstructed. Credit every past attempt as correct — the
+    // kinder reading, and the rating already reflects the misses — but seed
+    // fluency at zero: the speed requirement is new, so it has to be earned
+    // rather than assumed. A profile that was quick all along re-proves it
+    // within a few dozen answers.
+    const skills: SkillTable = {};
+    for (const [id, state] of Object.entries(v5.skills)) {
+      skills[id] = { ...state, correct: state.attempts ?? 0, fluency: 0 };
+    }
+    save = { ...v5, version: 6, skills };
   }
   if (save.version === CURRENT_SAVE_VERSION) {
     const current = save as unknown as Save;

@@ -4,7 +4,7 @@
  * already been shown so each fires exactly once.
  */
 import type { GameConfig } from '../config';
-import type { SkillTable } from './rating';
+import type { SkillState, SkillTable } from './rating';
 import { SKILLS } from './taxonomy';
 
 export interface Milestone {
@@ -54,14 +54,67 @@ const MASTERY_LABELS: Readonly<Record<string, string>> = {
   'pct.what': 'REVERSE PERCENTAGES MASTERED',
 };
 
-/** All milestones currently earned by the skill table. */
+/** Which gate is furthest from being met — what the player still has to do. */
+export type MasteryGate = 'volume' | 'rating' | 'speed';
+
+export interface MasteryProgress {
+  /** Each gate, 0 to 1. */
+  volume: number;
+  rating: number;
+  speed: number;
+  /** The composite: the weakest gate, because mastery needs all three. */
+  overall: number;
+  /** What is holding it back, for a display that explains itself. */
+  limiting: MasteryGate;
+  mastered: boolean;
+}
+
+/**
+ * How close one skill is to mastery, as three independent gates.
+ *
+ * Rating on its own cannot express this. Every skill seeds at `initialRating`,
+ * and roughly a third of the taxonomy has a base difficulty low enough that the
+ * seed already clears `base + masteryMargin` — so those skills read as fully
+ * mastered before the player has answered a single problem. The rating gate is
+ * therefore measured *from the seed*, and where the seed already clears the
+ * line it stops discriminating and the other two gates decide.
+ *
+ * Volume and speed are what actually separate "can work it out" from "knows
+ * it": enough correct answers to rule out luck, delivered fast enough to rule
+ * out counting. The composite is the weakest of the three rather than an
+ * average, so a player cannot bank a huge rating and coast past the clock.
+ */
+export function masteryProgress(
+  state: SkillState | undefined,
+  skill: { baseDifficulty: number },
+  cfg: GameConfig,
+): MasteryProgress {
+  const r = cfg.rating;
+  const clamp = (n: number): number => Math.min(1, Math.max(0, n));
+  if (!state) {
+    return { volume: 0, rating: 0, speed: 0, overall: 0, limiting: 'volume', mastered: false };
+  }
+
+  const volume = clamp(state.correct / r.masteryMinCorrect);
+
+  const line = skill.baseDifficulty + r.masteryMargin;
+  // A line at or below the seed proves nothing, so it is not allowed to award
+  // progress the player did not earn.
+  const rating = line <= r.initialRating ? 1 : clamp((state.rating - r.initialRating) / (line - r.initialRating));
+
+  const speed = clamp(state.fluency / r.masteryFluency);
+
+  const overall = Math.min(volume, rating, speed);
+  const limiting: MasteryGate = overall === volume ? 'volume' : overall === rating ? 'rating' : 'speed';
+  return { volume, rating, speed, overall, limiting, mastered: overall >= 1 };
+}
+
 export function earnedMilestones(table: SkillTable, cfg: GameConfig): Milestone[] {
   const out: Milestone[] = [];
   for (const skill of SKILLS) {
     const state = table[skill.id];
     if (!state) continue;
-    if (state.attempts < cfg.rating.masteryMinAttempts) continue;
-    if (state.rating < skill.baseDifficulty + cfg.rating.masteryMargin) continue;
+    if (!masteryProgress(state, skill, cfg).mastered) continue;
     const label = MASTERY_LABELS[skill.id] ?? `${skill.label.toUpperCase()} MASTERED`;
     out.push({ id: `mastery.${skill.id}`, label });
   }
