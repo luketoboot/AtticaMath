@@ -4,6 +4,7 @@ import { applyDifficulty, CONFIG, type DifficultyId } from '../../core/config';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import type { Problem } from '../../core/generator/problem';
 import { drillFilterFor } from '../../core/coach/techniques';
+import { burstFor, cannonFor } from '../../core/cosmetics/cosmetics';
 import { RunSession } from '../../core/session';
 import { crossedFluent, runDeltas } from '../../core/skills/report';
 import { getSkill, type SkillFilter, type SkillId } from '../../core/skills/taxonomy';
@@ -18,6 +19,7 @@ import { isTouchDevice, Numpad } from '../../ui/Numpad';
 import { announceDrop, effectsLine, DROP_CSS } from '../DropGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { InputBuffer } from '../InputBuffer';
+import { drawCannonShape } from '../ShipGfx';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 import type { KeyBindings } from '../../core/input/bindings';
 
@@ -88,6 +90,8 @@ export class GameScene extends Phaser.Scene {
   private pointerTargetX: number | null = null;
   private invulnUntil = 0;
   private warnedArmed = false;
+  /** Equipped kill-burst colour, read once at launch. */
+  private burstColor: number = PALETTE.cyan;
   /** Skill table as the wave began, for the breather's fluency callout. */
   private waveStartSkills: SkillTable = {};
 
@@ -127,6 +131,7 @@ export class GameScene extends Phaser.Scene {
     this.warnedArmed = false;
     this.groundY = height - 90;
     this.cannonX = width / 2;
+    this.burstColor = burstFor(this.saves.save.equipped.burst).core;
 
     const save = this.saves.save;
     // A Playbook drill outranks the sector-select filter: it derives its own
@@ -605,7 +610,10 @@ export class GameScene extends Phaser.Scene {
       const fast = responseMs <= targetLatencyMs(target.problem.difficulty, CONFIG.rating);
       anyFast = anyFast || fast;
       this.scorePopup(tx, ty, points, fast || hotBonus);
-      const tint = hotBonus ? PALETTE.yellow : fast ? PALETTE.yellow : PALETTE.cyan;
+      // Gold stays gold: a fast or hot kill is a reward signal, and a reward
+      // signal you can buy your way out of stops being one. The burst owns the
+      // ordinary kill, which is most of them.
+      const tint = hotBonus || fast ? PALETTE.yellow : this.burstColor;
       this.explode(tx, ty, tint, fast || hotBonus ? juice.fastKillParticles : juice.killParticles);
       shockwave(this, tx, ty, tint);
       // At the kill, not across the field: the player is still reading meteors.
@@ -1042,13 +1050,7 @@ export class GameScene extends Phaser.Scene {
   /** Drawn in local space inside a container, because the cannon now slides. */
   private drawCannon(): void {
     const g = this.add.graphics();
-    g.fillStyle(PALETTE.cyan, 1);
-    g.fillTriangle(-22, 0, 22, 0, 0, -34);
-    g.fillStyle(PALETTE.black, 1);
-    g.fillTriangle(-12, 0, 12, 0, 0, -20);
-    // Tread bar: gives the eye something to track against the ground line.
-    g.fillStyle(PALETTE.magenta, 1);
-    g.fillRect(-26, 0, 52, 4);
+    drawCannonShape(g, cannonFor(this.saves.save.equipped.cannon), PALETTE.cyan);
     this.cannon = this.add.container(this.cannonX, this.groundY, [g]).setDepth(4);
   }
 

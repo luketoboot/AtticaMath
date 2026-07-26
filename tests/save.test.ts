@@ -8,6 +8,12 @@ import {
   SAVE_KEY,
   writeSave,
 } from '../src/core/save/save';
+import {
+  defaultEquipped,
+  DEFAULT_BADGE,
+  DEFAULT_BURST,
+  DEFAULT_CANNON,
+} from '../src/core/cosmetics/cosmetics';
 import { defaultVideoSettings } from '../src/core/settings/video';
 
 describe('save round trip', () => {
@@ -15,11 +21,36 @@ describe('save round trip', () => {
     const storage = memoryAdapter();
     const save = defaultSave();
     save.credits = 420;
-    save.ownedCosmetics = ['hull.wedge'];
-    save.equipped = { hull: 'hull.wedge', trail: 'trail.ember' };
+    save.ownedCosmetics = ['hull.wedge', 'trail.ember'];
+    save.equipped = { ...defaultEquipped(), hull: 'hull.wedge', trail: 'trail.ember' };
     save.skills['add.single'] = { rating: 777, attempts: 12, lastAttemptWave: 4 };
     writeSave(storage, save);
     expect(loadSave(storage)).toEqual(save);
+  });
+
+  it('backfills cosmetic slots a stored save predates', () => {
+    // Exactly the equipped shape written before cannons, bursts and badges —
+    // the catalogue grows a shelf without a schema version because of this.
+    const storage = memoryAdapter();
+    const save = defaultSave();
+    save.ownedCosmetics = ['hull.wedge'];
+    (save as { equipped: unknown }).equipped = { hull: 'hull.wedge', trail: 'trail.ion' };
+    writeSave(storage, save);
+
+    const loaded = loadSave(storage);
+    expect(loaded.equipped.hull).toBe('hull.wedge');
+    expect(loaded.equipped.cannon).toBe(DEFAULT_CANNON);
+    expect(loaded.equipped.burst).toBe(DEFAULT_BURST);
+    expect(loaded.equipped.badge).toBe(DEFAULT_BADGE);
+  });
+
+  it('strips equipment the player does not own', () => {
+    const storage = memoryAdapter();
+    const save = defaultSave();
+    save.ownedCosmetics = [];
+    save.equipped = { ...defaultEquipped(), hull: 'hull.sable', badge: 'badge.star' };
+    writeSave(storage, save);
+    expect(loadSave(storage).equipped).toEqual(defaultEquipped());
   });
 
   it('returns defaults when empty', () => {

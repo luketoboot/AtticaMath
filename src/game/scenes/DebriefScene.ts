@@ -19,6 +19,7 @@ import { MenuNav, navHint } from '../../ui/MenuNav';
 import { spread } from '../../ui/ModeCard';
 import { neonButton } from '../../ui/panels';
 import { LEADERBOARD_REGISTRY_KEY } from '../leaderboardStore';
+import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 interface DebriefData {
   stats: RunStats;
@@ -234,12 +235,17 @@ export class DebriefScene extends Phaser.Scene {
     let rank = -1;
     try {
       await store.rememberInitials(initials);
+      // The badge is stamped at submission, so the board remembers what you
+      // wore when you set the score rather than what you happen to wear now.
+      const badge = (this.registry.get(SAVE_REGISTRY_KEY) as SaveManager | undefined)?.save
+        .equipped.badge;
       rank = (
         await store.submit(mode, {
           initials,
           score: data.stats.score,
           wave: data.stats.wavesCleared,
           at,
+          ...(badge !== undefined ? { badge } : {}),
         })
       ).rank;
     } catch {

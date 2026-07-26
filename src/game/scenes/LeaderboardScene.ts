@@ -9,9 +9,11 @@ import {
   type LeaderboardMode,
   type ScoreEntry,
 } from '../../core/leaderboard/leaderboard';
+import { badgeFor, DEFAULT_BADGE } from '../../core/cosmetics/cosmetics';
 import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
+import { paintBadge } from '../../ui/badges';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
 import { MenuNav, navHint } from '../../ui/MenuNav';
@@ -145,6 +147,20 @@ export class LeaderboardScene extends Phaser.Scene {
     PALETTE.magentaHot,
   ];
 
+  /**
+   * The emblem worn when the score was set. Entries from before badges — and
+   * anyone wearing the default — get an empty Graphics rather than a special
+   * case, so every row is built the same way.
+   */
+  private badgeMark(x: number, y: number, id: string | undefined): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics({ x, y });
+    if (id !== undefined && id !== DEFAULT_BADGE) {
+      const def = badgeFor(id);
+      paintBadge(g, def.shape, def.color, 20);
+    }
+    return g;
+  }
+
   private renderBoard(board: readonly ScoreEntry[]): void {
     const { width } = this.scale;
     const rowW = width * 0.62;
@@ -178,8 +194,9 @@ export class LeaderboardScene extends Phaser.Scene {
             color: `#${accent.toString(16).padStart(6, '0')}`,
           })
           .setOrigin(0.5),
+        this.badgeMark(left + 96, y + 11, entry.badge),
         this.add
-          .text(left + 116, y + 11, entry.initials, {
+          .text(left + 122, y + 11, entry.initials, {
             fontFamily: FONT,
             fontSize: '25px',
             fontStyle: 'bold',

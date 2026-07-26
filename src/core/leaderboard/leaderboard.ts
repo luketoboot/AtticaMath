@@ -63,6 +63,12 @@ export interface ScoreEntry {
   wave: number;
   /** Epoch milliseconds. */
   at: number;
+  /**
+   * Cosmetic badge id worn when the score was set. Optional: entries predate
+   * badges, and a board from a server may not carry one. Purely decorative,
+   * so an unknown id renders as the default rather than rejecting the entry.
+   */
+  badge?: string;
 }
 
 export const INITIALS_LENGTH = 3;
@@ -106,6 +112,9 @@ export function normalizeBoard(entries: readonly ScoreEntry[], size = BOARD_SIZE
       score: Math.floor(e.score),
       wave: Math.max(0, Math.floor(e.wave)),
       at: Number.isFinite(e.at) ? e.at : 0,
+      // Carried through untouched when present and dropped when not, so the
+      // stored shape stays exactly what it was for pre-badge boards.
+      ...(typeof e.badge === 'string' ? { badge: e.badge } : {}),
     }))
     .sort(compare)
     .slice(0, size);

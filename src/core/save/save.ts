@@ -4,7 +4,7 @@
  * without touching game code.
  */
 import { CONFIG, type GameConfig } from '../config';
-import { defaultEquipped, type Equipped } from '../cosmetics/cosmetics';
+import { defaultEquipped, resolveEquipped, type Equipped } from '../cosmetics/cosmetics';
 import { defaultBindings, type KeyBindings } from '../input/bindings';
 import {
   defaultVideoSettings,
@@ -168,6 +168,10 @@ export function loadSave(storage: StorageAdapter, cfg: GameConfig = CONFIG): Sav
   } catch {
     return defaultSave();
   }
+  // Cosmetic slots added after this profile was written arrive as defaults,
+  // and anything named but not owned falls back — so the catalogue can grow a
+  // whole new slot without a schema version.
+  save = { ...save, equipped: resolveEquipped(save.equipped, save.ownedCosmetics) };
   // Skills added to the taxonomy after this profile placed would otherwise be
   // unreachable forever (composeWave only buckets what the table contains).
   // Before placement there is nothing to patch: the sweep seeds every skill.
