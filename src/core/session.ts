@@ -40,6 +40,7 @@ import {
   tickStamina,
   type StaminaState,
 } from './stamina';
+import { recordTrouble, type TroubleLog } from './coach/trouble';
 import { applyAttempt, targetLatencyMs, type SkillTable } from './skills/rating';
 import type { SkillFilter, SkillId } from './skills/taxonomy';
 import { composePlacementWave, composeWave, OPEN_FILTER, type WavePlan } from './waves/compose';
@@ -58,6 +59,8 @@ export interface RunSessionInit {
    * not just the one after a tip. Tip picks still take a wave when they land.
    */
   coachedSkill?: SkillId;
+  /** The coach's running record, carried in from the save and handed back out. */
+  trouble?: TroubleLog;
 }
 
 const COACH_RECENCY_WAVES = 3;
@@ -90,6 +93,7 @@ export class RunSession {
   hp: number;
   private combo: ComboState = createCombo();
   private stamina: StaminaState;
+  private trouble: TroubleLog;
   /** Landings this wave; a clean wave carries the combo through the breather. */
   private missesThisWave = 0;
   /** Drops get their own stream for the same reason gunfire does. */
@@ -111,6 +115,7 @@ export class RunSession {
     this.hp = this.cfg.meteors.baseHp;
     this.maxHp = this.hp; // repair tops up to where the run started, never past it
     this.stamina = createStamina(this.cfg.stamina);
+    this.trouble = { ...(init.trouble ?? {}) };
     this.filter = init.filter ?? OPEN_FILTER;
     this.drillSkill = init.coachedSkill;
   }
@@ -277,6 +282,33 @@ export class RunSession {
     return { ...plan, wave: this.waveInRun };
   }
 
+  /** What the coach saw. Kept alongside the ratings, which cannot name a problem. */
+  get troubleLog(): TroubleLog {
+    return this.trouble;
+  }
+
+  /**
+   * File one problem with the coach.
+   *
+   * The prompt is the key, because the prompt is what the player would
+   * recognise: "8 + 6" is the thing they keep losing, not `add.bridge`.
+   */
+  private noteProblem(problem: Problem, correct: boolean, responseMs: number): void {
+    this.trouble = recordTrouble(
+      this.trouble,
+      {
+        mode: 'meteor',
+        prompt: problem.prompt,
+        answer: problem.answer,
+        skillId: problem.skillIds[0] ?? 'add.single',
+        correct,
+        responseMs,
+        wave: this.globalWave,
+      },
+      this.cfg.coach,
+    );
+  }
+
   /** Call when a placement wave finishes; flips to normal play after the last one. */
   private maybeFinishPlacement(): void {
     if (!this.placementDone && this.waveInRun >= this.cfg.waves.placementWaves) {
@@ -297,6 +329,7 @@ export class RunSession {
   recordHit(problem: Problem, responseMs: number, hotBonus = false): number {
     const attempt = { correct: true, responseMs, difficulty: problem.difficulty, wave: this.globalWave };
     this.skills = applyAttempt(this.skills, problem.skillIds, attempt, this.cfg.rating);
+    this.noteProblem(problem, true, responseMs);
     if (!this.placementDone) {
       for (const id of problem.skillIds) {
         this.placementLog.push({ skillId: id, difficulty: problem.difficulty, correct: true, responseMs });
@@ -316,6 +349,7 @@ export class RunSession {
   recordMiss(problem: Problem, responseMs: number): void {
     const attempt = { correct: false, responseMs, difficulty: problem.difficulty, wave: this.globalWave };
     this.skills = applyAttempt(this.skills, problem.skillIds, attempt, this.cfg.rating);
+    this.noteProblem(problem, false, responseMs);
     if (!this.placementDone) {
       for (const id of problem.skillIds) {
         this.placementLog.push({ skillId: id, difficulty: problem.difficulty, correct: false, responseMs });

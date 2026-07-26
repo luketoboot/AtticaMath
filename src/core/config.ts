@@ -371,6 +371,14 @@ export interface ExerciseConfig {
   graduationScaffold: number;
 }
 
+/** The coach's per-problem record. See core/coach/trouble.ts. */
+export interface CoachConfig {
+  /** Problems a profile remembers before the least instructive are dropped. */
+  troubleCap: number;
+  /** Rows the coach shows per mode. */
+  troubleShown: number;
+}
+
 export interface EconomyConfig {
   /** Currency per point of score, end of run. */
   creditsPerScore: number;
@@ -569,6 +577,7 @@ export interface GameConfig {
   exercise: ExerciseConfig;
   hazard: HazardConfig;
   stamina: StaminaConfig;
+  coach: CoachConfig;
   score: ScoreConfig;
   economy: EconomyConfig;
   juice: JuiceConfig;
@@ -865,6 +874,12 @@ export const CONFIG: GameConfig = {
     regenDelaySeconds: 0.6,
     // A third of a tank: enough for a real attempt, too much to tap out of.
     recoverAt: 34,
+  },
+  coach: {
+    // A few hundred problems is months of play at a few dozen troublesome ones
+    // per profile, and costs well under 100KB of the storage budget.
+    troubleCap: 300,
+    troubleShown: 8,
   },
   score: {
     killBase: 100,

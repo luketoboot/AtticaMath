@@ -11,6 +11,7 @@ import {
   sanitizeVideoSettings,
   type VideoSettings,
 } from '../settings/video';
+import type { TroubleLog } from '../coach/trouble';
 import { reconcileTable } from '../skills/placement';
 import type { SkillTable } from '../skills/rating';
 
@@ -21,7 +22,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 6;
+export const CURRENT_SAVE_VERSION = 7;
 
 export interface SaveV1 {
   version: 1;
@@ -75,7 +76,17 @@ export interface SaveV6 extends Omit<SaveV5, 'version'> {
   version: 6;
 }
 
-export type Save = SaveV6;
+/**
+ * The coach needs to name actual problems, and ratings cannot: they aggregate,
+ * which is their job. This remembers individual problems per mode so the
+ * breakdown can say "8 + 6" rather than "addition bridging ten".
+ */
+export interface SaveV7 extends Omit<SaveV6, 'version'> {
+  version: 7;
+  trouble: TroubleLog;
+}
+
+export type Save = SaveV7;
 
 export function defaultSave(): Save {
   return {
@@ -95,6 +106,7 @@ export function defaultSave(): Save {
     bestScore: 0,
     milestones: [],
     keybindings: defaultBindings(),
+    trouble: {},
   };
 }
 
@@ -170,12 +182,20 @@ export function migrate(raw: unknown): Save {
     }
     save = { ...v5, version: 6, skills };
   }
+  if (save.version === 6) {
+    // Nothing to reconstruct: which individual problems went wrong was never
+    // recorded, and the ratings cannot be unmixed back into them. The coach
+    // starts empty and fills from the next run.
+    save = { ...save, version: 7, trouble: {} };
+  }
   if (save.version === CURRENT_SAVE_VERSION) {
     const current = save as unknown as Save;
     // A hand-edited or half-written settings block must not reach the shader.
     return {
       ...current,
       settings: { ...current.settings, video: sanitizeVideoSettings(current.settings?.video) },
+      // A hand-edited or truncated save must not hand the coach a non-object.
+      trouble: typeof current.trouble === 'object' && current.trouble !== null ? current.trouble : {},
     };
   }
   // Anything unrecognised below the current version: start fresh.

@@ -94,16 +94,27 @@ export class BrainScanScene extends Phaser.Scene {
     const goBack = (): void => {
       this.scene.start('Menu');
     };
+    // The scan says which skills are weak; the coach says which problems. One
+    // is the map and the other is the itinerary, so the way to the second is
+    // from the first.
+    const coach = neonButton(
+      this,
+      width / 2 - 170,
+      height - 52,
+      'THE COACH',
+      () => this.scene.start('Coach'),
+      { width: 280, height: 44, fontSize: 19, accent: PALETTE.magenta, sub: 'PROBLEM BY PROBLEM' },
+    );
     // Sits a line higher than the other screens' BACK to leave room for the
     // hint below it; the longest column bottoms out around y=580.
-    const back = neonButton(this, width / 2, height - 52, 'BACK', goBack, {
+    const back = neonButton(this, width / 2 + 170, height - 52, 'BACK', goBack, {
       width: 200,
       height: 44,
       fontSize: 19,
     });
     this.input.keyboard?.once('keydown-ESC', goBack);
 
-    new MenuNav(this, [[back]]);
+    new MenuNav(this, [[coach, back]]);
     navHint(this);
   }
 

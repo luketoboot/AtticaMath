@@ -20,6 +20,7 @@ import {
 } from '../combo';
 import { CONFIG, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
+import { recordTrouble, type TroubleLog } from '../coach/trouble';
 import { DropTracker, type DropKind, type DropState } from '../drops';
 import { creditsForRun, type RunStats } from '../economy/economy';
 import { createRng, type Rng } from '../rng';
@@ -39,6 +40,8 @@ export interface FactorSessionInit {
   skills: SkillTable;
   totalWavesBefore: number;
   config?: GameConfig;
+  /** The coach's running record, carried in from the save and handed back out. */
+  trouble?: TroubleLog;
 }
 
 /** A rock as the simulation knows it. */
@@ -67,6 +70,7 @@ export class FactorSession {
   private lastTipSkill: SkillId | undefined;
   private combo: ComboState = createCombo();
   private readonly drops: DropTracker;
+  private trouble: TroubleLog;
   private hitsThisWave = 0;
   private damageThisWave = 0;
   /** Rocks already rated as unanswered, so one rock cannot count twice. */
@@ -91,6 +95,7 @@ export class FactorSession {
       this.cfg.drops,
       this.cfg.drops.pools.factor,
     );
+    this.trouble = { ...(init.trouble ?? {}) };
   }
 
   get globalWave(): number {
@@ -283,6 +288,35 @@ export class FactorSession {
     return ids.filter((id) => SKILLS.some((s) => s.id === id));
   }
 
+  /** What the coach saw this run. */
+  get troubleLog(): TroubleLog {
+    return this.trouble;
+  }
+
+  /**
+   * File one rock with the coach.
+   *
+   * Keyed on the rock's value, because that is the thing the player stares at
+   * and cannot crack. Factor Storm rarely misses outright — an unfactorable
+   * rock simply drifts — so the coach ranks these by how long they took rather
+   * than by accuracy, and a rock that reached the ship counts as never broken.
+   */
+  private noteRock(value: number, shot: number, correct: boolean, responseMs: number): void {
+    this.trouble = recordTrouble(
+      this.trouble,
+      {
+        mode: 'factor',
+        prompt: `FACTOR ${value}`,
+        answer: String(shot),
+        skillId: this.skillsForShot(value, shot)[0] ?? 'div.exact',
+        correct,
+        responseMs,
+        wave: this.globalWave,
+      },
+      this.cfg.coach,
+    );
+  }
+
   /** Rough difficulty of breaking this rock, on the rating scale. */
   private difficultyOf(value: number, shot: number): number {
     const ids = this.skillsForShot(value, shot);
@@ -306,6 +340,7 @@ export class FactorSession {
     const attempt = { correct: true, responseMs, difficulty, wave: this.globalWave };
     this.skills = applyAttempt(this.skills, this.skillsForShot(rock.value, shot), attempt, this.cfg.rating);
 
+    this.noteRock(rock.value, shot, true, responseMs);
     const fast = responseMs <= targetLatencyMs(difficulty, this.cfg.rating);
     const raw = shotScore(rock.value, outcome, this.cfg.factor);
     const points = Math.round(raw * this.scoreMultiplier * (fast ? this.cfg.score.speedBonusMultiplier : 1));
@@ -356,6 +391,7 @@ export class FactorSession {
       // Rated against the split the player was meant to find — the balanced
       // factor, or the number itself when it is prime and cannot be split.
       const shot = balancedFactor(rock.value) ?? rock.value;
+      this.noteRock(rock.value, shot, false, responseMs);
       this.skills = applyAttempt(
         this.skills,
         this.skillsForShot(rock.value, shot),

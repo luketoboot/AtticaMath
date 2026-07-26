@@ -19,6 +19,7 @@ import {
   isLive,
   type ChainState,
 } from '../../core/collapse/chain';
+import { recordTrouble } from '../../core/coach/trouble';
 import { collapseAttempt } from '../../core/collapse/skills';
 import { opposite, resolveShot, type GunKind, type TokenRef } from '../../core/collapse/targeting';
 import { CONFIG } from '../../core/config';
@@ -650,6 +651,25 @@ export class CollapseScene extends Phaser.Scene {
         wave: save.totalWaves + this.wave,
       },
       CONFIG.rating,
+    );
+    // The coach only wants Collapse's accuracy, not a list of pairings — this
+    // is a matching game, and "you got 3/4 wrong once" is not a drill anyone
+    // would run. Recorded per fraction anyway so the totals are honest, and
+    // surfaced as one number.
+    save.trouble = recordTrouble(
+      save.trouble,
+      {
+        mode: 'collapse',
+        prompt: fractionHalf.fraction
+          ? `${fractionHalf.fraction.num}/${fractionHalf.fraction.den}`
+          : `${fractionHalf.percent}%`,
+        answer: `${fractionHalf.percent}%`,
+        skillId: skillIds[0] ?? 'frac.percent',
+        correct,
+        responseMs: Math.max(1, this.time.now - this.armedAt),
+        wave: save.totalWaves + this.wave,
+      },
+      CONFIG.coach,
     );
   }
 

@@ -135,6 +135,7 @@ export class FactorScene extends Phaser.Scene {
       seed: Date.now() >>> 0,
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
+      trouble: save.trouble,
     });
 
     this.add.rectangle(0, 0, width, height, PALETTE.black).setOrigin(0);
@@ -827,6 +828,7 @@ export class FactorScene extends Phaser.Scene {
     const credits = this.session.creditsEarned();
     const deltas = runDeltas(save.skills, this.session.skillTable, CONFIG);
     save.skills = this.session.skillTable;
+    save.trouble = this.session.troubleLog;
     save.totalWaves += this.session.currentWaveNumber;
     save.credits += credits;
     save.bestScore = Math.max(save.bestScore, this.session.score);

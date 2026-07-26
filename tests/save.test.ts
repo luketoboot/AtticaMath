@@ -9,6 +9,7 @@ import {
   migrate,
   SAVE_KEY,
   writeSave,
+  type Save,
 } from '../src/core/save/save';
 import {
   defaultEquipped,
@@ -180,6 +181,40 @@ describe('migrate', () => {
   });
 });
 
+describe('v6 → v7 coach migration', () => {
+  it('starts the coach empty, because the past cannot be reconstructed', () => {
+    const { trouble: _drop, ...v6 } = { ...defaultSave(), version: 6 as const };
+    const out = migrate(v6);
+    expect(out.version).toBe(CURRENT_SAVE_VERSION);
+    // Which individual problems went wrong was never recorded, and ratings
+    // cannot be unmixed back into them. Empty is the honest answer.
+    expect(out.trouble).toEqual({});
+  });
+
+  it('keeps a coach record that is already there', () => {
+    const save = defaultSave();
+    save.trouble = {
+      'meteor|8 + 6': {
+        prompt: '8 + 6',
+        answer: '14',
+        skillId: 'add.bridge',
+        mode: 'meteor',
+        attempts: 3,
+        misses: 2,
+        totalMs: 2000,
+        timed: 1,
+        lastWave: 9,
+      },
+    };
+    expect(migrate(save).trouble['meteor|8 + 6']?.misses).toBe(2);
+  });
+
+  it('replaces a hand-edited coach record that is not an object', () => {
+    const broken = { ...defaultSave(), trouble: 'nonsense' as unknown as Save['trouble'] };
+    expect(migrate(broken).trouble).toEqual({});
+  });
+});
+
 describe('v5 → v6 skill migration', () => {
   it('credits past attempts as correct but makes speed be earned', () => {
     const v5 = {
@@ -188,7 +223,9 @@ describe('v5 → v6 skill migration', () => {
       skills: { 'add.single': { rating: 900, attempts: 42, lastAttemptWave: 7 } },
     };
     const out = migrate(v5);
-    expect(out.version).toBe(6);
+    // Whatever the newest version is — a migration runs the whole chain, so
+    // pinning the number here goes stale every time one is added.
+    expect(out.version).toBe(CURRENT_SAVE_VERSION);
     const state = out.skills['add.single']!;
     expect(state.rating).toBe(900);
     expect(state.correct).toBe(42);

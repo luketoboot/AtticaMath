@@ -153,6 +153,7 @@ export class GameScene extends Phaser.Scene {
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
       placementDone: save.placementDone,
+      trouble: save.trouble,
       config: applyDifficulty(CONFIG, level ?? CONFIG.difficulty.fallback),
       ...(filter ? { filter } : {}),
       ...(drill ? { coachedSkill: drill } : {}),
@@ -1266,6 +1267,7 @@ export class GameScene extends Phaser.Scene {
     // snapshots is the whole run report.
     const deltas = runDeltas(save.skills, this.session.skillTable, CONFIG);
     save.skills = this.session.skillTable;
+    save.trouble = this.session.troubleLog;
     save.totalWaves += this.session.currentWaveNumber;
     save.placementDone = !this.session.inPlacement;
     save.credits += credits;

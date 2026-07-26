@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { PALETTE } from './fx/palette';
 import { BootScene } from './game/scenes/BootScene';
 import { BrainScanScene } from './game/scenes/BrainScanScene';
+import { CoachScene } from './game/scenes/CoachScene';
 import { CollapseScene } from './game/scenes/CollapseScene';
 import { ControlsScene } from './game/scenes/ControlsScene';
 import { DebriefScene } from './game/scenes/DebriefScene';
@@ -44,6 +45,7 @@ const game = new Phaser.Game({
     LeaderboardScene,
     ShopScene,
     BrainScanScene,
+    CoachScene,
     PlaybookScene,
     SettingsScene,
     ControlsScene,
