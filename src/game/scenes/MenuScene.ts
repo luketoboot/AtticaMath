@@ -44,6 +44,14 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     badge: 'PROTO',
     onSelect: () => {},
   },
+  {
+    label: 'EXERCISE',
+    tagline: 'BREAK IT DOWN. SOLVE IT SMALL. BUILD IT BACK.',
+    icon: 'exercise',
+    accent: PALETTE.cyan,
+    scene: 'Exercise',
+    onSelect: () => {},
+  },
   // Boss Rush is benched, not deleted: with no target to hit, any expression
   // counted as correct, which both flattened the game (optimal play was
   // "multiply the big chips", forever) and let ratings inflate off attempts

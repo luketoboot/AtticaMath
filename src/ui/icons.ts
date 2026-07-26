@@ -24,7 +24,8 @@ export type IconName =
   | 'leaderboard'
   | 'brainscan'
   | 'settings'
-  | 'playbook';
+  | 'playbook'
+  | 'exercise';
 
 type Pt = readonly [number, number];
 
@@ -328,6 +329,26 @@ function playbook(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameOb
   return [g, glyph(scene, 0.46 * s, -0.1 * s, '×', s * 0.56, st.dim)];
 }
 
+function exercise(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameObject[] {
+  const s = st.size / 2;
+  const g = scene.add.graphics();
+  // A stack of bars, each shorter than the one above: the ladder, with the
+  // widest rung — the whole problem — on top and the simplest at the bottom.
+  const bars: readonly [number, number][] = [
+    [-0.86, -0.56],
+    [-0.58, -0.06],
+    [-0.3, 0.44],
+  ];
+  bars.forEach(([x0, y], i) => {
+    const lit = i === bars.length - 1;
+    g.fillStyle(lit ? st.color : st.dim, lit ? 0.32 : 0.16);
+    g.fillRect(x0 * s, (y - 0.16) * s, -x0 * 2 * s, 0.32 * s);
+    g.lineStyle(2.5, lit ? st.color : st.dim, 1);
+    g.strokeRect(x0 * s, (y - 0.16) * s, -x0 * 2 * s, 0.32 * s);
+  });
+  return [g];
+}
+
 const PAINTERS: Readonly<
   Record<IconName, (scene: Phaser.Scene, st: IconStyle) => Phaser.GameObjects.GameObject[]>
 > = {
@@ -341,6 +362,7 @@ const PAINTERS: Readonly<
   brainscan,
   settings,
   playbook,
+  exercise,
 };
 
 /**

@@ -6,6 +6,7 @@ import {
   weakestAttempted,
 } from '../../core/coach/techniques';
 import { CONFIG } from '../../core/config';
+import { EXERCISE_SKILLS } from '../../core/exercise/session';
 import { earnedMilestones } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
@@ -13,8 +14,9 @@ import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
 import { MenuNav, navHint, type MenuItem } from '../../ui/MenuNav';
-import { neonButton, neonChip } from '../../ui/panels';
+import { neonButton, neonChip, type NeonButton } from '../../ui/panels';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
+import { EXERCISE_SKILL_KEY } from './ExerciseScene';
 
 /**
  * Registry key for a Playbook drill: the skill id a launched run should
@@ -41,6 +43,8 @@ export class PlaybookScene extends Phaser.Scene {
   private detail: Phaser.GameObjects.GameObject[] = [];
   private shown: SkillDef | null = null;
   private saves!: SaveManager;
+  private workBtn!: NeonButton;
+  private workHint!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Playbook');
@@ -129,18 +133,39 @@ export class PlaybookScene extends Phaser.Scene {
       };
     });
 
+    // Two ways to take a move off the page. Exercise is the slow one — perform
+    // the method on the dial, untimed — and the drill is the fast one. Read it,
+    // work it, then meet it at speed.
+    this.workBtn = neonButton(
+      this,
+      width * 0.52,
+      height - 84,
+      'WORK IT',
+      () => {
+        if (this.shown) this.work(this.shown);
+      },
+      { width: 250, height: 54, fontSize: 22, accent: PALETTE.cyan },
+    );
+    this.workHint = this.add
+      .text(width * 0.52, height - 50, '', {
+        fontFamily: FONT,
+        fontSize: '12px',
+        color: CSS.cyanDim,
+      })
+      .setOrigin(0.5);
+
     const drillBtn = neonButton(
       this,
-      width * 0.72,
+      width * 0.81,
       height - 84,
       'DRILL THIS',
       () => {
         if (this.shown) this.drill(this.shown);
       },
-      { width: 280, height: 54, fontSize: 22, accent: PALETTE.yellow },
+      { width: 250, height: 54, fontSize: 22, accent: PALETTE.yellow },
     );
     this.add
-      .text(width * 0.72, height - 50, 'LAUNCHES METEOR DEFENSE, WEIGHTED AT THE MOVE', {
+      .text(width * 0.81, height - 50, 'METEOR DEFENSE, WEIGHTED AT THE MOVE', {
         fontFamily: FONT,
         fontSize: '12px',
         color: CSS.cyanDim,
@@ -150,14 +175,19 @@ export class PlaybookScene extends Phaser.Scene {
     const goBack = (): void => {
       this.scene.start('Menu');
     };
-    const back = neonButton(this, width * 0.22, height - 84, 'BACK', goBack, {
-      width: 200,
+    const back = neonButton(this, width * 0.2, height - 84, 'BACK', goBack, {
+      width: 180,
       height: 54,
       fontSize: 20,
     });
     this.input.keyboard?.once('keydown-ESC', goBack);
 
-    const nav = new MenuNav(this, [tabs, ...items.map((item) => [item]), [drillBtn], [back]]);
+    const nav = new MenuNav(this, [
+      tabs,
+      ...items.map((item) => [item]),
+      [this.workBtn, drillBtn],
+      [back],
+    ]);
     nav.setColumn(0, group);
     // Open on the recommended technique if it lives in this group, else the top.
     const openAt = Math.max(0, defs.findIndex((d) => d.id === recommended));
@@ -171,6 +201,13 @@ export class PlaybookScene extends Phaser.Scene {
   /** The right-hand pane: the move itself, and where the player stands on it. */
   private renderDetail(def: SkillDef, recommended: string | undefined): void {
     this.shown = def;
+    // Only the multi-digit add/sub moves have places to drop; the rest say so
+    // rather than offering a button that buzzes.
+    const workable = EXERCISE_SKILLS.includes(def.id);
+    this.workBtn?.setAccent(workable ? PALETTE.cyan : PALETTE.purple);
+    this.workHint?.setText(
+      workable ? 'EXERCISE — PERFORM IT, PLACE BY PLACE, NO CLOCK' : 'NO DIAL FOR THIS MOVE YET',
+    );
     for (const obj of this.detail) obj.destroy();
     this.detail = [];
     const { width } = this.scale;
@@ -255,5 +292,17 @@ export class PlaybookScene extends Phaser.Scene {
     getAudio(this)?.play('ui');
     this.registry.set(METEOR_DRILL_KEY, def.id);
     this.scene.start('Game');
+  }
+
+  /** Open Exercise on this skill, if the focus dial can take it apart. */
+  private work(def: SkillDef): void {
+    if (!EXERCISE_SKILLS.includes(def.id)) {
+      getAudio(this)?.play('error');
+      this.cameras.main.shake(90, 0.004);
+      return;
+    }
+    getAudio(this)?.play('ui');
+    this.registry.set(EXERCISE_SKILL_KEY, def.id);
+    this.scene.start('Exercise');
   }
 }

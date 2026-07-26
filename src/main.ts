@@ -5,6 +5,7 @@ import { BrainScanScene } from './game/scenes/BrainScanScene';
 import { CollapseScene } from './game/scenes/CollapseScene';
 import { ControlsScene } from './game/scenes/ControlsScene';
 import { DebriefScene } from './game/scenes/DebriefScene';
+import { ExerciseScene } from './game/scenes/ExerciseScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
 import { FactorScene } from './game/scenes/FactorScene';
 import { GameScene } from './game/scenes/GameScene';
@@ -35,6 +36,7 @@ const game = new Phaser.Game({
     ExpressionScene,
     FactorScene,
     CollapseScene,
+    ExerciseScene,
     // BossScene is benched pending a redesign — see the note in MenuScene.
     DebriefScene,
     LeaderboardScene,

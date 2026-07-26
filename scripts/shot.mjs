@@ -84,6 +84,14 @@ const PRESETS = [
       },
     },
   },
+  {
+    // The one play scene worth a golden: it is all layout, it needs no live
+    // session, and it seeds from Math.random — which this harness stubs — so
+    // the problem it deals is the same one every time.
+    name: 'Exercise',
+    scene: 'Exercise',
+    data: { skillId: 'add.triple' },
+  },
   { name: 'Settings', scene: 'Settings' },
   { name: 'Controls', scene: 'Controls' },
   { name: 'Video', scene: 'Video' },

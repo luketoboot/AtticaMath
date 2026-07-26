@@ -56,6 +56,13 @@ Input details matter: numpad and top row digits both work, backspace clears the 
 ### Mode 2: Expression Builder (second)
 A target number falls. The player has ammunition: a hand of numbers and operators. They compose an expression that evaluates to the target and fire it. Multiple valid solutions exist; award bonuses for ammo efficiency and operator variety. This is Countdown numbers round as an action game. Same skill model feeds it, and which operators the player avoids is itself a rating signal.
 
+### Mode 3: Exercise (the focus dial)
+The teaching mode, and the only one that is not a race — no HP, no clock, no combo. A problem opens downward into coarser versions of itself: DECONSTRUCT drops the ones out of focus, then the tens, until what is left is small enough to see whole (`679 + 834` → `670 + 830` → `600 + 800`). The player answers that rung, RECONSTRUCTs to bring the next place back, and answers again — so the answer arrives place by place and the carrying never has to be tracked apart from the running total. Solved rungs stay on screen, because `670 + 830` is only easy while `1400` is still in front of you.
+
+The point is to make base-10 structure something the player performs rather than reads. Every other mode can be beaten by recall; this one cannot. Its output is `scaffoldDepth` — how far out the player had to zoom before the problem looked solvable — which falls as a technique internalises and reaching zero means they are solving these whole. Rating updates are gentle (half K) and untimed, since a mode that invites you to think must not read your pace as slowness.
+
+Fractions get the same treatment later, with boxes and a RESLICE verb instead of a place-value dial; multiplication gets the area model. Neither is built yet.
+
 ### Later modes (design stubs only, do not build in MVP)
 - Boss fights: boss has an HP number, chip it with expressions, block boss attacks by answering problems
 - Estimation mode: problems fall too fast to compute exactly, fire at closest of three answers
