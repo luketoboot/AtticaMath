@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../audio/getAudio';
 import { CSS, FONT, PALETTE } from '../fx/palette';
+import { keyEventGate } from '../game/input/freshKey';
 
 /** Anything the cursor can frame — Text and Rectangle both qualify. */
 type Focusable = Phaser.GameObjects.GameObject & { getBounds(): Phaser.Geom.Rectangle };
@@ -60,6 +61,8 @@ export class MenuNav {
   private enabled = true;
   /** Whoever was last told it is lit, so it can be told when it is not. */
   private lit: MenuItem | undefined;
+  /** Drops Phaser's queue-replay duplicates; see game/input/freshKey. */
+  private readonly fresh = keyEventGate();
 
   constructor(scene: Phaser.Scene, rows: readonly (readonly MenuItem[])[]) {
     this.scene = scene;
@@ -130,6 +133,11 @@ export class MenuNav {
 
   private handleKey(event: KeyboardEvent): void {
     if (!this.enabled) return;
+    // One physical press must be one move or one activation. Phaser can drain
+    // its key queue more than once in a frame and redeliver the same event
+    // object, which here meant a single ENTER firing a button twice — visible
+    // in Exercise as one press cutting a fraction bar in four.
+    if (!this.fresh(event)) return;
     // Auto-repeat is discarded: a held ENTER from the previous screen would
     // otherwise land on whatever this screen opened focused on.
     if (event.repeat) return;

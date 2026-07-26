@@ -65,7 +65,11 @@ All four operations ride the dial, each truncating what it honestly can. A sum d
 
 Recall skills are deliberately withheld: the times tables and exact division can all be opened by the dial, but teaching a procedure for a fact that ought to be remembered is the opposite of what tracking them per-family is for. A test forces a ruling on every skill the dial can open, so omission is never a decision by default.
 
-Fractions get the same treatment later, with boxes and a RESLICE verb instead of a place-value dial. Not built yet.
+Fractions are worked on a second bench, because their problem is different in kind: halves and thirds do not fail to add because the numbers are big but because the slices are different sizes, and no amount of zooming out changes that. So the fraction skills get bars — a length of ground, cut into slices, some of them filled — and two verbs. RESLICE cuts every slice of a bar into `k`; MERGE fuses `k` back into one. Both leave the bar covering exactly the same ground, which is the whole lesson: `3/6` is not a new number, it is `1/2` wearing more cuts. Five skills fit (adding like and unlike fractions, common denominator, percentage, reducing); `frac.of`, `pct.of` and `pct.what` do not, because they cut a quantity into groups rather than a bar into slices.
+
+Both benches share a set: eight problems, one gentle untimed rating attempt each, and a record of how much help was needed. Neither reaches the leaderboard — a set worked at your own pace is not comparable with a run against a clock.
+
+Rebuilding is automatic. There is only ever one place to bring back and one moment to bring it, so asking for a keypress was a formality; the ladder walks itself down as the player answers. Breaking a problem apart stays the player's decision, because that one is a real choice — and answering the whole thing without breaking it is always allowed, since the mode exists to become unnecessary.
 
 ### Later modes (design stubs only, do not build in MVP)
 - Boss fights: boss has an HP number, chip it with expressions, block boss attacks by answering problems

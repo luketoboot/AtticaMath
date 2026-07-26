@@ -28,7 +28,18 @@ import {
   type WorkbenchEvent,
   type WorkbenchState,
 } from './layers';
-import { readingOf, solveByCutting, type SliceProblem } from './slices';
+import {
+  createSliceBench,
+  merge,
+  readingOf,
+  reslice,
+  select,
+  solveByCutting,
+  submitSlices,
+  type SliceEvent,
+  type SliceProblem,
+  type SliceState,
+} from './slices';
 
 /**
  * Skills the dial can open: the ones whose problems are a plain `a op b` with
@@ -223,7 +234,7 @@ export function isSliceable(problem: Problem): boolean {
 export function suggestedSkill(table: SkillTable): SkillId {
   let weakest: SkillId | undefined;
   let lowest = Number.POSITIVE_INFINITY;
-  for (const id of EXERCISE_SKILLS) {
+  for (const id of ALL_EXERCISE_SKILLS) {
     const state = table[id];
     if (!state || state.attempts === 0) continue;
     if (state.rating < lowest) {
@@ -270,15 +281,41 @@ export interface ExerciseSessionInit {
   config?: GameConfig;
 }
 
+/** Which machine a skill is worked on. */
+export type BenchKind = 'dial' | 'bars';
+
+/** Every skill Exercise can serve, on either bench. */
+export const ALL_EXERCISE_SKILLS: readonly SkillId[] = [...EXERCISE_SKILLS, ...SLICE_SKILLS];
+
+export function benchKindFor(skillId: SkillId): BenchKind | undefined {
+  if (EXERCISE_SKILLS.includes(skillId)) return 'dial';
+  if (SLICE_SKILLS.includes(skillId)) return 'bars';
+  return undefined;
+}
+
+/**
+ * A problem in progress, on whichever bench its skill belongs to.
+ *
+ * Two machines, one set. The dial and the bars share nothing about how a
+ * problem is worked — one drops places, the other recuts slices — but they
+ * share everything about what a *set* is: eight problems, a score, one gentle
+ * untimed rating attempt each, and a record of how much help was needed. That
+ * is what this class owns, and it is why they are not two sessions.
+ */
+type Bench =
+  | { kind: 'dial'; state: WorkbenchState }
+  | { kind: 'bars'; state: SliceState };
+
 export class ExerciseSession {
   private readonly cfg: GameConfig;
   private readonly rng: Rng;
   private skills: SkillTable;
   private readonly wave: number;
   readonly skillId: SkillId;
+  readonly kind: BenchKind;
 
   private current: Problem;
-  private bench: WorkbenchState;
+  private bench: Bench;
   private readonly records: SolvedRecord[] = [];
   score = 0;
 
@@ -288,22 +325,29 @@ export class ExerciseSession {
     this.skills = { ...init.skills };
     this.wave = init.totalWavesBefore;
     this.skillId = init.skillId ?? suggestedSkill(init.skills);
-    if (!EXERCISE_SKILLS.includes(this.skillId)) {
-      throw new Error(`Skill cannot be exercised on the dial: ${this.skillId}`);
-    }
+    const kind = benchKindFor(this.skillId);
+    if (!kind) throw new Error(`Skill cannot be exercised on the dial: ${this.skillId}`);
+    this.kind = kind;
     this.current = this.rollProblem();
-    this.bench = createWorkbench(exerciseFromProblem(this.current)!);
+    this.bench = this.openBench(this.current);
+  }
+
+  private openBench(problem: Problem): Bench {
+    return this.kind === 'dial'
+      ? { kind: 'dial', state: createWorkbench(exerciseFromProblem(problem)!) }
+      : { kind: 'bars', state: createSliceBench(sliceFromProblem(problem)!) };
   }
 
   /**
-   * A problem this skill's recipe produced that the dial can open. Most rolls
-   * qualify; the rerolls exist for the occasional `20 + 30`, whose places are
-   * already bare and which the mode therefore has nothing to teach on.
+   * A problem this skill's recipe produced that its bench can actually hold.
+   * Most rolls qualify; the rerolls exist for the occasional `20 + 30`, whose
+   * places are already bare and which the mode has nothing to teach on.
    */
   private rollProblem(): Problem {
+    const usable = this.kind === 'dial' ? isExercisable : isSliceable;
     for (let i = 0; i < this.cfg.exercise.maxGenerateAttempts; i++) {
       const problem = generateProblem(this.skillId, this.rng);
-      if (isExercisable(problem)) return problem;
+      if (usable(problem)) return problem;
     }
     throw new Error(`No exercisable problem for ${this.skillId} after ${this.cfg.exercise.maxGenerateAttempts} tries`);
   }
@@ -312,8 +356,16 @@ export class ExerciseSession {
     return this.current;
   }
 
+  /** The dial's state. Throws on a bars set — check `kind` first. */
   get state(): WorkbenchState {
-    return this.bench;
+    if (this.bench.kind !== 'dial') throw new Error(`${this.skillId} is worked on the bars, not the dial`);
+    return this.bench.state;
+  }
+
+  /** The bars' state. Throws on a dial set — check `kind` first. */
+  get bars(): SliceState {
+    if (this.bench.kind !== 'bars') throw new Error(`${this.skillId} is worked on the dial, not the bars`);
+    return this.bench.state;
   }
 
   get skillTable(): SkillTable {
@@ -330,36 +382,72 @@ export class ExerciseSession {
 
   /** The problem in front of the player is finished and awaiting `nextProblem`. */
   get problemComplete(): boolean {
-    return this.bench.done;
+    return this.bench.state.done;
   }
 
-  // --- commands ---
+  // --- dial commands ---
 
   deconstruct(): WorkbenchEvent {
-    const step = deconstruct(this.bench);
-    this.bench = step.state;
+    const step = deconstruct(this.state);
+    this.bench = { kind: 'dial', state: step.state };
     return step.event;
   }
 
   reconstruct(): WorkbenchEvent {
-    const step = reconstruct(this.bench);
-    this.bench = step.state;
+    const step = reconstruct(this.state);
+    this.bench = { kind: 'dial', state: step.state };
+    return step.event;
+  }
+
+  // --- bars commands ---
+
+  selectBar(index: number): SliceEvent {
+    const step = select(this.bars, index);
+    this.bench = { kind: 'bars', state: step.state };
+    return step.event;
+  }
+
+  reslice(k: number): SliceEvent {
+    const step = reslice(this.bars, k);
+    this.bench = { kind: 'bars', state: step.state };
+    return step.event;
+  }
+
+  fuse(k: number): SliceEvent {
+    const step = merge(this.bars, k);
+    this.bench = { kind: 'bars', state: step.state };
     return step.event;
   }
 
   /**
-   * Answer the rung in focus. Completing the problem banks it: score, the
-   * scaffold record, and one gentle rating attempt.
+   * Answer whatever is in front of the player. Completing the problem banks it:
+   * score, the record of how much help it took, and one gentle rating attempt.
    */
-  submit(typed: number): WorkbenchEvent {
-    const step = submit(this.bench, typed);
-    this.bench = step.state;
-    if (step.event.kind === 'solved' && step.event.complete) this.bank();
+  submit(typed: number): WorkbenchEvent | SliceEvent {
+    if (this.bench.kind === 'dial') {
+      const step = submit(this.bench.state, typed);
+      this.bench = { kind: 'dial', state: step.state };
+      if (step.event.kind === 'solved' && step.event.complete) this.bank();
+      return step.event;
+    }
+    const step = submitSlices(this.bench.state, typed);
+    this.bench = { kind: 'bars', state: step.state };
+    if (step.event.kind === 'solved') this.bank();
     return step.event;
   }
 
   private bank(): void {
-    const { misses, scaffoldDepth } = this.bench;
+    const misses = this.bench.state.misses;
+    // How much help this problem took, on whichever bench it was worked. The
+    // dial can report degrees of it — how many places had to come off — where
+    // the bars can only say whether they were leaned on at all, so a bars
+    // problem scores 0 or 1 on the same scale.
+    const scaffoldDepth =
+      this.bench.kind === 'dial'
+        ? this.bench.state.scaffoldDepth
+        : this.bench.state.usedScaffold
+          ? 1
+          : 0;
     const ex = this.cfg.exercise;
     const points = ex.solveScore + (misses === 0 ? ex.cleanBonus : 0);
     this.score += points;
@@ -387,9 +475,9 @@ export class ExerciseSession {
 
   /** Move to the next problem in the set. */
   nextProblem(): Problem {
-    if (!this.bench.done) throw new Error('Current problem is not finished');
+    if (!this.bench.state.done) throw new Error('Current problem is not finished');
     this.current = this.rollProblem();
-    this.bench = createWorkbench(exerciseFromProblem(this.current)!);
+    this.bench = this.openBench(this.current);
     return this.current;
   }
 

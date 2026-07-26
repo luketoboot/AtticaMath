@@ -11,7 +11,7 @@ import {
   slotWidth,
   slotsFor,
 } from '../../core/exercise/layers';
-import { EXERCISE_SKILLS, ExerciseSession, exerciseFromProblem } from '../../core/exercise/session';
+import { benchKindFor, ExerciseSession, exerciseFromProblem } from '../../core/exercise/session';
 import { newMilestones } from '../../core/skills/milestones';
 import type { SkillId } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
@@ -19,9 +19,11 @@ import { impact, shake, shockwave } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
-import { MenuNav } from '../../ui/MenuNav';
+import { CUT_FACTORS, sliceHint } from '../../core/exercise/slices';
+import { FractionBars } from '../../ui/FractionBars';
+import { MenuNav, type MenuItem } from '../../ui/MenuNav';
 import { isTouchDevice, Numpad } from '../../ui/Numpad';
-import { neonButton, neonPanel, paintPanel } from '../../ui/panels';
+import { neonButton, neonChip, neonPanel, paintPanel, type NeonChip } from '../../ui/panels';
 import { InputBuffer } from '../InputBuffer';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
@@ -50,6 +52,7 @@ const MAX_BLOCK = 152;
 const BASE_CELL = 34;
 const BASE_FONT = 34;
 
+
 /**
  * EXERCISE — the focus dial.
  *
@@ -73,6 +76,10 @@ export class ExerciseScene extends Phaser.Scene {
   private numpad!: Numpad;
 
   private rungs: Rung[] = [];
+  /** Present only on a bars set; the dial and the bars never share a screen. */
+  private barsUi?: FractionBars;
+  private barsHint?: Phaser.GameObjects.Text;
+  private barPickers?: NeonChip[];
   private focusPanel!: Phaser.GameObjects.Graphics;
   private promptText!: Phaser.GameObjects.Text;
   private progressText!: Phaser.GameObjects.Text;
@@ -106,7 +113,7 @@ export class ExerciseScene extends Phaser.Scene {
     this.busy = false;
 
     const requested = (data.skillId ?? this.registry.get(EXERCISE_SKILL_KEY)) as SkillId | undefined;
-    const skillId = requested && EXERCISE_SKILLS.includes(requested) ? requested : undefined;
+    const skillId = requested && benchKindFor(requested) ? requested : undefined;
     this.registry.remove(EXERCISE_SKILL_KEY);
     this.session = new ExerciseSession({
       // Seeded from Math.random rather than the clock so the screenshot harness,
@@ -171,28 +178,35 @@ export class ExerciseScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.breakBtn = neonButton(this, width / 2, height * 0.915, 'BREAK IT DOWN', () => this.deconstruct(), {
-      width: 330,
-      height: 54,
-      fontSize: 22,
-      accent: PALETTE.magenta,
-      sub: 'Q  ·  DROP A PLACE',
-    });
-    this.bondsBtn = neonButton(this, 178, height * 0.915, 'BONDS', () => this.toggleBonds(), {
-      width: 230,
-      height: 54,
-      fontSize: 20,
-      accent: PALETTE.purple,
-      sub: 'F  ·  FRIENDS OF 5 & 10',
-    });
     const quit = neonButton(this, width - 130, height * 0.915, 'LEAVE', () => this.leave(), {
       width: 170,
       height: 54,
       fontSize: 18,
     });
-    new MenuNav(this, [[this.bondsBtn, this.breakBtn, quit]]);
 
-    this.bondsPanel = this.add.container(width * 0.845, 300).setVisible(false);
+    if (this.session.kind === 'bars') {
+      this.buildBarsUi(quit);
+    } else {
+      this.breakBtn = neonButton(this, width / 2, height * 0.915, 'BREAK IT DOWN', () => this.deconstruct(), {
+        width: 330,
+        height: 54,
+        fontSize: 22,
+        accent: PALETTE.magenta,
+        sub: 'Q  ·  DROP A PLACE',
+      });
+      this.bondsBtn = neonButton(this, 178, height * 0.915, 'BONDS', () => this.toggleBonds(), {
+        width: 230,
+        height: 54,
+        fontSize: 20,
+        accent: PALETTE.purple,
+        sub: 'F  ·  FRIENDS OF 5 & 10',
+      });
+      new MenuNav(this, [[this.bondsBtn, this.breakBtn, quit]]);
+      this.input.keyboard?.on('keydown-Q', () => this.deconstruct());
+      this.input.keyboard?.on('keydown-F', () => this.toggleBonds());
+    }
+
+    this.bondsPanel = this.add.container(width * 0.17, 300).setVisible(false);
 
     this.buffer = new InputBuffer(this, (value) => this.onBufferChange(value));
     this.numpad = new Numpad(
@@ -202,11 +216,127 @@ export class ExerciseScene extends Phaser.Scene {
     );
     this.numpad.applySessionDefault(isTouchDevice());
 
-    this.input.keyboard?.on('keydown-Q', () => this.deconstruct());
-    this.input.keyboard?.on('keydown-F', () => this.toggleBonds());
     this.input.keyboard?.once('keydown-ESC', () => this.leave());
 
     this.dealProblem();
+  }
+
+  // --- the bars ---
+
+  /**
+   * A bars set: the fraction skills, where the problem is not that the numbers
+   * are big but that the slices are different sizes. Cutting is the verb, and
+   * it is offered as chips rather than keys because the digits are already
+   * spoken for by the answer buffer — and because recutting a bar is a
+   * deliberate act, not something to be done at speed.
+   */
+  private buildBarsUi(quit: ReturnType<typeof neonButton>): void {
+    const { width } = this.scale;
+    const count = this.session.bars.bars.length;
+    this.barsUi = new FractionBars(this, width / 2, count > 1 ? 250 : 300, 780, count, 34);
+
+    this.barsHint = this.add
+      .text(width / 2, 430, '', {
+        fontFamily: FONT,
+        fontSize: '17px',
+        color: CSS.white,
+        align: 'center',
+        wordWrap: { width: 760 },
+      })
+      .setOrigin(0.5);
+
+    const rows: MenuItem[][] = [];
+
+    // Which bar the cutting acts on. One bar needs no chooser.
+    if (count > 1) {
+      const pickers = Array.from({ length: count }, (_, i) =>
+        neonChip(this, width / 2 + (i - (count - 1) / 2) * 150, 494, `BAR ${i + 1}`, () => this.pickBar(i), {
+          size: 46,
+          width: 136,
+          fontSize: 17,
+          accent: PALETTE.cyan,
+        }),
+      );
+      this.barPickers = pickers;
+      rows.push(pickers);
+    }
+
+    const cutRow = CUT_FACTORS.map((k, i) =>
+      neonChip(this, width / 2 - 330 + i * 92, 566, `×${k}`, () => this.cut(k), {
+        size: 50,
+        width: 80,
+        fontSize: 22,
+        accent: PALETTE.magenta,
+      }),
+    );
+    const fuseRow = CUT_FACTORS.map((k, i) =>
+      neonChip(this, width / 2 + 44 + i * 92, 566, `÷${k}`, () => this.fuse(k), {
+        size: 50,
+        width: 80,
+        fontSize: 22,
+        accent: PALETTE.yellow,
+      }),
+    );
+    this.add
+      .text(width / 2 - 330 + (CUT_FACTORS.length - 1) * 46, 526, 'CUT EACH SLICE INTO', {
+        fontFamily: FONT,
+        fontSize: '12px',
+        color: CSS.magentaHot,
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(width / 2 + 44 + (CUT_FACTORS.length - 1) * 46, 526, 'FUSE SLICES BY', {
+        fontFamily: FONT,
+        fontSize: '12px',
+        color: CSS.yellow,
+      })
+      .setOrigin(0.5);
+
+    rows.push([...cutRow, ...fuseRow], [quit]);
+    const nav = new MenuNav(this, rows);
+    // Park the cursor on the bar that is already selected, so the outline and
+    // the highlight are never pointing at different bars.
+    if (count > 1) nav.setColumn(0, this.session.bars.selected);
+  }
+
+  private pickBar(index: number): void {
+    if (this.busy) return;
+    if (this.session.selectBar(index).kind === 'refused') return;
+    getAudio(this)?.play('ui');
+    this.refresh();
+  }
+
+  private cut(k: number): void {
+    if (this.busy) return;
+    const event = this.session.reslice(k);
+    if (event.kind === 'refused') {
+      getAudio(this)?.play('error');
+      shake(this, 90, 0.005);
+      return;
+    }
+    getAudio(this)?.play('phase');
+    this.buffer.clear();
+    this.refresh();
+  }
+
+  private fuse(k: number): void {
+    if (this.busy) return;
+    const event = this.session.fuse(k);
+    if (event.kind === 'refused') {
+      getAudio(this)?.play('error');
+      shake(this, 90, 0.005);
+      return;
+    }
+    getAudio(this)?.play('reload');
+    this.buffer.clear();
+    this.refresh();
+  }
+
+  private refreshBars(): void {
+    const bars = this.session.bars;
+    this.barsUi?.update(bars.bars, bars.selected);
+    this.barsHint?.setText(bars.done ? 'SOLVED' : sliceHint(bars));
+    this.barPickers?.forEach((chip, i) => chip.setChosen(i === bars.selected));
   }
 
   // --- layout ---
@@ -349,6 +479,7 @@ export class ExerciseScene extends Phaser.Scene {
    * silent than inventing a reading.
    */
   private currentBond(): ReturnType<typeof bondHint> {
+    if (this.session.kind !== 'dial') return undefined;
     const problem = exerciseFromProblem(this.session.problem)!;
     if (problem.op !== 'add' && problem.op !== 'sub') return undefined;
     return bondHint(problem.a, problem.b, problem.op, this.session.state.depth);
@@ -370,21 +501,25 @@ export class ExerciseScene extends Phaser.Scene {
    * number as places come back into focus.
    */
   private drawBonds(): void {
+    if (!this.bondsBtn) return;
     this.bondsPanel.removeAll(true);
-    const state = this.session.state;
     const hint = this.currentBond();
+    const solved = this.session.problemComplete;
     // Dimmed when there is no bond to show, so the button reads as unavailable
     // before it is pressed rather than only buzzing after.
     this.bondsBtn.setAccent(!hint ? PALETTE.deepPurple : this.bondsOpen ? PALETTE.cyan : PALETTE.purple);
-    this.bondsPanel.setVisible(this.bondsOpen && hint !== undefined && !state.done);
+    this.bondsPanel.setVisible(this.bondsOpen && hint !== undefined && !solved);
     if (!this.bondsOpen || !hint) return;
 
     // Sit beside the rung being explained, not at a fixed height — the help has
     // to be where the eye already is. Clamped so a low rung cannot push the
     // reading off the bottom of the screen.
-    const live = this.rungs.find((r) => r.depth === state.depth);
+    const live = this.rungs.find((r) => r.depth === this.session.state.depth);
     const y = Phaser.Math.Clamp(live?.y ?? 300, 220, 430);
-    this.bondsPanel.setPosition(this.scale.width * 0.845, y);
+    // Left flank. The right belongs to the on-screen numpad, which opens over
+    // exactly this band — two panels fighting for the same corner is how a
+    // touch player loses the frame they just asked for.
+    this.bondsPanel.setPosition(this.scale.width * 0.17, y);
 
     const pip = 30;
     const gap = 4;
@@ -474,8 +609,15 @@ export class ExerciseScene extends Phaser.Scene {
 
   private dealProblem(): void {
     this.buffer.clear();
-    this.buildRungs();
+    if (this.session.kind === 'dial') this.buildRungs();
     this.refresh();
+  }
+
+  /** What the buffer is racing towards, whichever bench is in play. */
+  private expectedAnswer(): string {
+    return this.session.kind === 'dial'
+      ? String(currentLayer(this.session.state).value)
+      : this.session.problem.answer;
   }
 
   private deconstruct(): void {
@@ -543,7 +685,7 @@ export class ExerciseScene extends Phaser.Scene {
    */
   private onBufferChange(value: string): void {
     if (this.busy || value === '') return this.refresh();
-    const answer = String(currentLayer(this.session.state).value);
+    const answer = this.expectedAnswer();
     if (value === answer) {
       this.solve();
       return;
@@ -561,8 +703,8 @@ export class ExerciseScene extends Phaser.Scene {
   }
 
   private solve(): void {
-    const depth = this.session.state.depth;
-    const event = this.session.submit(currentLayer(this.session.state).value);
+    const depth = this.session.kind === 'dial' ? this.session.state.depth : 0;
+    const event = this.session.submit(Number(this.expectedAnswer()));
     if (event.kind !== 'solved') return;
     this.buffer.clear();
 
@@ -577,7 +719,8 @@ export class ExerciseScene extends Phaser.Scene {
       });
     }
 
-    if (event.complete) {
+    // A bars problem has no rungs to climb: solving it is finishing it.
+    if (!('complete' in event) || event.complete) {
       getAudio(this)?.play('explosion');
       impact(this, {
         shakeMs: CONFIG.juice.killShakeMs,
@@ -611,6 +754,30 @@ export class ExerciseScene extends Phaser.Scene {
   // --- painting ---
 
   private refresh(): void {
+    this.paintCommon();
+    if (this.session.kind === 'bars') {
+      // The dial's frame has no rung to sit on here.
+      this.focusPanel.setVisible(false);
+      this.refreshBars();
+      return;
+    }
+    this.refreshLadder();
+  }
+
+  /** Header readouts and the prompt line, which both benches share. */
+  private paintCommon(): void {
+    const done = this.session.problemComplete;
+    // While a finished problem is still on screen the counter names it, not the
+    // one waiting behind it.
+    const nth = done ? this.session.solvedCount : this.session.solvedCount + 1;
+    this.progressText.setText(
+      `PROBLEM ${Math.min(nth, CONFIG.exercise.problemsPerSet)} / ${CONFIG.exercise.problemsPerSet}`,
+    );
+    this.scoreText.setText(`${this.session.score}`);
+    this.promptText.setText(this.hint());
+  }
+
+  private refreshLadder(): void {
     const state = this.session.state;
     const problem = exerciseFromProblem(this.session.problem)!;
     const buffer = this.buffer.value;
@@ -644,21 +811,15 @@ export class ExerciseScene extends Phaser.Scene {
       });
     }
 
-    // While a finished problem is still on screen the counter names it, not the
-    // one waiting behind it.
-    const nth = state.done ? this.session.solvedCount : this.session.solvedCount + 1;
-    this.progressText.setText(
-      `PROBLEM ${Math.min(nth, CONFIG.exercise.problemsPerSet)} / ${CONFIG.exercise.problemsPerSet}`,
-    );
-    this.scoreText.setText(`${this.session.score}`);
-    this.promptText.setText(this.hint());
-
     const canBreak = !state.locked && state.depth < this.deepestReachable();
     this.breakBtn.setAccent(canBreak ? PALETTE.magenta : PALETTE.purple);
     this.drawBonds();
   }
 
   private hint(): string {
+    if (this.session.kind === 'bars') {
+      return this.session.bars.done ? 'SOLVED' : 'CUT THE BARS UNTIL THE SLICES AGREE, THEN TYPE IT';
+    }
     const state = this.session.state;
     if (state.done) return 'SOLVED';
     if (state.layerSolved) return 'BUILDING THE NEXT PLACE BACK…';
@@ -673,6 +834,7 @@ export class ExerciseScene extends Phaser.Scene {
 
   /** Paint the live rung's answer red for a beat, then let refresh restore it. */
   private flashMiss(): void {
+    if (this.session.kind !== 'dial') return;
     const rung = this.rungs.find((r) => r.depth === this.session.state.depth);
     if (!rung) return;
     for (const slot of rung.resultSlots) slot.setColor(CSS.red);
@@ -718,8 +880,15 @@ export class ExerciseScene extends Phaser.Scene {
       credits,
       mode: 'Exercise',
       title: summary.graduated ? 'NO SCAFFOLD NEEDED' : 'SET COMPLETE',
-      killsLabel: 'SOLVED WHOLE',
-      streakLabel: 'BEST STREAK',
+      // Finishing a set is not a base falling, so it is not announced in red.
+      titleColor: summary.graduated ? CSS.yellow : CSS.cyan,
+      wavesLabel: 'PROBLEMS SOLVED',
+      killsLabel: this.session.kind === 'dial' ? 'SOLVED WHOLE' : 'SOLVED UNAIDED',
+      hideStreak: true,
+      leaderboard: false,
+      operatorLine: summary.graduated
+        ? `OPERATOR // ${this.session.skillLabel.toUpperCase()} — you stopped needing the scaffold. Take it up to speed.`
+        : 'OPERATOR // Logged. The method is the point, not the clock.',
       milestones: unlocked.map((m) => m.label),
     });
   }

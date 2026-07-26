@@ -6,7 +6,7 @@ import {
   weakestAttempted,
 } from '../../core/coach/techniques';
 import { CONFIG } from '../../core/config';
-import { EXERCISE_SKILLS } from '../../core/exercise/session';
+import { benchKindFor } from '../../core/exercise/session';
 import { earnedMilestones } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
@@ -203,7 +203,7 @@ export class PlaybookScene extends Phaser.Scene {
     this.shown = def;
     // Only the multi-digit add/sub moves have places to drop; the rest say so
     // rather than offering a button that buzzes.
-    const workable = EXERCISE_SKILLS.includes(def.id);
+    const workable = benchKindFor(def.id) !== undefined;
     this.workBtn?.setAccent(workable ? PALETTE.cyan : PALETTE.purple);
     this.workHint?.setText(
       workable ? 'EXERCISE — PERFORM IT, PLACE BY PLACE, NO CLOCK' : 'NO DIAL FOR THIS MOVE YET',
@@ -296,7 +296,7 @@ export class PlaybookScene extends Phaser.Scene {
 
   /** Open Exercise on this skill, if the focus dial can take it apart. */
   private work(def: SkillDef): void {
-    if (!EXERCISE_SKILLS.includes(def.id)) {
+    if (!benchKindFor(def.id) !== undefined) {
       getAudio(this)?.play('error');
       this.cameras.main.shake(90, 0.004);
       return;

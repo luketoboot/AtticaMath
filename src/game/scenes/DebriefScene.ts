@@ -38,6 +38,23 @@ interface DebriefData {
   streakLabel?: string;
   /** Rating movement over the run, for the brain-delta column. */
   deltas?: SkillDelta[];
+  /**
+   * Headline colour. Red is right for a base that fell; a mode whose ending is
+   * an achievement should not announce it in the colour of failure.
+   */
+  titleColor?: string;
+  /** Row labels a mode counts differently, and rows it does not count at all. */
+  wavesLabel?: string;
+  /** Modes with no streak to speak of drop the row rather than printing x0. */
+  hideStreak?: boolean;
+  /** Closing line, for modes the Operator would not talk to about rocks. */
+  operatorLine?: string;
+  /**
+   * Whether this run may reach the board. Off for the teaching modes: a run you
+   * can take at your own pace is not comparable with one against a clock, and
+   * mixing them would make the board meaningless.
+   */
+  leaderboard?: boolean;
 }
 
 export class DebriefScene extends Phaser.Scene {
@@ -57,16 +74,16 @@ export class DebriefScene extends Phaser.Scene {
         fontFamily: FONT,
         fontSize: '56px',
         fontStyle: 'bold',
-        color: CSS.red,
+        color: data.titleColor ?? CSS.red,
       })
       .setOrigin(0.5);
 
     const s = data.stats;
     const rows = [
       ['SCORE', String(s.score)],
-      ['WAVES CLEARED', String(s.wavesCleared)],
+      [data.wavesLabel ?? 'WAVES CLEARED', String(s.wavesCleared)],
       [data.killsLabel ?? 'KILLS', String(s.kills)],
-      [data.streakLabel ?? 'BEST STREAK', `x${s.bestStreak}`],
+      ...(data.hideStreak ? [] : [[data.streakLabel ?? 'BEST STREAK', `x${s.bestStreak}`]]),
       ['CREDITS EARNED', `+${data.credits}`],
     ];
     // Stats keep the left half; the rating movement takes the right, so a run
@@ -105,7 +122,8 @@ export class DebriefScene extends Phaser.Scene {
     const quote =
       unlocked.length > 0
         ? 'OPERATOR // New hardware in the brain. Logged. Go break it in.'
-        : 'OPERATOR // Debrief logged. The rocks don’t care. Neither do I. Go again.';
+        : (data.operatorLine ??
+          'OPERATOR // Debrief logged. The rocks don’t care. Neither do I. Go again.');
     this.add
       .text(width / 2, height * 0.66, quote, {
         fontFamily: FONT,
@@ -165,6 +183,14 @@ export class DebriefScene extends Phaser.Scene {
     const store = this.registry.get(LEADERBOARD_REGISTRY_KEY) as LeaderboardStore | undefined;
     const mode = modeFromSceneKey(data.mode);
     const score = data.stats.score;
+
+    // Teaching modes never reach the board. A set worked at your own pace is
+    // not comparable with a run against a clock, and letting the two share a
+    // table would make the table say nothing.
+    if (data.leaderboard === false) {
+      this.showButtons(data, mode);
+      return;
+    }
 
     if (!store) {
       this.showButtons(data, mode);

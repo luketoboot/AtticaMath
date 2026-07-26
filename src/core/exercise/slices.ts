@@ -100,12 +100,22 @@ export function createSliceBench(problem: SliceProblem): SliceState {
   return {
     problem,
     bars: problem.bars.map((b) => ({ ...b })),
-    selected: 0,
+    // Open on a bar that actually needs cutting. Starting on one that is
+    // already the right size makes the first thing the player sees a bar with
+    // nothing to do, and the hint an apology.
+    selected: firstBarNeedingWork(problem),
     moves: 0,
     misses: 0,
     usedScaffold: false,
     done: false,
   };
+}
+
+/** The first bar not yet the right size, or the first bar if they all are. */
+function firstBarNeedingWork(problem: SliceProblem): number {
+  if (problem.goal === 'reduce' || problem.goal === 'scale') return 0;
+  const i = problem.bars.findIndex((b) => b.den !== problem.target);
+  return i === -1 ? 0 : i;
 }
 
 /** How much of the bar is filled, as a plain number. Invariant under both verbs. */
@@ -149,25 +159,28 @@ export function readingOf(state: SliceState): number | undefined {
  */
 export function solveByCutting(problem: SliceProblem): SliceState | undefined {
   let state = createSliceBench(problem);
+  // Only ever moves the player could make. A route that needs a factor the
+  // chips do not offer is not a route, however sound the arithmetic.
+  const LIMIT = 8;
   if (problem.goal === 'reduce') {
-    const bar = state.bars[0]!;
-    if (problem.target <= 0 || bar.num % problem.target !== 0) return undefined;
-    const k = bar.num / problem.target;
-    if (k >= 2) {
+    for (let i = 0; i < LIMIT && !barsReady(state); i++) {
+      const k = fuseStep(state.bars[0]!, problem.target);
+      if (!k) return undefined;
       const step = merge(state, k);
       if (step.event.kind === 'refused') return undefined;
       state = step.state;
     }
   } else {
     for (let i = 0; i < state.bars.length; i++) {
-      const bar = state.bars[i]!;
-      if (bar.den === problem.target) continue;
-      const k = factorTo(bar, problem.target);
-      if (!k) return undefined;
       state = select(state, i).state;
-      const step = reslice(state, k);
-      if (step.event.kind === 'refused') return undefined;
-      state = step.state;
+      for (let n = 0; n < LIMIT && state.bars[i]!.den !== problem.target; n++) {
+        const k = cutStep(state.bars[i]!, problem.target);
+        if (!k) return undefined;
+        const step = reslice(state, k);
+        if (step.event.kind === 'refused') return undefined;
+        state = step.state;
+      }
+      if (state.bars[i]!.den !== problem.target) return undefined;
     }
   }
   return barsReady(state) ? state : undefined;
@@ -245,6 +258,56 @@ export function factorTo(bar: Bar, target: number): number | undefined {
   return k >= 2 ? k : undefined;
 }
 
+/**
+ * Factors the player is actually offered.
+ *
+ * A game rule, not a layout detail, which is why it lives here: every hint and
+ * every reachability check has to be written in terms of moves that exist. Two
+ * through five covers every denominator the generator deals, in one step or
+ * two — 4/5 reaches hundredths as ×5 then ×4.
+ */
+export const CUT_FACTORS: readonly number[] = [2, 3, 4, 5];
+
+/**
+ * The largest offered factor dividing `needed`, or undefined if none does.
+ * `alsoDivides`, when given, is a second number the factor must divide — the
+ * slice count, for a fuse that must not move the boundary.
+ */
+function largestUsable(
+  needed: number,
+  allowed: readonly number[],
+  alsoDivides?: number,
+): number | undefined {
+  if (!Number.isInteger(needed) || needed < 2) return undefined;
+  const usable = allowed.filter(
+    (k) => needed % k === 0 && (alsoDivides === undefined || alsoDivides % k === 0),
+  );
+  return usable.length > 0 ? Math.max(...usable) : undefined;
+}
+
+/**
+ * One cut that takes this bar closer to `target` slices, using only factors the
+ * player has. Undefined when the bar cannot get there at all, or is there.
+ *
+ * Naming the whole factor would be useless advice whenever it exceeds what the
+ * chips offer: "cut each slice into 20" is not a move, it is two moves and a
+ * puzzle about which.
+ */
+export function cutStep(bar: Bar, target: number, allowed: readonly number[] = CUT_FACTORS): number | undefined {
+  if (target % bar.den !== 0) return undefined;
+  return largestUsable(target / bar.den, allowed);
+}
+
+/** One fuse that takes this bar's numerator closer to `targetNum`. */
+export function fuseStep(
+  bar: Bar,
+  targetNum: number,
+  allowed: readonly number[] = CUT_FACTORS,
+): number | undefined {
+  if (targetNum <= 0 || bar.num % targetNum !== 0) return undefined;
+  return largestUsable(bar.num / targetNum, allowed, bar.den);
+}
+
 /** One line naming the move the bars are waiting for. */
 export function sliceHint(state: SliceState): string {
   const { goal, target } = state.problem;
@@ -256,9 +319,14 @@ export function sliceHint(state: SliceState): string {
   }
   const bar = state.bars[state.selected]!;
   if (goal === 'reduce') {
+    const f = fuseStep(bar, target);
+    if (f) return `Fuse every ${f} slices of ${bar.num}/${bar.den} into one.`;
     return `${bar.num}/${bar.den} still. Fuse slices until the top reads ${target}.`;
   }
-  const k = factorTo(bar, target);
+  // A bar can be the right size already while its partner is not; saying it
+  // "will not reach" the size it is currently sitting at reads as nonsense.
+  if (bar.den === target) return `${bar.num}/${bar.den} is already in ${target}ths. The other bar is not.`;
+  const k = cutStep(bar, target);
   if (k) return `Cut each slice of ${bar.num}/${bar.den} into ${k}.`;
   return `${bar.num}/${bar.den} will not reach ${target} slices by cutting. Try the other bar.`;
 }

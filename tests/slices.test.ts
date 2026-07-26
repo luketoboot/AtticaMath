@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   barsReady,
   createSliceBench,
+  cutStep,
   factorTo,
+  fuseStep,
+  solveByCutting,
   MAX_SLICES,
   merge,
   readingOf,
@@ -126,6 +129,29 @@ describe('making unlike slices match', () => {
     });
     expect(sliceHint(s)).toBe('1/5 will not reach 6 slices by cutting. Try the other bar.');
   });
+
+  it('opens on a bar that has work to do', () => {
+    // 1/4 is already in quarters; the thirds are what need cutting.
+    const s = createSliceBench({
+      goal: 'match',
+      bars: [{ num: 1, den: 4 }, { num: 1, den: 2 }],
+      target: 4,
+      answer: 3,
+    });
+    expect(s.selected).toBe(1);
+    expect(sliceHint(s)).toBe('Cut each slice of 1/2 into 2.');
+  });
+
+  it('does not tell a bar it cannot reach the size it already is', () => {
+    let s = createSliceBench({
+      goal: 'match',
+      bars: [{ num: 1, den: 4 }, { num: 1, den: 2 }],
+      target: 4,
+      answer: 3,
+    });
+    s = select(s, 0).state;
+    expect(sliceHint(s)).toBe('1/4 is already in 4ths. The other bar is not.');
+  });
 });
 
 describe('scaling to a hundred', () => {
@@ -139,12 +165,32 @@ describe('scaling to a hundred', () => {
     expect(readingOf(s)).toBe(15);
     expect(readingOf(s)).toBe(s.problem.answer);
   });
+
+  it('never advises a cut the player has no chip for', () => {
+    // 4/5 needs twenty times as many slices, and there is no ×20 to press.
+    const problem: SliceProblem = { goal: 'scale', bars: [{ num: 4, den: 5 }], target: 100, answer: 80 };
+    expect(factorTo(problem.bars[0]!, 100)).toBe(20);
+    expect(cutStep(problem.bars[0]!, 100)).toBe(5);
+    expect(sliceHint(createSliceBench(problem))).toBe('Cut each slice of 4/5 into 5.');
+    // And the two-step route still lands exactly on a hundred.
+    const solved = solveByCutting(problem)!;
+    expect(solved.bars[0]).toEqual({ num: 80, den: 100 });
+    expect(readingOf(solved)).toBe(80);
+  });
+
+  it('fuses in steps it can actually press, too', () => {
+    // 18/24 down to 3/4 needs a factor of six, which is not on offer: 3 then 2.
+    const problem: SliceProblem = { goal: 'reduce', bars: [{ num: 18, den: 24 }], target: 3, answer: 4 };
+    expect(fuseStep(problem.bars[0]!, 3)).toBe(3);
+    expect(sliceHint(createSliceBench(problem))).toBe('Fuse every 3 slices of 18/24 into one.');
+    expect(solveByCutting(problem)!.bars[0]).toEqual({ num: 3, den: 4 });
+  });
 });
 
 describe('fusing back down', () => {
   it('reduces 18/24 to 3/4', () => {
     let s = createSliceBench(reduce());
-    expect(sliceHint(s)).toBe('18/24 still. Fuse slices until the top reads 3.');
+    expect(sliceHint(s)).toBe('Fuse every 3 slices of 18/24 into one.');
     s = merge(s, 6).state;
     expect(barsReady(s)).toBe(true);
     expect(readingOf(s)).toBe(4);
