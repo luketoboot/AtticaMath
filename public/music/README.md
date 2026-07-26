@@ -28,10 +28,11 @@ empty.
 
 ## Rotations
 
-`playMusic` also takes an array — `playMusic(['drift', 'pulse'])` — and the
+`playMusic` also takes an array — `playMusic(['pulse', 'drift'])` — and the
 tracks hand off to each other at the end of each one, crossfading over the same
 `CROSSFADE_MS`, then wrapping. Collapse uses this: it has no wave structure to
-end a run, so sessions run long enough that one loop wears through.
+end a run, so sessions run long enough that one loop wears through. Pulse
+leads, so a run opens on the beat.
 
 A rotation only loops the file when it is a rotation of one, so **tracks meant
 for rotation want a real ending, not a seamless loop point**. Re-requesting the

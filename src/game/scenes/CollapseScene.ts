@@ -224,8 +224,8 @@ export class CollapseScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     // No waves to end a run here, so a single loop wears out long before the
-    // player does. Drift sets the weightless tone, pulse picks the pace back up.
-    getAudio(this)?.playMusic(['drift', 'pulse']);
+    // player does. Pulse opens with the pressure on; drift is the breather.
+    getAudio(this)?.playMusic(['pulse', 'drift']);
     applyCrt(this);
     clearHitStop(this);
     // A loop outlives the scene that started it unless it is cut explicitly —
