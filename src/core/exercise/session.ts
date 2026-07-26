@@ -28,6 +28,7 @@ import {
   type WorkbenchEvent,
   type WorkbenchState,
 } from './layers';
+import { readingOf, solveByCutting, type SliceProblem } from './slices';
 
 /**
  * Skills the dial can open: the ones whose problems are a plain `a op b` with
@@ -117,6 +118,101 @@ export function exerciseFromProblem(problem: Problem): ExerciseProblem | undefin
 export function isExercisable(problem: Problem): boolean {
   const parsed = exerciseFromProblem(problem);
   return parsed !== undefined && ladderFor(parsed).length > 1;
+}
+
+// --- fractions ---
+
+/**
+ * Fraction skills the bars can hold. All five are one move seen from different
+ * sides: make the slices the size the question wants, then read the picture.
+ *
+ * `frac.of`, `pct.of` and `pct.what` are deliberately absent. Those cut a
+ * *quantity* into groups rather than a bar into slices — "3/4 of 20" is twenty
+ * things shared four ways, not one bar recut — and drawing them as slice
+ * matching would teach the wrong picture.
+ */
+export const SLICE_SKILLS: readonly SkillId[] = [
+  'frac.add.same',
+  'frac.add.unlike',
+  'frac.lcd',
+  'frac.percent',
+  'frac.reduce',
+] as const;
+
+/** `a/d + b/e = ?/f` — adding fractions, like or unlike. */
+const SUM_PATTERN = /^(\d+)\/(\d+) \+ (\d+)\/(\d+) = \?\/(\d+)$/;
+/** `1/d + 1/e → ?ths` — naming the common denominator itself. */
+const LCD_PATTERN = /^1\/(\d+) \+ 1\/(\d+) → \?ths$/;
+/** `n/d = ?%` */
+const PERCENT_PATTERN = /^(\d+)\/(\d+) = \?%$/;
+/** `n/d = m/?` — the reduced numerator is shown, the denominator is asked. */
+const REDUCE_PATTERN = /^(\d+)\/(\d+) = (\d+)\/\?$/;
+
+/**
+ * Read a generated problem as bars, or undefined if it is not one of the five
+ * the bench can hold.
+ */
+export function sliceFromProblem(problem: Problem): SliceProblem | undefined {
+  const answer = Number(problem.answer);
+  if (!Number.isInteger(answer)) return undefined;
+
+  const sum = SUM_PATTERN.exec(problem.prompt);
+  if (sum) {
+    const [, n1, d1, n2, d2, target] = sum.map(Number);
+    const bars = [
+      { num: n1!, den: d1! },
+      { num: n2!, den: d2! },
+    ];
+    // Every bar has to be able to reach the common denominator by cutting.
+    if (bars.some((b) => target! % b.den !== 0)) return undefined;
+    return { goal: 'match', bars, target: target!, answer };
+  }
+
+  const lcd = LCD_PATTERN.exec(problem.prompt);
+  if (lcd) {
+    const [, d1, d2] = lcd.map(Number);
+    const bars = [
+      { num: 1, den: d1! },
+      { num: 1, den: d2! },
+    ];
+    // The answer *is* the common denominator here, so it doubles as the target.
+    if (bars.some((b) => answer % b.den !== 0)) return undefined;
+    return { goal: 'common', bars, target: answer, answer };
+  }
+
+  const pct = PERCENT_PATTERN.exec(problem.prompt);
+  if (pct) {
+    const [, num, den] = pct.map(Number);
+    if (100 % den! !== 0) return undefined;
+    return { goal: 'scale', bars: [{ num: num!, den: den! }], target: 100, answer };
+  }
+
+  const red = REDUCE_PATTERN.exec(problem.prompt);
+  if (red) {
+    const [, num, den, target] = red.map(Number);
+    if (target! === 0 || num! % target! !== 0) return undefined;
+    const k = num! / target!;
+    if (k < 2 || den! % k !== 0) return undefined;
+    return { goal: 'reduce', bars: [{ num: num!, den: den! }], target: target!, answer };
+  }
+
+  return undefined;
+}
+
+/**
+ * Whether the bars have anything to do with this problem. Same-denominator
+ * sums qualify even though nothing needs recutting: seeing that both bars are
+ * already sliced the same way is the lesson there.
+ */
+export function isSliceable(problem: Problem): boolean {
+  const parsed = sliceFromProblem(problem);
+  if (!parsed) return false;
+  // Not merely "does it parse": cut the bars the short way and check that what
+  // they then read equals the answer the game will mark. A picture that ends up
+  // showing a different number than the one being asked for is teaching a lie,
+  // and it is the sort of thing that goes wrong quietly.
+  const solved = solveByCutting(parsed);
+  return solved !== undefined && readingOf(solved) === parsed.answer;
 }
 
 /**
