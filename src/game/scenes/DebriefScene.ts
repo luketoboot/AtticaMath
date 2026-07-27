@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
+import { CONFIG } from '../../core/config';
+import { displayDate } from '../../core/daily/daily';
 import type { RunStats } from '../../core/economy/economy';
 import {
   DEFAULT_INITIALS,
@@ -9,6 +11,10 @@ import {
   qualifies,
   type LeaderboardMode,
 } from '../../core/leaderboard/leaderboard';
+import {
+  DAILY_REGISTRY_KEY,
+  type DailyLeaderboardStore,
+} from '../../core/leaderboard/dailyStore';
 import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { topMovers, type SkillDelta } from '../../core/skills/report';
 import { applyCrt } from '../../fx/applyCrt';
@@ -55,6 +61,13 @@ interface DebriefData {
    * mixing them would make the board meaningless.
    */
   leaderboard?: boolean;
+  /**
+   * The UTC date key when this run was today's daily challenge. Present means
+   * the score belongs to the daily board and to no other: a daily roster is
+   * composed without reference to the player's ratings, so its scores are not
+   * comparable with the adaptive runs on the all-time meteor board either.
+   */
+  daily?: string;
 }
 
 export class DebriefScene extends Phaser.Scene {
@@ -184,6 +197,11 @@ export class DebriefScene extends Phaser.Scene {
     const mode = modeFromSceneKey(data.mode);
     const score = data.stats.score;
 
+    if (data.daily !== undefined) {
+      await this.offerDaily(data, data.daily, store);
+      return;
+    }
+
     // Teaching modes never reach the board. A set worked at your own pace is
     // not comparable with a run against a clock, and letting the two share a
     // table would make the table say nothing.
@@ -249,6 +267,110 @@ export class DebriefScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown', route);
   }
 
+  /**
+   * The daily's own submission path.
+   *
+   * Unlike the mode boards there is no qualifying cut: the board is global and
+   * a place on it is a place however far down, so any score above zero gets the
+   * initials prompt. Being 4,000th out of 12,000 is a real result and the mode
+   * should be willing to print it.
+   */
+  private async offerDaily(
+    data: DebriefData,
+    dateKey: string,
+    modeStore: LeaderboardStore | undefined,
+  ): Promise<void> {
+    const { width, height } = this.scale;
+    const store = this.registry.get(DAILY_REGISTRY_KEY) as DailyLeaderboardStore | undefined;
+    if (!store || data.stats.score <= 0) {
+      this.showButtons(data, 'meteor');
+      return;
+    }
+
+    const initial = (await modeStore?.lastInitials()) ?? DEFAULT_INITIALS;
+    if (!this.scene.isActive()) return;
+
+    const header = this.add
+      .text(width / 2, height * 0.7, `DAILY // ${displayDate(dateKey)}`, {
+        fontFamily: FONT,
+        fontSize: '26px',
+        fontStyle: 'bold',
+        color: CSS.yellow,
+      })
+      .setOrigin(0.5);
+    const hint = this.add
+      .text(width / 2, height * 0.93, 'TYPE YOUR INITIALS  ·  ARROWS ADJUST  ·  ENTER CONFIRMS', {
+        fontFamily: FONT,
+        fontSize: '14px',
+        color: CSS.cyanDim,
+      })
+      .setOrigin(0.5);
+    getAudio(this)?.play('tip');
+
+    const entry = new InitialsEntry(this, width / 2, height * 0.82, initial, (initials) => {
+      this.input.keyboard?.off('keydown', route);
+      entry.destroy();
+      header.destroy();
+      hint.destroy();
+      void this.submitDaily(store, modeStore, dateKey, initials, data);
+    });
+    const route = (event: KeyboardEvent): void => {
+      entry.handleKey(event);
+    };
+    this.input.keyboard?.on('keydown', route);
+  }
+
+  private async submitDaily(
+    store: DailyLeaderboardStore,
+    modeStore: LeaderboardStore | undefined,
+    dateKey: string,
+    initials: string,
+    data: DebriefData,
+  ): Promise<void> {
+    const { width, height } = this.scale;
+    const saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager | undefined;
+    const badge = saves?.save.equipped.badge;
+    const at = Date.now();
+
+    await modeStore?.rememberInitials(initials);
+    const result = await store.submit(
+      dateKey,
+      {
+        initials,
+        score: data.stats.score,
+        wave: data.stats.wavesCleared,
+        at,
+        ...(badge !== undefined ? { badge } : {}),
+      },
+      CONFIG.daily.boardSize,
+    );
+
+    // Only the upload flag moves here. The attempt itself was spent when the
+    // run ended, so a failed submission leaves the run played and the score
+    // pending, to be retried from the daily lobby.
+    if (result.submitted && saves?.save.daily?.date === dateKey) {
+      saves.save.daily = { ...saves.save.daily, submitted: true };
+      saves.persist();
+    }
+    if (!this.scene.isActive()) return;
+
+    const placing =
+      result.rank >= 0 && result.total > 0
+        ? `${initials} — ${ordinal(result.rank + 1)} OF ${result.total}`
+        : result.submitted
+          ? `${initials} — ON THE BOARD`
+          : `${initials} — SAVED, BOARD UNREACHABLE`;
+    this.add
+      .text(width / 2, height * 0.7, placing, {
+        fontFamily: FONT,
+        fontSize: '24px',
+        fontStyle: 'bold',
+        color: result.submitted ? CSS.yellow : CSS.cyanDim,
+      })
+      .setOrigin(0.5);
+    this.showButtons(data, 'meteor', at);
+  }
+
   private async submitScore(
     store: LeaderboardStore,
     mode: LeaderboardMode,
@@ -295,45 +417,39 @@ export class DebriefScene extends Phaser.Scene {
     const relaunchScene = data.mode ?? 'Game';
     const y = height * 0.82;
     const opts = { width: 250, height: 50, fontSize: 20 };
-    const relaunch = neonButton(
-      this,
-      spread(width / 2, 1060, 0, 4),
-      y,
-      'RELAUNCH',
-      () => this.scene.start(relaunchScene),
-      { ...opts, accent: PALETTE.magenta },
-    );
-    const board = neonButton(
-      this,
-      spread(width / 2, 1060, 1, 4),
-      y,
-      'SCORES',
-      () =>
-        this.scene.start(
-          'Leaderboard',
-          highlightAt === undefined ? { mode } : { mode, highlightAt },
-        ),
-      opts,
-    );
-    const hangar = neonButton(
-      this,
-      spread(width / 2, 1060, 2, 4),
-      y,
-      'HANGAR',
-      () => this.scene.start('Shop'),
-      opts,
-    );
-    const menu = neonButton(
-      this,
-      spread(width / 2, 1060, 3, 4),
-      y,
-      'MENU',
-      () => this.scene.start('Menu'),
-      opts,
+
+    // A spent daily has nothing to relaunch into — going again today is the one
+    // thing the mode does not offer — so its row leads with the board instead.
+    const specs: { label: string; go: () => void; accent?: number }[] =
+      data.daily !== undefined
+        ? [
+            { label: 'DAILY', go: () => this.scene.start('Daily'), accent: PALETTE.magenta },
+            { label: 'HANGAR', go: () => this.scene.start('Shop') },
+            { label: 'MENU', go: () => this.scene.start('Menu') },
+          ]
+        : [
+            { label: 'RELAUNCH', go: () => this.scene.start(relaunchScene), accent: PALETTE.magenta },
+            {
+              label: 'SCORES',
+              go: () =>
+                this.scene.start(
+                  'Leaderboard',
+                  highlightAt === undefined ? { mode } : { mode, highlightAt },
+                ),
+            },
+            { label: 'HANGAR', go: () => this.scene.start('Shop') },
+            { label: 'MENU', go: () => this.scene.start('Menu') },
+          ];
+
+    const buttons = specs.map((spec, i) =>
+      neonButton(this, spread(width / 2, 1060, i, specs.length), y, spec.label, spec.go, {
+        ...opts,
+        ...(spec.accent !== undefined ? { accent: spec.accent } : {}),
+      }),
     );
 
-    // One row, opening on RELAUNCH, so ENTER still means "go again".
-    new MenuNav(this, [[relaunch, board, hangar, menu]]);
+    // One row, opening on the first button, so ENTER still means "go again".
+    new MenuNav(this, [buttons]);
     navHint(this, height - 18);
   }
 }

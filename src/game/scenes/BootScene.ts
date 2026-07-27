@@ -3,6 +3,8 @@ import { AudioManager, AUDIO_REGISTRY_KEY } from '../../audio/AudioManager';
 import { CrtPipeline } from '../../fx/CrtPipeline';
 import { PALETTE } from '../../fx/palette';
 import { setVideoSettings } from '../../fx/videoSettings';
+import { DAILY_REGISTRY_KEY } from '../../core/leaderboard/dailyStore';
+import { createDailyStore } from '../dailyStore';
 import { LEADERBOARD_REGISTRY_KEY, LocalLeaderboardStore } from '../leaderboardStore';
 import { SaveManager, SAVE_REGISTRY_KEY } from '../storage';
 
@@ -18,6 +20,9 @@ export class BootScene extends Phaser.Scene {
     // Swapping this for a server-backed store is the whole extent of moving
     // the boards online: every consumer already awaits it.
     this.registry.set(LEADERBOARD_REGISTRY_KEY, new LocalLeaderboardStore());
+    // Shared when the Supabase env pair is set at build time, device-local
+    // otherwise — so a clone with no .env is still a complete game.
+    this.registry.set(DAILY_REGISTRY_KEY, createDailyStore());
     this.registry.set(
       AUDIO_REGISTRY_KEY,
       new AudioManager(saves.save.settings.sfxVolume, saves.save.settings.musicVolume),

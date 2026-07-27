@@ -4,6 +4,7 @@
 import type { ChainConfig } from './collapse/chain';
 import type { FlightConfig } from './flight/newtonian';
 import type { AsteroidOptions } from './shapes/asteroid';
+import type { SkillFilter } from './skills/taxonomy';
 
 export interface RatingConfig {
   /** Starting rating for every skill before placement. */
@@ -560,11 +561,37 @@ export function applyDifficulty(cfg: GameConfig, id: DifficultyId): GameConfig {
   };
 }
 
+/**
+ * The daily challenge. Everything here exists to hold one variable still:
+ * two players' runs must differ only in how they were played.
+ */
+export interface DailyConfig {
+  /** Tiers the difficulty band's top edge climbs per wave. */
+  tiersPerWave: number;
+  /** How many tiers wide the band stays, so easy skills never fully retire. */
+  bandTiers: number;
+  /**
+   * The pace every daily run is played at, whatever the player last picked in
+   * sector select. Pace is the single largest score lever in the mode, so
+   * leaving it to a menu would mean the board ranked menu choices.
+   */
+  pace: DifficultyId;
+  /**
+   * What the daily draws from. Fixed rather than inherited from the sector
+   * select filter, for the same reason as the pace: the roster cannot be
+   * allowed to drift with menu state.
+   */
+  filter: SkillFilter;
+  /** Rows shown on the board. The server holds every entry regardless. */
+  boardSize: number;
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
   meteors: MeteorConfig;
   difficulty: DifficultyConfig;
+  daily: DailyConfig;
   combo: ComboConfig;
   drops: DropConfig;
   expression: ExpressionConfig;
@@ -660,6 +687,20 @@ export const CONFIG: GameConfig = {
         maxProblemsBonus: 4,
       },
     ],
+  },
+  daily: {
+    // Seven tiers exist. Half a tier per wave puts the ceiling in reach around
+    // wave 13, which is past where most runs end — so the ramp is still
+    // climbing when the base falls, and the run never plateaus.
+    tiersPerWave: 0.5,
+    bandTiers: 3,
+    // The middle pace. Euclid would make the board a typing-speed contest;
+    // Euler would make the first minute decide it.
+    pace: 'gauss',
+    // Fractions out: they are a toggle everywhere else, and a board is easier
+    // to read as one contest than as a mix of two number systems.
+    filter: { op: 'all', maxDigits: 4, fractions: false },
+    boardSize: 10,
   },
   meteors: {
     baseFallSeconds: 10,

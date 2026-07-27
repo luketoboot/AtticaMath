@@ -43,7 +43,13 @@ import {
 import { recordTrouble, type TroubleLog } from './coach/trouble';
 import { applyAttempt, targetLatencyMs, type SkillTable } from './skills/rating';
 import type { SkillFilter, SkillId } from './skills/taxonomy';
-import { composePlacementWave, composeWave, OPEN_FILTER, type WavePlan } from './waves/compose';
+import {
+  composeDailyWave,
+  composePlacementWave,
+  composeWave,
+  OPEN_FILTER,
+  type WavePlan,
+} from './waves/compose';
 
 export interface RunSessionInit {
   seed: number;
@@ -61,6 +67,18 @@ export interface RunSessionInit {
   coachedSkill?: SkillId;
   /** The coach's running record, carried in from the save and handed back out. */
   trouble?: TroubleLog;
+  /**
+   * Run today's daily challenge: waves come from the seed alone, never from
+   * this player's ratings, so every player faces the identical roster. Implies
+   * placement is skipped — a stealth placement sweep is a personalised wave by
+   * construction, and it would hand a new profile a different run.
+   *
+   * Attempts still update the skill table. Reading the table is what breaks
+   * comparability; writing to it is just the run being honest signal, and a
+   * mode that taught the model nothing would be a strange thing to ship in
+   * this game.
+   */
+  daily?: boolean;
 }
 
 const COACH_RECENCY_WAVES = 3;
@@ -84,6 +102,7 @@ export class RunSession {
   private readonly drillSkill: SkillId | undefined;
   private lastTipSkill: SkillId | undefined;
   private readonly filter: SkillFilter;
+  private readonly daily: boolean;
 
   score = 0;
   kills = 0;
@@ -111,12 +130,18 @@ export class RunSession {
     );
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
-    this.placementDone = init.placementDone;
+    this.daily = init.daily ?? false;
+    // A daily run is never a placement sweep, whatever the profile says. The
+    // caller must not write this back to the save: a new player who opened
+    // with the daily still owes the game a placement run.
+    this.placementDone = this.daily || init.placementDone;
     this.hp = this.cfg.meteors.baseHp;
     this.maxHp = this.hp; // repair tops up to where the run started, never past it
     this.stamina = createStamina(this.cfg.stamina);
     this.trouble = { ...(init.trouble ?? {}) };
-    this.filter = init.filter ?? OPEN_FILTER;
+    // The daily's pool is a config constant, not a menu leftover: a filter
+    // inherited from sector select would change the roster per player.
+    this.filter = this.daily ? this.cfg.daily.filter : (init.filter ?? OPEN_FILTER);
     this.drillSkill = init.coachedSkill;
   }
 
@@ -266,6 +291,12 @@ export class RunSession {
   /** Advance to the next wave and get its problem list. */
   nextWave(): WavePlan {
     this.waveInRun += 1;
+    if (this.daily) {
+      // Note this reads `waveInRun`, not `globalWave`: the roster must depend
+      // on how far into today's run you are, never on how many waves this
+      // profile has ever played.
+      return composeDailyWave(this.waveInRun, this.cfg, this.rng, this.filter);
+    }
     if (!this.placementDone) {
       const plan = composePlacementWave(this.waveInRun, this.cfg, this.rng, this.filter);
       return { ...plan, wave: this.waveInRun };

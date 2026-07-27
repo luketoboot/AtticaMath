@@ -84,6 +84,36 @@ const PRESETS = [
       },
     },
   },
+  {
+    // The daily lobby with today's run still to take, over a board that is
+    // partly claimed — the state a player sees most mornings.
+    name: 'Daily',
+    scene: 'Daily',
+    data: {
+      __daily: {
+        date: '2026-07-27',
+        entries: [
+          { initials: 'LTB', score: 38400, wave: 13, at: 1 },
+          { initials: 'NNN', score: 29050, wave: 10, at: 2 },
+          { initials: 'K9X', score: 17600, wave: 8, at: 3 },
+          { initials: 'AAA', score: 6200, wave: 4, at: 4 },
+        ],
+      },
+    },
+  },
+  {
+    // Today already spent: the dimmed LAUNCH and the countdown, which is the
+    // half of the mode a shot would otherwise never see.
+    name: 'Daily-spent',
+    scene: 'Daily',
+    save: { daily: { date: '2026-07-27', score: 21400, wave: 9, submitted: true } },
+    data: {
+      __daily: {
+        date: '2026-07-27',
+        entries: [{ initials: 'LTB', score: 38400, wave: 13, at: 1 }],
+      },
+    },
+  },
   { name: 'Playbook', scene: 'Playbook' },
   { name: 'BrainScan', scene: 'BrainScan' },
   {
@@ -238,6 +268,13 @@ async function shoot(page, { name, scene, data, save }, opts) {
           JSON.stringify(sceneData.__board.entries));
       }
 
+      if (sceneData.__daily) {
+        // Same idea for the daily board, which is keyed by date rather than
+        // by mode and so cannot reuse the hook above.
+        window.localStorage.setItem('mathgame.daily.' + sceneData.__daily.date,
+          JSON.stringify(sceneData.__daily.entries));
+      }
+
       // Stop whatever is currently up, or two scenes render over each other.
       for (const active of game.scene.getScenes(true)) {
         if (active.scene.key !== sceneKey) game.scene.stop(active.scene.key);
@@ -349,11 +386,19 @@ async function main() {
         seed = (seed * 1103515245 + 12345) & 0x7fffffff;
         return seed / 0x7fffffff;
       };
+      // The daily challenge puts a real date and a live countdown on the menu,
+      // so an unpinned clock would churn those goldens every second and every
+      // midnight. Phaser's own timing runs off performance.now, which is left
+      // alone — this only fixes what the game *displays* as the date.
+      Date.now = () => window.__FIXED_NOW;
       // Rewound before every shot. One page serves the whole batch and each
       // scene draws its star field from this one stream, so without a rewind
       // inserting a preset would shift the stars of every scene after it and
       // churn goldens that nothing touched.
       window.__reseed = () => void (seed = SEED);
+      // Mid-morning UTC, so the daily countdown reads as a partial day rather
+      // than a suspiciously round number.
+      window.__FIXED_NOW = Date.parse('2026-07-27T09:41:00Z');
     });
 
     const errors = [];

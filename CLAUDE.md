@@ -4,7 +4,7 @@
 
 Browser based arcade arithmetic game. Hotline Miami aesthetic: CRT shader, neon on black, synthwave soundtrack (provided by the owner, do not generate music). Target audience is elementary students through adults. No kid theming anywhere. Difficulty is fully adaptive, driven by a per skill rating model. The game never displays grade levels.
 
-Long term: mobile via Capacitor wrapping the same codebase. Every decision should keep the web bundle small and touch input viable.
+Desktop and web, played on a keyboard. Mobile via Capacitor was considered and dropped: the core input is a continuously watched digit buffer, and the flight modes want a hand on WASD and a hand on the numpad at once, so a phone version would have to be a different game rather than a wrapper. Touch code already in the tree (`FlightPad`, `Numpad`, the boss pad) stays and still works, but nothing new needs to be sized for a phone. Keeping the bundle small is still a rule — it is a web game, and the download is the first impression.
 
 ## Tech Stack
 
@@ -77,11 +77,19 @@ Both benches share a set: eight problems, one gentle untimed rating attempt each
 
 Rebuilding is automatic. There is only ever one place to bring back and one moment to bring it, so asking for a keypress was a formality; the ladder walks itself down as the player answers. Breaking a problem apart stays the player's decision, because that one is a real choice — and answering the whole thing without breaking it is always allowed, since the mode exists to become unnecessary.
 
-### Later modes (design stubs only, do not build in MVP)
-- Boss fights: boss has an HP number, chip it with expressions, block boss attacks by answering problems
+### Daily Challenge
+
+Meteor Defense on a seed the UTC date decides. One run per day, one shared board per day.
+
+The mode exists on one guarantee: everybody plays the identical run. That puts it in direct conflict with the rest of the game, where waves are composed from the player's own skill table — a veteran's wave 5 and a beginner's wave 5 would share a number and nothing else, and ranking those against each other would be theatre. So the daily gets its own composer (`composeDailyWave`) which never reads a rating, laddering difficulty by wave number alone out of the date's seed, and the run forces the pace level, the skill filter, and placement-off, since each of those changes what a score is worth. Attempts still update the skill table: *reading* the table breaks comparability, writing to it is just the run being honest signal.
+
+The attempt is spent when the base falls, not when the score uploads — a failed submission leaves the score pending and retried from the lobby, never a second run at a roster you have now seen. Daily scores stay off the all-time meteor board for the same reason exercise sets do: they were not the same game.
+
+The board is Supabase, reached with `fetch` against PostgREST rather than `supabase-js`, which would cost ~100KB for two queries and an insert. With `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` unset the board falls back to device-local and says so on screen, so a clone with no `.env` is still a complete game. Schema and its row-level security live in `supabase/migrations/`.
+
+### Later modes (design stubs only)
 - Estimation mode: problems fall too fast to compute exactly, fire at closest of three answers
-- Factor storm: shoot falling numbers with their factors to split them, asteroids style, until only primes remain
-- Daily challenge: fixed seed, shared leaderboard
+- Boss fights are built but benched pending a redesign around a demanded number; Factor Storm shipped. See git history and the note in `MenuScene`.
 
 ## Coach ("The Operator")
 
@@ -129,8 +137,8 @@ Expression Builder is milestone 2. Nothing else until both modes feel good.
 
 ## Non Goals for MVP
 
-- No accounts, no server, no leaderboards
-- No mobile packaging yet (but keep touch input in mind: on screen numpad must be feasible)
+- Still no accounts. The daily board is the one server-backed feature and it deliberately has no login: an anonymous insert policy and a per-device id, nothing to sign up for or recover. Every other board stays local.
+- No mobile packaging, ever — see the top of this file for why it was dropped rather than deferred.
 - No music generation (owner supplies tracks; build a music manager that loops supplied files with beat synced intensity layers if easy, otherwise simple looping)
 - No base building, ever
 

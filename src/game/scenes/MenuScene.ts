@@ -1,11 +1,18 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
+import {
+  dailyAvailable,
+  dailyDateKey,
+  displayDate,
+  formatCountdown,
+  msUntilNextDaily,
+} from '../../core/daily/daily';
 import { applyCrt } from '../../fx/applyCrt';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { MenuNav, navHint } from '../../ui/MenuNav';
 import { CardDeck, spread, type ModeCardSpec } from '../../ui/ModeCard';
-import { neonButton } from '../../ui/panels';
+import { neonButton, type NeonButton } from '../../ui/panels';
 import { titleLogo } from '../../ui/TitleLogo';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
@@ -131,9 +138,35 @@ export class MenuScene extends Phaser.Scene {
       ),
     ];
 
-    new MenuNav(this, [deck.items, utility]);
+    // The daily gets its own strip rather than a sixth utility button. It is
+    // not a sibling of SETTINGS — it is a thing to play, and it expires — so it
+    // reads as a standing invitation under the modes instead of a menu item.
+    const daily = this.dailyButton(saves, width / 2, 556);
+
+    new MenuNav(this, [deck.items, utility, [daily]]);
 
     navHint(this, height - 20);
+  }
+
+  /** The daily strip, labelled with whether today's run is still there to take. */
+  private dailyButton(saves: SaveManager, x: number, y: number): NeonButton {
+    const dateKey = dailyDateKey(Date.now());
+    const available = dailyAvailable(saves.save.daily, dateKey);
+    // The sun sits directly behind this strip and its stripes were reading
+    // straight through the panel's half-transparent fill, which the date line
+    // is too small to survive. A backing plate buys the contrast back without
+    // dimming the sun for every other row on the screen.
+    this.add.rectangle(x, y, 446, 64, PALETTE.black, 0.82);
+    return neonButton(this, x, y, 'DAILY CHALLENGE', () => this.scene.start('Daily'), {
+      width: 440,
+      height: 58,
+      fontSize: 22,
+      icon: 'meteor',
+      accent: available ? PALETTE.yellow : PALETTE.cyanDim,
+      sub: available
+        ? `${displayDate(dateKey)}  ·  ONE RUN, SAME ROCKS FOR EVERYONE`
+        : `PLAYED  ·  NEXT IN ${formatCountdown(msUntilNextDaily(Date.now()))}`,
+    });
   }
 
   /** Card specs with their scene launches bound. */

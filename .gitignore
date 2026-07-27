@@ -4,5 +4,8 @@ dist/
 *.png
 *.local
 
+# Local Supabase credentials. `.env.example` is the committed template.
+.env
+
 # Golden scene shots are the one PNG set worth versioning.
 !shots/golden/*.png

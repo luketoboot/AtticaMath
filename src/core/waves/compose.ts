@@ -157,6 +157,58 @@ export function composeWave(
   return { wave, problems, categories, payloads: assignPayloads(categories, cfg, rng) };
 }
 
+/**
+ * Compose a daily-challenge wave: the same problems for everyone, everywhere.
+ *
+ * This is the one composer that never reads a skill table, and that omission is
+ * the whole feature. A shared board only means something if the runs on it were
+ * the same run, and an adaptive wave is by definition a different wave for
+ * every player — a veteran's wave 5 and a beginner's wave 5 would share a
+ * number and nothing else, so comparing their scores would be theatre. The
+ * daily therefore ladders difficulty by wave alone, out of a seed the date
+ * decides, and the only thing that differs between two players' runs is how
+ * they played it.
+ *
+ * `coachedSkill` is deliberately not a parameter. Overweighting a skill for one
+ * player is exactly the drift this composer exists to prevent.
+ */
+export function composeDailyWave(
+  wave: number,
+  cfg: GameConfig,
+  rng: Rng,
+  filter: SkillFilter = cfg.daily.filter,
+): WavePlan {
+  const allowed = poolFor(filter);
+  const tiers = [...new Set(allowed.map((id) => getSkill(id).tier))].sort((a, b) => a - b);
+  const count = problemsForWave(wave, cfg);
+
+  // The band's top edge climbs with the wave; its bottom trails behind by a
+  // fixed width. Easy skills keep appearing rather than being retired, because
+  // a wave made only of your ceiling is an exam, not an arcade run — but they
+  // stop being the bulk of it, which is what makes the run escalate.
+  const top = Math.min(tiers.length - 1, Math.floor((wave - 1) * cfg.daily.tiersPerWave));
+  const bottom = Math.max(0, top - cfg.daily.bandTiers + 1);
+  const band = new Set(tiers.slice(bottom, top + 1));
+  const topTier = tiers[top];
+
+  let pool = allowed.filter((id) => band.has(getSkill(id).tier));
+  if (pool.length === 0) pool = allowed;
+
+  const problems: Problem[] = [];
+  const categories: SkillCategory[] = [];
+  for (let i = 0; i < count; i++) {
+    const skillId = rng.pick(pool);
+    problems.push(generateProblem(skillId, rng));
+    // Category is relative to the wave's own band rather than to a player:
+    // the hardest tier on offer is this wave's frontier. That keeps the hot
+    // meteor pointed at the hardest rock on screen, so the score chase still
+    // rewards reaching for the difficult one.
+    categories.push(getSkill(skillId).tier === topTier ? 'frontier' : 'fluent');
+  }
+
+  return { wave, problems, categories, payloads: assignPayloads(categories, cfg, rng) };
+}
+
 /** True while the profile is still in the stealth placement sweep. */
 export function isPlacementWave(wave: number, cfg: GameConfig): boolean {
   return wave <= cfg.waves.placementWaves;

@@ -5,9 +5,11 @@ import { DROP_LABEL, type DropKind } from '../../core/drops';
 import type { Problem } from '../../core/generator/problem';
 import { drillFilterFor } from '../../core/coach/techniques';
 import { burstFor, cannonFor } from '../../core/cosmetics/cosmetics';
+import { dailyDateKey, seedForDate } from '../../core/daily/daily';
 import { RunSession } from '../../core/session';
 import { crossedFluent, runDeltas } from '../../core/skills/report';
 import { getSkill, type SkillFilter, type SkillId } from '../../core/skills/taxonomy';
+import { DAILY_RUN_KEY } from './DailyScene';
 import { METEOR_DRILL_KEY } from './PlaybookScene';
 import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
@@ -73,6 +75,11 @@ const STAMINA_BAR_WIDTH = 240;
 
 export class GameScene extends Phaser.Scene {
   private session!: RunSession;
+  /** This run is today's daily challenge, not a free run. */
+  private daily = false;
+  /** The UTC date the run belongs to, fixed at launch so a midnight rollover
+   * mid-run cannot file the score under tomorrow. */
+  private dailyDate = '';
   private saves!: SaveManager;
   private buffer!: InputBuffer;
 
@@ -138,24 +145,46 @@ export class GameScene extends Phaser.Scene {
     this.burstColor = burstFor(this.saves.save.equipped.burst).core;
 
     const save = this.saves.save;
+    // A daily run ignores every per-player knob on the way in — filter, drill
+    // and pace all change what a run is worth, and a shared board can only rank
+    // players who were handed the same game.
+    this.daily = this.registry.get(DAILY_RUN_KEY) === true;
+    this.dailyDate = dailyDateKey(Date.now());
+    // A one-shot token, consumed on read. RELAUNCH from the debrief restarts
+    // this scene, and the daily is spent — without this, one press of LAUNCH
+    // would let the player replay today's roster forever.
+    this.registry.remove(DAILY_RUN_KEY);
+    if (this.daily) {
+      // The attempt is spent at launch, not at game over.
+      //
+      // QUIT TO MENU stops this scene without ever reaching endRun(), so
+      // recording the attempt there would let a player abandon a run that was
+      // going badly and relaunch the same roster until one went well. A score
+      // of zero is the honest record of a run that was started and walked away
+      // from, and endRun() overwrites it with the real one.
+      this.saves.save.daily = { date: this.dailyDate, score: 0, wave: 0, submitted: false };
+      this.saves.persist();
+    }
     // A Playbook drill outranks the sector-select filter: it derives its own
     // from the technique's family, and keeps the skill overweighted all run.
     // Deliberately not cleared here, so RELAUNCH from the debrief re-drills.
-    const drill = this.registry.get(METEOR_DRILL_KEY) as SkillId | undefined;
+    const drill = this.daily ? undefined : (this.registry.get(METEOR_DRILL_KEY) as SkillId | undefined);
     const filter = drill
       ? drillFilterFor(drill)
       : (this.registry.get('meteorFilter') as SkillFilter | undefined);
     // The pace level is a derived config, not session state: the session just
     // reads whatever pacing numbers it is handed.
     const level = this.registry.get('meteorDifficulty') as DifficultyId | undefined;
+    const pace = this.daily ? CONFIG.daily.pace : (level ?? CONFIG.difficulty.fallback);
     this.session = new RunSession({
-      seed: Date.now() >>> 0,
+      seed: this.daily ? seedForDate(this.dailyDate) : Date.now() >>> 0,
       skills: save.skills,
       totalWavesBefore: save.totalWaves,
       placementDone: save.placementDone,
       trouble: save.trouble,
-      config: applyDifficulty(CONFIG, level ?? CONFIG.difficulty.fallback),
-      ...(filter ? { filter } : {}),
+      config: applyDifficulty(CONFIG, pace),
+      ...(this.daily ? { daily: true } : {}),
+      ...(!this.daily && filter ? { filter } : {}),
       ...(drill ? { coachedSkill: drill } : {}),
     });
 
@@ -1269,9 +1298,23 @@ export class GameScene extends Phaser.Scene {
     save.skills = this.session.skillTable;
     save.trouble = this.session.troubleLog;
     save.totalWaves += this.session.currentWaveNumber;
-    save.placementDone = !this.session.inPlacement;
+    // A daily forces placement off to keep its roster identical for everyone,
+    // so it must never write that back: a new player whose first game was the
+    // daily still owes the profile a real placement sweep.
+    if (!this.daily) save.placementDone = !this.session.inPlacement;
     save.credits += credits;
     save.bestScore = Math.max(save.bestScore, this.session.score);
+    if (this.daily) {
+      // Written before the score is submitted, and regardless of whether it
+      // ever is. The attempt is spent the moment the base falls — an upload
+      // that fails must not hand back a second try at the same roster.
+      save.daily = {
+        date: this.dailyDate,
+        score: this.session.score,
+        wave: this.session.stats().wavesCleared,
+        submitted: false,
+      };
+    }
     const unlocked = newMilestones(this.session.skillTable, save.milestones, CONFIG);
     save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
@@ -1289,6 +1332,7 @@ export class GameScene extends Phaser.Scene {
         credits,
         milestones: unlocked.map((m) => m.label),
         deltas,
+        ...(this.daily ? { daily: this.dailyDate } : {}),
       });
     });
   }

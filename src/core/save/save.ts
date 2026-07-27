@@ -12,6 +12,7 @@ import {
   type VideoSettings,
 } from '../settings/video';
 import type { TroubleLog } from '../coach/trouble';
+import type { DailyRecord } from '../daily/daily';
 import { reconcileTable } from '../skills/placement';
 import type { SkillTable } from '../skills/rating';
 
@@ -22,7 +23,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 7;
+export const CURRENT_SAVE_VERSION = 8;
 
 export interface SaveV1 {
   version: 1;
@@ -86,7 +87,18 @@ export interface SaveV7 extends Omit<SaveV6, 'version'> {
   trouble: TroubleLog;
 }
 
-export type Save = SaveV7;
+/**
+ * The daily challenge needs to remember one attempt, so the run cannot be
+ * retried until the date rolls over. Absent on a profile that has never played
+ * one, which is also the "available" state — `undefined` and "a record from an
+ * older date" mean the same thing to every reader, so neither needs a flag.
+ */
+export interface SaveV8 extends Omit<SaveV7, 'version'> {
+  version: 8;
+  daily?: DailyRecord;
+}
+
+export type Save = SaveV8;
 
 export function defaultSave(): Save {
   return {
@@ -187,6 +199,11 @@ export function migrate(raw: unknown): Save {
     // recorded, and the ratings cannot be unmixed back into them. The coach
     // starts empty and fills from the next run.
     save = { ...save, version: 7, trouble: {} };
+  }
+  if (save.version === 7) {
+    // No daily record means today's run is available, which is the right thing
+    // to give an existing profile: nobody has spent an attempt they never had.
+    save = { ...save, version: 8 };
   }
   if (save.version === CURRENT_SAVE_VERSION) {
     const current = save as unknown as Save;
