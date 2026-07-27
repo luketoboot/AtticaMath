@@ -66,6 +66,24 @@ const PRESETS = [
   { name: 'Shop-burst', scene: 'Shop', data: { kind: 'burst' } },
   { name: 'Shop-badge', scene: 'Shop', data: { kind: 'badge' } },
   { name: 'Leaderboard', scene: 'Leaderboard' },
+  {
+    // A board mid-fill. The empty one above covers the unclaimed rungs; this
+    // covers the medal colours and the claimed-above-unclaimed seam, which
+    // nothing else looks at.
+    name: 'Leaderboard-filled',
+    scene: 'Leaderboard',
+    data: {
+      __board: {
+        mode: 'meteor',
+        entries: [
+          { initials: 'LTB', score: 42000, wave: 14, at: 1 },
+          { initials: 'AAA', score: 31500, wave: 11, at: 2 },
+          { initials: 'ZZZ', score: 22800, wave: 9, at: 3 },
+          { initials: 'QQQ', score: 9100, wave: 5, at: 4 },
+        ],
+      },
+    },
+  },
   { name: 'Playbook', scene: 'Playbook' },
   { name: 'BrainScan', scene: 'BrainScan' },
   {
@@ -212,6 +230,13 @@ async function shoot(page, { name, scene, data, save }, opts) {
       // fixture is an assignment — no save file to write or schema to mirror.
       const saves = game.registry.get('saveManager');
       Object.assign(saves.save, saveOverrides);
+
+      if (sceneData.__board) {
+        // Seed a partly-filled board so the mixed case — claimed rungs above
+        // unclaimed ones — is something a shot can actually show.
+        window.localStorage.setItem('mathgame.board.' + sceneData.__board.mode,
+          JSON.stringify(sceneData.__board.entries));
+      }
 
       // Stop whatever is currently up, or two scenes render over each other.
       for (const active of game.scene.getScenes(true)) {

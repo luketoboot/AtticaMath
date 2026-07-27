@@ -161,9 +161,60 @@ export class LeaderboardScene extends Phaser.Scene {
     return g;
   }
 
+  /**
+   * An empty rung: the rank, and nothing standing on it yet.
+   *
+   * A board with no scores used to render nothing at all, which left the whole
+   * screen blank under one apologetic line — the worst possible look for the
+   * thing meant to make you want a place on it. Drawing the ladder empty says
+   * the same "no scores" while showing exactly what there is to take, and it
+   * keeps the promise the filled rows already make: a board is a ladder, not a
+   * list that happens to be short.
+   */
+  private renderEmptyRow(i: number, y: number, rowW: number): void {
+    const { width } = this.scale;
+    const strip = this.add.graphics({ x: width / 2, y: y + 11 });
+    paintPanel(strip, {
+      width: rowW,
+      height: 36,
+      accent: PALETTE.deepPurple,
+      chamfer: 8,
+      fillAlpha: 0.16,
+      borderWidth: 1,
+      headerRule: false,
+    });
+    this.rows.push(strip);
+
+    const left = width / 2 - rowW / 2;
+    this.rows.push(
+      this.add
+        .text(left + 46, y + 11, ordinal(i + 1), {
+          fontFamily: FONT,
+          fontSize: '19px',
+          fontStyle: 'bold',
+          color: CSS.purple,
+        })
+        .setOrigin(0.5)
+        .setAlpha(0.7),
+      this.add
+        .text(left + 122, y + 11, '- - -', {
+          fontFamily: FONT,
+          fontSize: '25px',
+          fontStyle: 'bold',
+          color: CSS.purple,
+        })
+        .setOrigin(0, 0.5)
+        .setAlpha(0.6),
+    );
+  }
+
   private renderBoard(board: readonly ScoreEntry[]): void {
     const { width } = this.scale;
     const rowW = width * 0.62;
+    // Every rung, always — the ones nobody has claimed included.
+    for (let i = board.length; i < BOARD_SIZE; i++) {
+      this.renderEmptyRow(i, 192 + i * 42, rowW);
+    }
     board.forEach((entry, i) => {
       const y = 192 + i * 42;
       const mine = this.highlightAt !== undefined && entry.at === this.highlightAt;
