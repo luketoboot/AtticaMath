@@ -11,6 +11,7 @@ import { clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '..
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { onActionKey, sceneBindings } from '../input/KeyState';
+import { isTouchDevice, Numpad } from '../../ui/Numpad';
 import { announceDrop, carrierRing, effectsLine } from '../DropGfx';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 import { codeMatches } from '../../core/input/bindings';
@@ -109,22 +110,21 @@ export class BossScene extends Phaser.Scene {
       if (this.phase !== 'fight' || codeMatches(bindings.pause, event.code)) return;
       // Incoming attacks take input priority for digits and backspace.
       if (this.attack) {
-        if (event.key >= '0' && event.key <= '9') {
-          if (this.attackBuffer.length < 8) {
-            this.attackBuffer += event.key;
-            this.attack.bufferText.setText(this.attackBuffer);
-            this.tryBlock();
-          }
-          return;
-        }
-        if (event.key === 'Backspace' || event.key === 'Delete') {
-          this.attackBuffer = '';
-          this.attack.bufferText.setText('');
-          return;
-        }
+        if (event.key >= '0' && event.key <= '9') return this.typeDigit(event.key);
+        if (event.key === 'Backspace' || event.key === 'Delete') return this.clearDigits();
       }
       this.composer.handleKey(event);
     });
+
+    // The hand, the operators, FIRE and UNDO are all buttons already — but a
+    // boss attack is blocked by typing an answer, and that had no touch path
+    // at all. The pad routes exactly where a keyboard digit would go.
+    const numpad = new Numpad(
+      this,
+      (digit) => this.typeDigit(digit),
+      () => this.clearDigits(),
+    );
+    numpad.applySessionDefault(isTouchDevice());
 
     this.banner(`BOSS ${this.session.bossNumber}`, CSS.magenta);
     getAudio(this)?.play('wave');
@@ -445,6 +445,34 @@ export class BossScene extends Phaser.Scene {
       .text(x, y, message, { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: CSS.yellow })
       .setOrigin(0.5);
     this.tweens.add({ targets: text, y: y - 70, alpha: 0, duration: 800, ease: 'Cubic.easeOut', onComplete: () => text.destroy() });
+  }
+
+  /**
+   * One digit, from whichever input sent it.
+   *
+   * An incoming attack claims digits: blocking it is the urgent thing, and a
+   * digit going into an expression instead would cost the player the hit.
+   */
+  private typeDigit(digit: string): void {
+    if (this.phase !== 'fight') return;
+    if (this.attack) {
+      if (this.attackBuffer.length >= 8) return;
+      this.attackBuffer += digit;
+      this.attack.bufferText.setText(this.attackBuffer);
+      this.tryBlock();
+      return;
+    }
+    this.composer.typeDigit(digit);
+  }
+
+  private clearDigits(): void {
+    if (this.phase !== 'fight') return;
+    if (this.attack) {
+      this.attackBuffer = '';
+      this.attack.bufferText.setText('');
+      return;
+    }
+    this.composer.backspace();
   }
 
   private banner(message: string, color: string): void {

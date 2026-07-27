@@ -49,6 +49,8 @@ import { paintAsteroid } from '../AsteroidGfx';
 import { announceDrop, carrierRing, effectsLine, pickupPod, DROP_CSS } from '../DropGfx';
 import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
+import { FlightPad } from '../../ui/FlightPad';
+import { isTouchDevice } from '../../ui/Numpad';
 import type { KeyBindings } from '../../core/input/bindings';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
@@ -203,6 +205,9 @@ export class CollapseScene extends Phaser.Scene {
 
   private keys!: KeyState;
   private bindings!: KeyBindings;
+  /** On-screen controls. Present always, shown by default only on touch. */
+  private pad?: FlightPad;
+  private keyHints!: Phaser.GameObjects.Text;
   private hullDef = hullFor(DEFAULT_HULL);
   private trail = trailFor(DEFAULT_TRAIL);
   private shapeRng = createRng(1);
@@ -280,6 +285,17 @@ export class CollapseScene extends Phaser.Scene {
 
     onActionKey(this, this.bindings.launch, () => this.fire());
     onActionKey(this, this.bindings.switchWeapon, () => this.swapGun());
+
+    // Every control this mode has, reachable by thumb. Without it Collapse is
+    // the one mode a phone cannot play at all.
+    this.pad = new FlightPad(this, {
+      actions: [
+        { id: 'fire', label: 'FIRE', onPress: () => this.fire(), accent: PALETTE.magenta, size: 96 },
+        { id: 'swap', label: 'SWAP', onPress: () => this.swapGun(), accent: PALETTE.yellow, size: 74 },
+      ],
+      onVisibleChange: (on) => this.layoutForPad(on),
+    });
+    this.pad.applySessionDefault(isTouchDevice());
     onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Collapse' });
@@ -309,18 +325,38 @@ export class CollapseScene extends Phaser.Scene {
     if (this.tokens.length === 0 && this.resolving === 0) this.startWave();
   }
 
+  /**
+   * Make room for the thumbs.
+   *
+   * The keyboard hint strip runs along the bottom edge and the weapon readout
+   * sits in the bottom-left corner — which is exactly where the left thumb
+   * goes. With the pad up the strip is also simply wrong, since it names keys
+   * the player is not using, so it goes rather than moves.
+   */
+  private layoutForPad(on: boolean): void {
+    const { width, height } = this.scale;
+    this.keyHints?.setVisible(!on);
+    this.gunIcon?.setPosition(38, on ? 96 : height - 62);
+    this.gunText?.setPosition(64, on ? 96 : height - 62);
+    this.heldText?.setPosition(width / 2, on ? 108 : height - 78);
+  }
+
   // --- flight ---
 
   private flyShip(dt: number): void {
-    const thrust = this.keys.isDown(this.bindings.up);
-    const reverse = this.keys.isDown(this.bindings.down);
+    // Keyboard or thumb, the simulation cannot tell — which is what keeps a
+    // touch run comparable with a keyboard one on the same leaderboard.
+    const held = (action: 'up' | 'down' | 'left' | 'right'): boolean =>
+      this.keys.isDown(this.bindings[action]) || this.pad?.isDown(action) === true;
+    const thrust = held('up');
+    const reverse = held('down');
     this.flight = stepFlight(
       this.flight,
       {
         thrust,
         reverse,
-        turnLeft: this.keys.isDown(this.bindings.left),
-        turnRight: this.keys.isDown(this.bindings.right),
+        turnLeft: held('left'),
+        turnRight: held('right'),
       },
       CONFIG.flight,
       dt,
@@ -1361,7 +1397,7 @@ export class CollapseScene extends Phaser.Scene {
       .setDepth(hud)
       .setVisible(false);
 
-    this.add
+    this.keyHints = this.add
       .text(
         width / 2,
         height - 26,

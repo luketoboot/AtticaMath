@@ -23,6 +23,7 @@ import { paintAsteroid } from '../AsteroidGfx';
 import { announceDrop, carrierRing, effectsLine, pickupPod } from '../DropGfx';
 import { drawFlame, drawHull } from '../ShipGfx';
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
+import { FlightPad } from '../../ui/FlightPad';
 import { InputBuffer } from '../InputBuffer';
 import { isTouchDevice, Numpad, PAD_CLAIMED_CODES } from '../../ui/Numpad';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -102,6 +103,10 @@ export class FactorScene extends Phaser.Scene {
   private effectsText!: Phaser.GameObjects.Text;
   private bufferText!: Phaser.GameObjects.Text;
   private hintText!: Phaser.GameObjects.Text;
+  /** On-screen flight controls. Present always, shown by default only on touch. */
+  private pad?: FlightPad;
+  private numpad!: Numpad;
+  private keyHints!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Factor');
@@ -155,13 +160,18 @@ export class FactorScene extends Phaser.Scene {
     // Padless keyboards: TAB summons an on-screen pad steered by arrows or
     // HJKL. Arrows are masked out of flight while it is open — the left hand
     // keeps flying on WASD, the right hand types on the pad.
-    const numpad = new Numpad(
+    this.numpad = new Numpad(
       this,
       (digit) => this.buffer.push(digit),
       () => this.buffer.clear(),
       { onOpenChange: (open) => this.keys?.setMask(PAD_CLAIMED_CODES, open) },
     );
-    numpad.applySessionDefault(isTouchDevice());
+    this.numpad.applySessionDefault(isTouchDevice());
+
+    // Typing already had a touch path; flying did not. No trigger buttons here
+    // — a rock in this mode is shot by naming a factor, not by pulling one.
+    this.pad = new FlightPad(this, { onVisibleChange: (on) => this.keyHints?.setVisible(!on) });
+    this.pad.applySessionDefault(isTouchDevice());
 
     onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
@@ -193,15 +203,18 @@ export class FactorScene extends Phaser.Scene {
   // --- flight ---
 
   private flyShip(dt: number): void {
-    const thrust = this.keys.isDown(this.bindings.up);
-    const reverse = this.keys.isDown(this.bindings.down);
+    // Keyboard or thumb, the simulation cannot tell.
+    const held = (action: 'up' | 'down' | 'left' | 'right'): boolean =>
+      this.keys.isDown(this.bindings[action]) || this.pad?.isDown(action) === true;
+    const thrust = held('up');
+    const reverse = held('down');
     this.flight = stepFlight(
       this.flight,
       {
         thrust,
         reverse,
-        turnLeft: this.keys.isDown(this.bindings.left),
-        turnRight: this.keys.isDown(this.bindings.right),
+        turnLeft: held('left'),
+        turnRight: held('right'),
       },
       CONFIG.flight,
       dt,
@@ -786,7 +799,7 @@ export class FactorScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(hud);
-    this.add
+    this.keyHints = this.add
       .text(24, height - 40, 'W THRUST · S REVERSE · A/D TURN  ·  TYPE A FACTOR TO SPLIT  ·  A PRIME DIES BY ITS OWN NAME', {
         fontFamily: FONT,
         fontSize: '14px',

@@ -225,6 +225,13 @@ async function shoot(page, { name, scene, data, save }, opts) {
         else target.events.once('create', done);
       });
 
+      if (sceneData.__pad) {
+        // The on-screen pads default off on a desktop pointer, so a shot that
+        // is meant to show them has to ask.
+        const target = game.scene.getScene(sceneKey);
+        for (const key of ['pad', 'numpad']) target[key]?.setVisible(true);
+      }
+
       if (freeze) {
         // Two things make the same screen render differently twice, and a shot
         // that is not reproducible cannot be compared to a stored one.

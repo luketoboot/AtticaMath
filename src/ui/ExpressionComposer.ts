@@ -290,7 +290,8 @@ export class ExpressionComposer {
     this.opts.onFire(this.tokens);
   }
 
-  private backspace(): void {
+  /** Public so an on-screen pad can reach it, same as UNDO and the keyboard. */
+  backspace(): void {
     if (this.pending !== '') {
       this.pending = this.pending.slice(0, -1);
       this.renderExpression();
@@ -324,7 +325,8 @@ export class ExpressionComposer {
     return { exact, longer };
   }
 
-  private typeDigit(digit: string): void {
+  /** Public so an on-screen pad can reach it, same as the keyboard. */
+  typeDigit(digit: string): void {
     if (!this.expectingNumber()) {
       this.errorCue();
       return;
