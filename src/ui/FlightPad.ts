@@ -46,11 +46,21 @@ export interface FlightPadOptions {
   onVisibleChange?: (visible: boolean) => void;
 }
 
-const BTN = 74;
+/**
+ * Button size, set by the smallest screen this has to work on rather than by
+ * how it looks on a desktop.
+ *
+ * Scale.FIT scales the whole 1280-wide canvas to the window, so a control's
+ * real size in CSS pixels is `BTN * windowWidth / 1280`. On a 667pt phone held
+ * in landscape — the smallest common case — 74 game px comes out at 38.6 CSS
+ * px, under the 44 px minimum touch target. 86 lands at 44.8 and clears it
+ * everywhere above that.
+ */
+const BTN = 86;
 /** Centre of the left thumb's diamond, and how far the arms reach. */
-const HUB_X = 162;
-const HUB_Y = 556;
-const ARM = 82;
+const HUB_X = 172;
+const HUB_Y = 540;
+const ARM = 96;
 
 /**
  * Whether the pad was up when the player last left a run. Session-scoped for
