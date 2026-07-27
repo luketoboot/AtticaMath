@@ -93,6 +93,12 @@ const PRESETS = [
     scene: 'Exercise',
     data: { skillId: 'add.triple' },
   },
+  // One per picture. The dial drives three unrelated renderers — counters in
+  // frames, a rectangle, and bars — and a baseline of only the first would let
+  // the other two rot unnoticed.
+  { name: 'Exercise-sub', scene: 'Exercise', data: { skillId: 'sub.borrow' } },
+  { name: 'Exercise-mul', scene: 'Exercise', data: { skillId: 'mul.2x2' } },
+  { name: 'Exercise-frac', scene: 'Exercise', data: { skillId: 'frac.add.unlike' } },
   { name: 'Settings', scene: 'Settings' },
   { name: 'Controls', scene: 'Controls' },
   { name: 'Video', scene: 'Video' },

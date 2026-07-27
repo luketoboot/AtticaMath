@@ -31,6 +31,14 @@ export interface Pane {
   area: number;
   /** Whether the player has reached this pane yet. */
   live: boolean;
+  /**
+   * Whether its area may be written inside it.
+   *
+   * A slab's own product is exactly the answer to the rung that reveals it, so
+   * printing it on arrival would make the typing a copy. The shape and the
+   * factors are the help; the product is the work, and it waits to be earned.
+   */
+  revealed: boolean;
 }
 
 const SPLIT_MS = 380;
@@ -143,7 +151,13 @@ export class AreaModel {
           .setPosition(px + paneW / 2, this.y)
           .setAlign('center')
           .setFontSize(paneW > 92 ? 15 : 12)
-          .setText(pane.live ? `${pane.part} × ${this.multiplier}\n${pane.area}` : String(pane.part))
+          .setText(
+            !pane.live
+              ? String(pane.part)
+              : pane.revealed
+                ? `${pane.part} × ${this.multiplier}\n${pane.area}`
+                : `${pane.part} × ${this.multiplier}`,
+          )
           .setColor(pane.live ? CSS.white : CSS.purple)
           .setAlpha(pane.live ? 1 : 0.6);
       }

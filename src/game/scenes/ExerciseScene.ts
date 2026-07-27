@@ -12,6 +12,7 @@ import {
   slotWidth,
   slotsFor,
 } from '../../core/exercise/layers';
+import { placeColumnsFor } from '../../core/exercise/places';
 import { benchKindFor, ExerciseSession, exerciseFromProblem } from '../../core/exercise/session';
 import { newMilestones } from '../../core/skills/milestones';
 import type { SkillId } from '../../core/skills/taxonomy';
@@ -22,6 +23,7 @@ import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
 import { CUT_FACTORS, sliceHint } from '../../core/exercise/slices';
 import { AreaModel } from '../../ui/AreaModel';
+import { PlaceFrames } from '../../ui/PlaceFrames';
 import { FractionBars } from '../../ui/FractionBars';
 import { MenuNav, type MenuItem } from '../../ui/MenuNav';
 import { isTouchDevice, Numpad } from '../../ui/Numpad';
@@ -53,6 +55,16 @@ const MAX_BLOCK = 152;
 /** Cell and glyph sizes at full block height; both scale down together. */
 const BASE_CELL = 34;
 const BASE_FONT = 34;
+/**
+ * Centre of the left flank, where the help lives.
+ *
+ * The right belongs to the on-screen numpad, which opens over exactly this
+ * band — two panels fighting for the same corner is how a touch player loses
+ * the reading they just asked for.
+ */
+const FLANK_X = 268;
+/** Where the flank's bottom row sits. The frames stack upward from here. */
+const FLANK_BOTTOM = 392;
 
 
 /**
@@ -84,6 +96,9 @@ export class ExerciseScene extends Phaser.Scene {
   private barPickers?: NeonChip[];
   /** Present only for products and quotients, which have an area to draw. */
   private areaUi?: AreaModel;
+  /** Present only for sums and differences, whose picture is counters in frames. */
+  private framesUi?: PlaceFrames;
+  private framesCaption?: Phaser.GameObjects.Text;
   /** Top of the ladder band; the area model pushes it down when it is present. */
   private bandTop = BAND_TOP;
   private focusPanel!: Phaser.GameObjects.Graphics;
@@ -207,6 +222,21 @@ export class ExerciseScene extends Phaser.Scene {
             color: CSS.magentaHot,
           })
           .setOrigin(0.5);
+      } else {
+        // A sum has no area, so it gets the exchange instead: ten counters in a
+        // place become one in the place above. It rides the left flank, where
+        // the ladder is not, so the rungs keep the whole band.
+        this.framesUi = new PlaceFrames(this, FLANK_X, FLANK_BOTTOM, shape.op);
+        // Under the block, not over it: the frames grow upward as places come
+        // back, so the caption is the only edge that can hold still.
+        this.framesCaption = this.add
+          .text(
+            FLANK_X,
+            FLANK_BOTTOM + 44,
+            shape.op === 'add' ? 'WHAT EACH PLACE HOLDS' : 'WHAT EACH PLACE CAN PAY',
+            { fontFamily: FONT, fontSize: '12px', fontStyle: 'bold', color: CSS.magentaHot },
+          )
+          .setOrigin(0.5);
       }
       this.breakBtn = neonButton(this, width / 2, height * 0.915, 'BREAK IT DOWN', () => this.deconstruct(), {
         width: 330,
@@ -227,7 +257,7 @@ export class ExerciseScene extends Phaser.Scene {
       this.input.keyboard?.on('keydown-F', () => this.toggleBonds());
     }
 
-    this.bondsPanel = this.add.container(width * 0.17, 300).setVisible(false);
+    this.bondsPanel = this.add.container(FLANK_X, 300).setVisible(false);
 
     this.buffer = new InputBuffer(this, (value) => this.onBufferChange(value));
     this.numpad = new Numpad(
@@ -364,6 +394,7 @@ export class ExerciseScene extends Phaser.Scene {
   override update(_time: number, delta: number): void {
     this.barsUi?.tick(delta);
     this.areaUi?.tick(delta);
+    this.framesUi?.tick(delta);
   }
 
   // --- layout ---
@@ -535,7 +566,13 @@ export class ExerciseScene extends Phaser.Scene {
     // Dimmed when there is no bond to show, so the button reads as unavailable
     // before it is pressed rather than only buzzing after.
     this.bondsBtn.setAccent(!hint ? PALETTE.deepPurple : this.bondsOpen ? PALETTE.cyan : PALETTE.purple);
-    this.bondsPanel.setVisible(this.bondsOpen && hint !== undefined && !solved);
+    const showBonds = this.bondsOpen && hint !== undefined && !solved;
+    this.bondsPanel.setVisible(showBonds);
+    // One flank, two readings. The zoom-in on a single column stands in front
+    // of the overview of every place, and steps back out of the way when it is
+    // dismissed — they would otherwise be drawn straight through each other.
+    this.framesUi?.setVisible(!showBonds);
+    this.framesCaption?.setVisible(!showBonds);
     if (!this.bondsOpen || !hint) return;
 
     // Sit beside the rung being explained, not at a fixed height — the help has
@@ -543,10 +580,8 @@ export class ExerciseScene extends Phaser.Scene {
     // reading off the bottom of the screen.
     const live = this.rungs.find((r) => r.depth === this.session.state.depth);
     const y = Phaser.Math.Clamp(live?.y ?? 300, 220, 430);
-    // Left flank. The right belongs to the on-screen numpad, which opens over
-    // exactly this band — two panels fighting for the same corner is how a
-    // touch player loses the frame they just asked for.
-    this.bondsPanel.setPosition(this.scale.width * 0.17, y);
+    // Beside the rung, on the flank the frames otherwise hold.
+    this.bondsPanel.setPosition(FLANK_X, y);
 
     const pip = 30;
     const gap = 4;
@@ -763,7 +798,7 @@ export class ExerciseScene extends Phaser.Scene {
       });
       this.busy = true;
       this.refresh();
-      this.time.delayedCall(900, () => this.advance());
+      this.time.delayedCall(Math.max(900, this.framesUi?.resolveMs ?? 0), () => this.advance());
       return;
     }
 
@@ -772,7 +807,8 @@ export class ExerciseScene extends Phaser.Scene {
     this.refresh();
     // Let the solved rung land before the next one opens; back to back they
     // read as one event and the player loses which number they just banked.
-    this.time.delayedCall(420, () => this.rebuild());
+    // A rung with counters still moving gets as long as the exchange needs.
+    this.time.delayedCall(Math.max(420, this.framesUi?.resolveMs ?? 0), () => this.rebuild());
   }
 
   private advance(): void {
@@ -858,9 +894,16 @@ export class ExerciseScene extends Phaser.Scene {
         part: p.part,
         area: p.area,
         live: p.place >= state.depth,
+        // The slab's own product is the rung's answer, so it waits to be
+        // earned. Its extent is the help; its number is the work.
+        revealed: p.place > state.depth || state.layerSolved,
       }));
       this.areaUi.show(panes, problem.b);
     }
+
+    // The counters, place by place. They resolve only once the rung has been
+    // answered, so the exchange is the reward rather than the answer key.
+    this.framesUi?.show(placeColumnsFor(problem, state.depth), state.layerSolved);
   }
 
   private hint(): string {
