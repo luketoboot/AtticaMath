@@ -13,6 +13,8 @@ import {
 } from '../../core/flight/newtonian';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { createRng } from '../../core/rng';
+import { drawsAsCells } from '../../core/factor/lattice';
+import { paintCells } from '../../ui/NumberCells';
 import { generateAsteroid, hitsCircle, type AsteroidShape } from '../../core/shapes/asteroid';
 import { newMilestones } from '../../core/skills/milestones';
 import { runDeltas } from '../../core/skills/report';
@@ -445,6 +447,35 @@ export class FactorScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The parent's counters opening into piles, drawn once and thrown away.
+   *
+   * Purely decorative and detached from everything: it drifts with the split,
+   * fades, and takes no part in targeting or collision.
+   */
+  private groupGhost(target: LiveRock, factor: number): void {
+    if (!drawsAsCells(target.rock.value)) return;
+    const ghost = this.add.graphics({ x: target.x, y: target.y });
+    ghost.setDepth(4);
+    const state = { spread: 0 };
+    this.tweens.add({
+      targets: state,
+      spread: 1,
+      duration: 300,
+      ease: 'Cubic.easeOut',
+      onUpdate: () => {
+        paintCells(ghost, target.rock.value, {
+          radius: target.radius,
+          groups: factor,
+          spread: state.spread,
+          colour: PALETTE.yellow,
+        });
+        ghost.setAlpha(1 - state.spread * 0.9);
+      },
+      onComplete: () => ghost.destroy(),
+    });
+  }
+
   private shoot(target: LiveRock, shot: number): void {
     const { juice } = CONFIG;
     const audio = getAudio(this);
@@ -474,6 +505,12 @@ export class FactorScene extends Phaser.Scene {
       });
     } else {
       audio?.play('laserSpread', { pitch });
+      // Show what naming that factor did to the counters before they scatter:
+      // typing 3 at a 6 opens it into three twos. A ghost rather than a held
+      // rock, because the split has already happened in the simulation and
+      // leaving the parent on screen would let the player target a rock that
+      // no longer exists.
+      this.groupGhost(target, shot);
       this.explode(target.x, target.y, PALETTE.yellow, juice.killParticles);
       this.popup(
         target.x,
@@ -555,10 +592,18 @@ export class FactorScene extends Phaser.Scene {
       facets: true,
     });
 
+    // Small rocks wear their quantity: 24 counters laid out four by six, so
+    // the factors are something to see rather than recall — and a prime is
+    // visibly stuck in a single line. Past that a grid stops reading as an
+    // amount and the numeral does the work, which turns the mode's own
+    // difficulty curve into an abstraction ladder.
+    const cells = drawsAsCells(rock.value) ? this.add.graphics() : undefined;
+    if (cells) paintCells(cells, rock.value, { radius });
+
     const label = this.add
-      .text(0, 0, String(rock.value), {
+      .text(0, cells ? radius + 11 : 0, String(rock.value), {
         fontFamily: FONT,
-        fontSize: `${Math.round(radius * 0.85)}px`,
+        fontSize: `${Math.round(cells ? 17 : radius * 0.85)}px`,
         fontStyle: 'bold',
         color: CSS.white,
         stroke: CSS.black,
@@ -566,15 +611,15 @@ export class FactorScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const carrierMark = payload ? carrierRing(this, radius + 10) : null;
-    const parts: Phaser.GameObjects.GameObject[] = carrierMark
-      ? [carrierMark, gfx, label]
-      : [gfx, label];
+    const layers: Phaser.GameObjects.GameObject[] = cells ? [gfx, cells, label] : [gfx, label];
+    const parts: Phaser.GameObjects.GameObject[] = carrierMark ? [carrierMark, ...layers] : layers;
     const container = this.add.container(x, y, parts);
 
     const spinDeg = Phaser.Math.Between(a.minSpinDeg, a.maxSpinDeg) * (this.shapeRng.chance(0.5) ? 1 : -1);
 
     this.rocks.push({
       container,
+      ...(cells ? { cells } : {}),
       label,
       gfx,
       shape,
