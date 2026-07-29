@@ -4,6 +4,7 @@ import { CONFIG } from '../../core/config';
 import { creditsForRun } from '../../core/economy/economy';
 import { answerValue, type KakoomaOp } from '../../core/kakooma/kakooma';
 import { KakoomaSession } from '../../core/kakooma/session';
+import { candidates, exactIndex, matchBuffer } from '../../core/kakooma/typing';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
 import { impact, shake, shockwave } from '../../fx/juice';
@@ -35,7 +36,7 @@ const CELL_W = 190;
 const CELL_H = 150;
 const GAP = 14;
 const BOARD_CX = 640;
-const BOARD_CY = 388;
+const BOARD_CY = 374;
 
 /** Numpad order, so key 7 is the top-left of a three-by-three. */
 const PAD_ORDER = [7, 8, 9, 4, 5, 6, 1, 2, 3] as const;
@@ -68,6 +69,9 @@ export class KakoomaScene extends Phaser.Scene {
   private clockText!: Phaser.GameObjects.Text;
   /** Which cell the first keypress picked, or undefined when none is held. */
   private picked: number | undefined;
+  /** Digits typed at the picked cell. Values, not positions. */
+  private buffer = '';
+  private bufferText!: Phaser.GameObjects.Text;
   private ended = false;
   private readonly fresh = keyEventGate();
 
@@ -83,6 +87,7 @@ export class KakoomaScene extends Phaser.Scene {
     drawBackdrop(this, { sun: false, horizon: 0.97 });
     this.cells = [];
     this.picked = undefined;
+    this.buffer = '';
     this.ended = false;
 
     this.session = new KakoomaSession({
@@ -140,6 +145,15 @@ export class KakoomaScene extends Phaser.Scene {
     this.clockText = this.add
       .text(26, 18, '', { fontFamily: FONT, fontSize: '24px', fontStyle: 'bold', color: CSS.cyan })
       .setOrigin(0, 0);
+
+    this.bufferText = this.add
+      .text(this.scale.width / 2, 624, '', {
+        fontFamily: FONT,
+        fontSize: '30px',
+        fontStyle: 'bold',
+        color: CSS.yellow,
+      })
+      .setOrigin(0.5);
 
     this.promptText = this.add
       .text(this.scale.width / 2, 660, '', {
@@ -208,43 +222,94 @@ export class KakoomaScene extends Phaser.Scene {
 
   // --- input ---
 
+  /**
+   * Pick a cell by where it is, then say what you found by typing it.
+   *
+   * Cells have no value to type, so the numpad picks them by position. The
+   * numbers inside do, and typing the value is what every other mode in this
+   * game asks for — reading digits as positions there meant a player who found
+   * a 20 typed a 2 at some unrelated square and had the 0 thrown away.
+   */
   private onKey(event: KeyboardEvent): void {
     if (this.ended || !this.fresh(event)) return;
-    if (event.key === 'Backspace' || event.key === 'Escape') {
-      this.picked = undefined;
+
+    if (event.key === 'Escape') return this.clearPick();
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      if (this.buffer === '') return this.clearPick();
+      this.buffer = this.buffer.slice(0, -1);
       this.refresh();
       return;
     }
-    const digit = Number(event.key);
-    if (!Number.isInteger(digit) || digit < 1 || digit > 9) return;
-    const slot = PAD_ORDER.indexOf(digit as (typeof PAD_ORDER)[number]);
-    if (slot < 0) return;
 
-    // Once the grid has collapsed there is only one cell left — the board
-    // itself — so a single press calls it rather than picking into anything.
-    if (this.session.finalUnlocked) {
-      this.callFinal(slot);
+    const live = this.liveCell();
+    if (event.key === 'Enter' || event.key === ' ') {
+      // The escape hatch from an ambiguous buffer: in a cell holding 2 and 20,
+      // "2" waits forever unless the player can say they meant it.
+      if (!live) return this.buzz();
+      const exact = exactIndex(live.values, this.buffer);
+      if (exact === undefined) return this.buzz();
+      this.commit(exact);
       return;
     }
-    if (this.picked === undefined) {
+
+    if (!/^[0-9]$/.test(event.key)) return;
+
+    // Nothing picked yet: the digit names a cell by its place on the pad.
+    if (!live) {
+      const slot = PAD_ORDER.indexOf(Number(event.key) as (typeof PAD_ORDER)[number]);
+      if (slot < 0) return this.buzz();
       if (this.session.solvedCells[slot]) return this.buzz();
       this.picked = slot;
+      this.buffer = '';
       this.refresh();
       return;
     }
-    this.callNumber(this.picked, slot);
+
+    const next = this.buffer + event.key;
+    const match = matchBuffer(live.values, next);
+    if (match.kind === 'dead') {
+      // Never silently swallowed: no number here starts that way.
+      this.buffer = '';
+      this.buzz();
+      this.refresh();
+      return;
+    }
+    this.buffer = next;
+    if (match.kind === 'fire') this.commit(match.index);
+    else this.refresh();
+  }
+
+  /** The cell keystrokes currently address, or undefined when none is picked. */
+  private liveCell(): { values: readonly number[] } | undefined {
+    // Once the grid has collapsed there is only one cell left — the board
+    // itself — so typing addresses it directly with nothing to pick into.
+    if (this.session.finalUnlocked) return this.session.final;
+    return this.picked === undefined ? undefined : this.session.grid[this.picked];
+  }
+
+  private commit(index: number): void {
+    if (this.session.finalUnlocked) this.callFinal(index);
+    else if (this.picked !== undefined) this.callNumber(this.picked, index);
+  }
+
+  private clearPick(): void {
+    this.picked = undefined;
+    this.buffer = '';
+    this.refresh();
   }
 
   private callNumber(cell: number, index: number): void {
     if (this.ended || this.session.finalUnlocked) return;
     const out = this.session.call(cell, index);
     this.picked = undefined;
+    this.buffer = '';
     this.after(out, this.cells[cell]!);
   }
 
   private callFinal(index: number): void {
     if (this.ended || !this.session.finalUnlocked) return;
     const out = this.session.call(-1, index);
+    this.buffer = '';
     this.after(out, this.cells[index]!);
   }
 
@@ -304,18 +369,28 @@ export class KakoomaScene extends Phaser.Scene {
     const solved = this.session.solvedCells;
     const unlocked = this.session.finalUnlocked;
 
+    // What the buffer could still mean, so the cell can light it. Typing is
+    // otherwise invisible until it fires, and a player cannot tell a buffer
+    // that is still going from one the game ignored.
+    const live = this.liveCell();
+    const lit = live && this.buffer !== '' ? new Set(candidates(live.values, this.buffer)) : undefined;
+
     this.cells.forEach((view, i) => {
       const isSolved = solved[i] === true;
       const cell = this.session.grid[i]!;
+      const typingHere = !unlocked && this.picked === i;
       view.numbers.forEach((text, n) => {
         const value = cell.values[n];
         text.setVisible(!isSolved && value !== undefined);
-        if (value !== undefined) text.setText(String(value)).setColor(CSS.white);
+        if (value === undefined) return;
+        const dimmed = typingHere && lit !== undefined && !lit.has(n);
+        text.setText(String(value)).setColor(dimmed ? CSS.purple : typingHere && lit ? CSS.yellow : CSS.white);
       });
       view.answer.setVisible(isSolved).setText(String(answerValue(cell)));
       // Once the board is the final cell, its nine answers are candidates again
       // and none of them is "done" any more.
-      view.answer.setColor(unlocked ? CSS.yellow : CSS.cyan);
+      const finalDim = unlocked && lit !== undefined && !lit.has(i);
+      view.answer.setColor(!unlocked ? CSS.cyan : finalDim ? CSS.purple : CSS.yellow);
 
       const focused = this.picked === i;
       const accent = unlocked ? PALETTE.yellow : isSolved ? PALETTE.cyanDim : focused ? PALETTE.yellow : PALETTE.purple;
@@ -326,6 +401,7 @@ export class KakoomaScene extends Phaser.Scene {
     const combo = this.session.combo;
     this.comboText.setText(combo > 1 ? `x${combo}` : '');
     this.rangeText.setText(`NUMBERS TO ${this.session.range}  ·  GRIDS ${this.session.gridsCleared}`);
+    this.bufferText.setText(this.buffer === '' ? '' : `▸ ${this.buffer}`);
     this.promptText.setText(this.hint());
   }
 
@@ -358,8 +434,8 @@ export class KakoomaScene extends Phaser.Scene {
     if (this.session.finalUnlocked) {
       return `THE NINE ANSWERS ARE A CELL — FIND THE ${made} ONE LAST TIME`;
     }
-    if (this.picked !== undefined) return 'NOW THE NUMBER — NUMPAD, OR CLICK IT';
-    return `IN EACH CELL, ONE NUMBER IS THE ${made} OF TWO OTHERS  ·  NUMPAD PICKS THE CELL, THEN THE NUMBER`;
+    if (this.picked !== undefined) return 'NOW TYPE THE NUMBER YOU FOUND  ·  BACKSPACE TO GO BACK';
+    return `IN EACH CELL, ONE NUMBER IS THE ${made} OF TWO OTHERS  ·  NUMPAD PICKS A CELL, THEN TYPE THE NUMBER`;
   }
 
   // --- leaving ---
