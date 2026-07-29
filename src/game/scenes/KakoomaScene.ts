@@ -11,7 +11,6 @@ import { impact, shake, shockwave } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
-import { MenuNav } from '../../ui/MenuNav';
 import { neonButton, paintPanel } from '../../ui/panels';
 import { keyEventGate } from '../input/freshKey';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -100,12 +99,15 @@ export class KakoomaScene extends Phaser.Scene {
     this.buildHud();
     this.buildBoard();
 
-    const quit = neonButton(this, width - 120, height * 0.945, 'LEAVE', () => this.finish(), {
+    neonButton(this, width - 120, height * 0.945, 'LEAVE', () => this.finish(), {
       width: 160,
       height: 46,
       fontSize: 17,
     });
-    new MenuNav(this, [[quit]]);
+    // No MenuNav on the quit button here. MenuNav activates on ENTER *or*
+    // SPACE, and both of those are load-bearing in this mode — binding them to
+    // a button as well means the key that plays the game also leaves it. The
+    // button still answers the pointer, and ESC is the keyboard way out.
 
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
     // One key, same everywhere: the rules over a paused game. A player who

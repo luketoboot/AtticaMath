@@ -19,7 +19,16 @@ function sourceOf(scene: string): string {
 }
 
 /** Scenes a player can be stuck inside. Boss is benched but still reachable in code. */
-const PLAY_SCENES = ['Game', 'Expression', 'Factor', 'Collapse', 'Kakooma', 'Exercise', 'Boss'];
+const PLAY_SCENES = [
+  'Game',
+  'Expression',
+  'Factor',
+  'Collapse',
+  'Kakooma',
+  'Packing',
+  'Exercise',
+  'Boss',
+];
 
 describe('mode briefings', () => {
   it('gives every playable mode a page', () => {

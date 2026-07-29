@@ -642,6 +642,25 @@ export interface KakoomaConfig {
   maxCombo: number;
 }
 
+export interface PackingConfig {
+  /** Board in cells. Ten wide keeps a row a familiar thing to decompose. */
+  width: number;
+  height: number;
+  /** Values a piece can take, widening as rows fall. */
+  minValue: number;
+  startMaxValue: number;
+  maxValuePerClear: number;
+  hardestMaxValue: number;
+  /** Seconds a piece takes to fall one row, and how that tightens. */
+  startFallSeconds: number;
+  fallSpeedupPerClear: number;
+  minFallSeconds: number;
+  /** Score for a row, multiplied by how many went at once. */
+  rowPoints: number;
+  /** Score for landing a piece as a proper rectangle rather than a bar. */
+  rectanglePoints: number;
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
@@ -657,6 +676,7 @@ export interface GameConfig {
   factor: FactorConfig;
   collapse: CollapseConfig;
   kakooma: KakoomaConfig;
+  packing: PackingConfig;
   boss: BossConfig;
   exercise: ExerciseConfig;
   hazard: HazardConfig;
@@ -918,6 +938,19 @@ export const CONFIG: GameConfig = {
     splitSpeed: 90,
     aimHysteresisDeg: 3,
     aimSnapDeg: 14,
+  },
+  packing: {
+    width: 10,
+    height: 14,
+    minValue: 2,
+    startMaxValue: 12,
+    maxValuePerClear: 1,
+    hardestMaxValue: 36,
+    startFallSeconds: 0.85,
+    fallSpeedupPerClear: 0.97,
+    minFallSeconds: 0.22,
+    rowPoints: 220,
+    rectanglePoints: 25,
   },
   kakooma: {
     cellSize: 9,

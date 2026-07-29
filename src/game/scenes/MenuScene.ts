@@ -60,6 +60,14 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     onSelect: () => {},
   },
   {
+    label: 'GNOMON',
+    tagline: 'PACK NUMBERS BY THE RECTANGLES THEY MAKE.',
+    icon: 'gnomon',
+    accent: PALETTE.magentaHot,
+    scene: 'Packing',
+    onSelect: () => {},
+  },
+  {
     label: 'EXERCISE',
     tagline: 'BREAK IT DOWN. SOLVE IT SMALL. BUILD IT BACK.',
     icon: 'exercise',
@@ -89,7 +97,7 @@ export class MenuScene extends Phaser.Scene {
     // atmosphere here — still synthwave, no longer a second thing to read.
     drawBackdrop(this, { sunAlpha: 0.32, horizon: 0.88, sunHorizon: 1.06 });
 
-    titleLogo(this, width / 2, 86, 'METEOR MATH', {
+    titleLogo(this, width / 2, 86, 'NUMERACY', {
       fontSize: 66,
       subtitle: 'ARITHMETIC AT SPEED  ·  NO CALCULATOR, NO MERCY',
     });
@@ -99,7 +107,7 @@ export class MenuScene extends Phaser.Scene {
     // Modes across one row, so no mode reads as buried under another. The
     // card narrows as modes are added rather than the row wrapping: a second
     // row would make the modes on it read as lesser.
-    const cardLayout = { width: 172, height: 214 };
+    const cardLayout = { width: 148, height: 214 };
     const deck = new CardDeck(this, this.modeSpecs(), cardLayout, (i, n) => ({
       x: spread(width / 2, 1120, i, n),
       y: 322,

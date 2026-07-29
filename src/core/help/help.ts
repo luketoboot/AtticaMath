@@ -106,6 +106,18 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
     gotcha:
       'Nothing here is timed and nothing is lost by breaking a problem down. The mode measures how far out you had to go, and it is trying to become unnecessary.',
   },
+  Packing: {
+    title: 'GNOMON',
+    goal: 'Pack the falling numbers into full rows. A full row clears.',
+    lines: [
+      { key: 'A / D', text: 'Move the piece.' },
+      { key: 'W', text: 'Refactor it: 12 can be 6x2, 4x3, 3x4 or 2x6. Same area, new shape.' },
+      { key: 'S', text: 'Drop it now.' },
+      { key: 'SPACE', text: 'Same thing, harder.' },
+    ],
+    gotcha:
+      'A prime has no rectangle, so it can only fall as a bar — those are the ones that ruin a board. Turning a piece never changes how much space it takes, only what shape that space is.',
+  },
   Boss: {
     title: 'BOSS RUSH',
     goal: 'Chip the boss down with expressions, and block what it throws back.',

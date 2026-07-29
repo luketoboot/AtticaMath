@@ -26,7 +26,8 @@ export type IconName =
   | 'settings'
   | 'playbook'
   | 'exercise'
-  | 'kakooma';
+  | 'kakooma'
+  | 'gnomon';
 
 type Pt = readonly [number, number];
 
@@ -373,6 +374,27 @@ function kakooma(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameObj
   return [g];
 }
 
+
+function gnomon(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameObject[] {
+  const s = st.size / 2;
+  const g = scene.add.graphics();
+  // The gnomon itself: a square, and the L-shaped border that grows it into the
+  // next square. Add the odd number and the shape is preserved — which is the
+  // Pythagorean picture of 1 + 3 + 5 + 7 = 16.
+  g.fillStyle(st.dim, 0.28);
+  g.fillRect(-0.86 * s, -0.06 * s, 0.8 * s, 0.8 * s);
+  g.lineStyle(2.5, st.dim, 1);
+  g.strokeRect(-0.86 * s, -0.06 * s, 0.8 * s, 0.8 * s);
+  // The border wrapping its top and right.
+  g.fillStyle(st.color, 0.3);
+  g.fillRect(-0.86 * s, -0.72 * s, 1.5 * s, 0.62 * s);
+  g.fillRect(-0.02 * s, -0.06 * s, 0.66 * s, 0.8 * s);
+  g.lineStyle(2.5, st.color, 1);
+  g.strokeRect(-0.86 * s, -0.72 * s, 1.5 * s, 0.62 * s);
+  g.strokeRect(-0.02 * s, -0.06 * s, 0.66 * s, 0.8 * s);
+  return [g];
+}
+
 const PAINTERS: Readonly<
   Record<IconName, (scene: Phaser.Scene, st: IconStyle) => Phaser.GameObjects.GameObject[]>
 > = {
@@ -388,6 +410,7 @@ const PAINTERS: Readonly<
   playbook,
   exercise,
   kakooma,
+  gnomon,
 };
 
 /**

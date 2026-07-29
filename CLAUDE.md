@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-## Project: Arcade Math Game (working title)
+## Project: Numeracy
 
 Browser based arcade arithmetic game. Hotline Miami aesthetic: CRT shader, neon on black, synthwave soundtrack (provided by the owner, do not generate music). Target audience is elementary students through adults. No kid theming anywhere. Difficulty is fully adaptive, driven by a per skill rating model. The game never displays grade levels.
 
