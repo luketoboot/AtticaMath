@@ -9,10 +9,12 @@ import { DailyScene } from './game/scenes/DailyScene';
 import { DebriefScene } from './game/scenes/DebriefScene';
 import { ExerciseScene } from './game/scenes/ExerciseScene';
 import { ExerciseSelectScene } from './game/scenes/ExerciseSelectScene';
+import { ExpressionSelectScene } from './game/scenes/ExpressionSelectScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
 import { KakoomaScene } from './game/scenes/KakoomaScene';
 import { KakoomaSelectScene } from './game/scenes/KakoomaSelectScene';
 import { FactorScene } from './game/scenes/FactorScene';
+import { HelpScene } from './game/scenes/HelpScene';
 import { GameScene } from './game/scenes/GameScene';
 import { LeaderboardScene } from './game/scenes/LeaderboardScene';
 import { MenuScene } from './game/scenes/MenuScene';
@@ -38,6 +40,7 @@ const game = new Phaser.Game({
     MenuScene,
     ModeSelectScene,
     GameScene,
+    ExpressionSelectScene,
     ExpressionScene,
     FactorScene,
     KakoomaSelectScene,
@@ -57,6 +60,7 @@ const game = new Phaser.Game({
     ControlsScene,
     VideoScene,
     PauseScene,
+    HelpScene,
   ],
 });
 

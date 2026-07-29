@@ -269,6 +269,14 @@ export class ExerciseScene extends Phaser.Scene {
     );
     this.numpad.applySessionDefault(isTouchDevice());
 
+    // One key, same everywhere: the rules over a paused game. A player who
+    // wants these is stuck mid-run, and quitting to find out how a mode works
+    // is how a mode gets abandoned rather than learned.
+    this.input.keyboard?.on('keydown-H', () => {
+      if (this.scene.isActive('Help')) return;
+      this.scene.launch('Help', { target: 'Exercise' });
+      this.scene.pause();
+    });
     this.input.keyboard?.once('keydown-ESC', () => this.leave());
     // Any key or tap during a held animation runs the step it was holding.
     this.input.keyboard?.on('keydown', () => this.runPending());

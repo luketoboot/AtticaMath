@@ -133,6 +133,10 @@ const PRESETS = [
     },
   },
   { name: 'KakoomaSelect', scene: 'KakoomaSelect' },
+  { name: 'ExpressionSelect', scene: 'ExpressionSelect' },
+  // The briefing overlay, over a real board rather than on its own — it is
+  // drawn on top of a paused mode and that is the layering worth watching.
+  { name: 'Help-kakooma', scene: 'Kakooma', keys: ['h'] },
   {
     // Like Exercise, this is all layout and seeds from a stubbed Math.random,
     // so the board it deals is the same one every time.

@@ -31,7 +31,7 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     tagline: 'BUILD THE TARGET OUT OF THE HAND YOU ARE DEALT.',
     icon: 'expression',
     accent: PALETTE.cyan,
-    scene: 'Expression',
+    scene: 'ExpressionSelect',
     onSelect: () => {},
   },
   {

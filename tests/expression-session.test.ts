@@ -64,7 +64,9 @@ describe('hand as the wave resource', () => {
       state.rating = CONFIG.expression.fourChipRating + 100;
       state.attempts = 5;
     }
-    const s = freshSession({ seed: 13, skills });
+    // The level caps par now, so the high-par path has to be asked for by name
+    // rather than reached by having a good rating. That is the point of levels.
+    const s = freshSession({ seed: 13, skills, levelId: 'countdown' });
     let sawBigPar = false;
     for (let wave = 0; wave < 6; wave++) {
       s.nextWave();

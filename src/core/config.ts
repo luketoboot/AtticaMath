@@ -234,6 +234,27 @@ export interface ScoreConfig {
   speedBonusMultiplier: number;
 }
 
+/**
+ * A chosen size of puzzle.
+ *
+ * Expression Builder had no chooser: difficulty came only from the player's
+ * rating, which is an average across every mode. Get good at Meteor Defense and
+ * this mode silently jumps to three- and four-chip Countdown puzzles you never
+ * asked for. The rating still moves the puzzle inside a level; the level says
+ * how far it is allowed to go.
+ */
+export interface ExpressionLevel {
+  id: string;
+  label: string;
+  blurb: string;
+  /** Ceiling on par, whatever the rating says. Par is the difficulty. */
+  maxPar: number;
+  chipMax: number;
+  bigChipChance: number;
+  maxTarget: number;
+  baseFallSeconds: number;
+}
+
 export interface ExpressionConfig {
   /** Targets per wave, ramping over the run. */
   baseTargetsPerWave: number;
@@ -265,6 +286,8 @@ export interface ExpressionConfig {
   varietyBonusPerOperator: number;
   /** Weight multiplier for operators the player has been avoiding. */
   avoidedOpWeight: number;
+  /** Chooseable sizes. The first is the default for a player who has not picked. */
+  levels: readonly ExpressionLevel[];
   /** Overall rating thresholds that raise the target size to 3 and 4 chips. */
   threeChipRating: number;
   fourChipRating: number;
@@ -793,6 +816,38 @@ export const CONFIG: GameConfig = {
     maxPaceTier: 4,
   },
   expression: {
+    levels: [
+      {
+        id: 'short',
+        label: 'SHORT',
+        blurb: 'TWO CHIPS AND AN OPERATOR.\nONE STEP, NO BOOKKEEPING.',
+        maxPar: 2,
+        chipMax: 9,
+        bigChipChance: 0,
+        maxTarget: 99,
+        baseFallSeconds: 22,
+      },
+      {
+        id: 'standard',
+        label: 'STANDARD',
+        blurb: 'UP TO THREE CHIPS.\nA STEP, THEN A SECOND ONE ON TOP OF IT.',
+        maxPar: 3,
+        chipMax: 12,
+        bigChipChance: 0.1,
+        maxTarget: 300,
+        baseFallSeconds: 19,
+      },
+      {
+        id: 'countdown',
+        label: 'COUNTDOWN',
+        blurb: 'FOUR CHIPS, BIG NUMBERS, THE WHOLE HAND.\nTHE NUMBERS ROUND, AT SPEED.',
+        maxPar: 4,
+        chipMax: 12,
+        bigChipChance: 0.15,
+        maxTarget: 999,
+        baseFallSeconds: 16,
+      },
+    ],
     baseTargetsPerWave: 5,
     targetsPerWaveGrowth: 1,
     maxTargetsPerWave: 9,

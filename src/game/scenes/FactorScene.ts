@@ -173,6 +173,14 @@ export class FactorScene extends Phaser.Scene {
     this.pad = new FlightPad(this, { onVisibleChange: (on) => this.keyHints?.setVisible(!on) });
     this.pad.applySessionDefault(isTouchDevice());
 
+    // One key, same everywhere: the rules over a paused game. A player who
+    // wants these is stuck mid-run, and quitting to find out how a mode works
+    // is how a mode gets abandoned rather than learned.
+    this.input.keyboard?.on('keydown-H', () => {
+      if (this.scene.isActive('Help')) return;
+      this.scene.launch('Help', { target: 'Factor' });
+      this.scene.pause();
+    });
     onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Factor' });

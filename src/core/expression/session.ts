@@ -22,7 +22,7 @@ import {
   tickCombo,
   type ComboState,
 } from '../combo';
-import { CONFIG, type GameConfig } from '../config';
+import { CONFIG, type ExpressionLevel, type GameConfig } from '../config';
 import { selectTip, type CoachPick } from '../coach/select';
 import { DropTracker, type DropKind, type DropState } from '../drops';
 import { creditsForRun, killScore, type RunStats } from '../economy/economy';
@@ -43,6 +43,8 @@ export interface ExpressionSessionInit {
   skills: SkillTable;
   totalWavesBefore: number;
   config?: GameConfig;
+  /** Chosen puzzle size. Falls back to the first level when unset. */
+  levelId?: string;
 }
 
 /** A live target that had to be re-rolled because the hand can no longer make it. */
@@ -99,8 +101,27 @@ export class ExpressionSession {
   hp: number;
   private readonly maxHp: number;
 
+  /** The chosen level, resolved once. */
+  private readonly level: ExpressionLevel;
+
   constructor(init: ExpressionSessionInit) {
-    this.cfg = init.config ?? CONFIG;
+    const base = init.config ?? CONFIG;
+    this.level =
+      base.expression.levels.find((l) => l.id === init.levelId) ?? base.expression.levels[0]!;
+    // The level is folded into the config the whole session reads, so nothing
+    // downstream has to know a level exists — generation, fall time and the
+    // solver all just see a narrower game.
+    this.cfg = {
+      ...base,
+      expression: {
+        ...base.expression,
+        maxChips: this.level.maxPar,
+        chipMax: this.level.chipMax,
+        bigChipChance: this.level.bigChipChance,
+        maxTarget: this.level.maxTarget,
+        baseFallSeconds: this.level.baseFallSeconds,
+      },
+    };
     this.rng = createRng(init.seed);
     this.skills = { ...init.skills };
     this.startWave = init.totalWavesBefore;
@@ -285,12 +306,23 @@ export class ExpressionSession {
     return attempted.reduce((sum, s) => sum + s.rating, 0) / attempted.length;
   }
 
+  /**
+   * How many chips the next target should want.
+   *
+   * Rating still moves this, but only inside the level. Difficulty used to come
+   * from rating alone — an average across every mode — so getting good at
+   * Meteor Defense silently promoted this one to four-chip Countdown puzzles
+   * the player never asked for.
+   */
   private desiredPar(): number {
     const e = this.cfg.expression;
     const rating = this.overallRating();
-    if (rating >= e.fourChipRating) return 4;
-    if (rating >= e.threeChipRating) return 3;
-    return 2;
+    const wanted = rating >= e.fourChipRating ? 4 : rating >= e.threeChipRating ? 3 : 2;
+    return Math.min(wanted, this.level.maxPar);
+  }
+
+  get levelLabel(): string {
+    return this.level.label;
   }
 
   // --- wave flow ---
