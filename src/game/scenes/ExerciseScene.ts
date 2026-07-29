@@ -119,6 +119,8 @@ export class ExerciseScene extends Phaser.Scene {
   private frameH = MAX_BLOCK;
   /** Blocks input between banking a problem and dealing the next one. */
   private busy = false;
+  /** A step waiting on an animation, and the timer that will run it anyway. */
+  private pending: { timer: Phaser.Time.TimerEvent; run: () => void } | undefined;
 
   constructor() {
     super('Exercise');
@@ -268,6 +270,9 @@ export class ExerciseScene extends Phaser.Scene {
     this.numpad.applySessionDefault(isTouchDevice());
 
     this.input.keyboard?.once('keydown-ESC', () => this.leave());
+    // Any key or tap during a held animation runs the step it was holding.
+    this.input.keyboard?.on('keydown', () => this.runPending());
+    this.input.on('pointerdown', () => this.runPending());
 
     this.dealProblem();
   }
@@ -798,7 +803,7 @@ export class ExerciseScene extends Phaser.Scene {
       });
       this.busy = true;
       this.refresh();
-      this.time.delayedCall(Math.max(900, this.framesUi?.resolveMs ?? 0), () => this.advance());
+      this.waitThen(Math.max(900, this.framesUi?.resolveMs ?? 0), () => this.advance());
       return;
     }
 
@@ -808,7 +813,36 @@ export class ExerciseScene extends Phaser.Scene {
     // Let the solved rung land before the next one opens; back to back they
     // read as one event and the player loses which number they just banked.
     // A rung with counters still moving gets as long as the exchange needs.
-    this.time.delayedCall(Math.max(420, this.framesUi?.resolveMs ?? 0), () => this.rebuild());
+    this.waitThen(Math.max(420, this.framesUi?.resolveMs ?? 0), () => this.rebuild());
+  }
+
+  /**
+   * Hold for an animation, but let the player cut it short.
+   *
+   * Watching ten counters leave a frame explains carrying the first time and
+   * costs a second the twentieth, and a mode whose whole point is to become
+   * unnecessary must not charge rent. Any key or tap finishes the exchange and
+   * moves on; nothing is lost, because what the animation leaves behind is what
+   * it was trying to say.
+   */
+  private waitThen(ms: number, run: () => void): void {
+    this.pending?.timer.remove();
+    const timer = this.time.delayedCall(ms, () => this.runPending());
+    this.pending = { timer, run };
+  }
+
+  private runPending(): void {
+    const step = this.pending;
+    if (!step) return;
+    this.pending = undefined;
+    step.timer.remove();
+    this.framesUi?.finish();
+    step.run();
+  }
+
+  /** True while a step is waiting, so the prompt can offer the skip. */
+  private get waiting(): boolean {
+    return this.pending !== undefined;
   }
 
   private advance(): void {
@@ -911,8 +945,10 @@ export class ExerciseScene extends Phaser.Scene {
       return this.session.bars.done ? 'SOLVED' : 'CUT THE BARS UNTIL THE SLICES AGREE, THEN TYPE IT';
     }
     const state = this.session.state;
-    if (state.done) return 'SOLVED';
-    if (state.layerSolved) return 'BUILDING THE NEXT PLACE BACK…';
+    if (state.done) return this.waiting ? 'ANY KEY TO CARRY ON' : 'SOLVED';
+    if (state.layerSolved) {
+      return this.waiting ? 'ANY KEY TO SKIP AHEAD' : 'BUILDING THE NEXT PLACE BACK…';
+    }
     if (state.locked) return 'ANSWER THIS RUNG';
     return 'TYPE THE ANSWER, OR BREAK IT DOWN UNTIL YOU CAN SEE IT';
   }

@@ -136,6 +136,21 @@ export class PlaceFrames {
     this.draw();
   }
 
+  /**
+   * Jump to the end of whatever is running.
+   *
+   * The exchange is worth watching once, not every time, and an animation that
+   * cannot be dismissed is a toll rather than an explanation. Skipping is safe
+   * here precisely because the end state is the informative one and it persists
+   * — the counters left standing are the answer's digits either way.
+   */
+  finish(): void {
+    if (this.mode === 'idle') return;
+    this.elapsed = this.mode === 'intro' ? INTRO_MS : this.resolveMs;
+    this.mode = 'idle';
+    this.draw();
+  }
+
   setVisible(on: boolean): void {
     this.visible = on;
     this.gfx.setVisible(on);
