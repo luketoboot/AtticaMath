@@ -642,23 +642,14 @@ export interface KakoomaConfig {
   maxCombo: number;
 }
 
-export interface PackingConfig {
-  /** Board in cells. Ten wide keeps a row a familiar thing to decompose. */
-  width: number;
-  height: number;
-  /** Values a piece can take, widening as rows fall. */
-  minValue: number;
-  startMaxValue: number;
-  maxValuePerClear: number;
-  hardestMaxValue: number;
-  /** Seconds a piece takes to fall one row, and how that tightens. */
-  startFallSeconds: number;
-  fallSpeedupPerClear: number;
-  minFallSeconds: number;
-  /** Score for a row, multiplied by how many went at once. */
-  rowPoints: number;
-  /** Score for landing a piece as a proper rectangle rather than a bar. */
-  rectanglePoints: number;
+export interface CagesConfig {
+  /** Grid width when nothing else is chosen. */
+  defaultSize: number;
+  puzzlesPerSet: number;
+  solvePoints: number;
+  cleanBonus: number;
+  /** Difficulty added per cell beyond a pair — a four-cell cage is real work. */
+  perCellDifficulty: number;
 }
 
 export interface GameConfig {
@@ -676,7 +667,7 @@ export interface GameConfig {
   factor: FactorConfig;
   collapse: CollapseConfig;
   kakooma: KakoomaConfig;
-  packing: PackingConfig;
+  cages: CagesConfig;
   boss: BossConfig;
   exercise: ExerciseConfig;
   hazard: HazardConfig;
@@ -939,18 +930,12 @@ export const CONFIG: GameConfig = {
     aimHysteresisDeg: 3,
     aimSnapDeg: 14,
   },
-  packing: {
-    width: 10,
-    height: 14,
-    minValue: 2,
-    startMaxValue: 12,
-    maxValuePerClear: 1,
-    hardestMaxValue: 36,
-    startFallSeconds: 0.85,
-    fallSpeedupPerClear: 0.97,
-    minFallSeconds: 0.22,
-    rowPoints: 220,
-    rectanglePoints: 25,
+  cages: {
+    defaultSize: 4,
+    puzzlesPerSet: 3,
+    solvePoints: 500,
+    cleanBonus: 250,
+    perCellDifficulty: 60,
   },
   kakooma: {
     cellSize: 9,

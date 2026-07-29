@@ -106,17 +106,18 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
     gotcha:
       'Nothing here is timed and nothing is lost by breaking a problem down. The mode measures how far out you had to go, and it is trying to become unnecessary.',
   },
-  Packing: {
-    title: 'GNOMON',
-    goal: 'Pack the falling numbers into full rows. A full row clears.',
+  Cages: {
+    title: 'CAGES',
+    goal: 'Fill every row and column with 1 to N once, and make every cage hit its target.',
     lines: [
-      { key: 'A / D', text: 'Move the piece.' },
-      { key: 'W', text: 'Refactor it: 12 can be 6x2, 4x3, 3x4 or 2x6. Same area, new shape.' },
-      { key: 'S', text: 'Drop it now.' },
-      { key: 'SPACE', text: 'Same thing, harder.' },
+      { key: 'ARROWS', text: 'Move around the grid. Clicking a cell works too.' },
+      { key: 'DIGITS', text: 'Write a digit into the selected cell.' },
+      { key: 'BACKSPACE', text: 'Rub it out.' },
+      { key: '24×', text: 'A cage label: those cells must multiply to 24. Also + and − and ÷.' },
+      { key: '3', text: 'A label with no sign is a one-cell cage — that digit, given to you.' },
     ],
     gotcha:
-      'A prime has no rectangle, so it can only fall as a bar — those are the ones that ruin a board. Turning a piece never changes how much space it takes, only what shape that space is.',
+      'A cage is only judged once every cell in it is filled, so a half-written one is never wrong. Start with the small cages: they pin down the rows the big ones need.',
   },
   Boss: {
     title: 'BOSS RUSH',

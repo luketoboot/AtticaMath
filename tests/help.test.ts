@@ -25,7 +25,7 @@ const PLAY_SCENES = [
   'Factor',
   'Collapse',
   'Kakooma',
-  'Packing',
+  'Cages',
   'Exercise',
   'Boss',
 ];

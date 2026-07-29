@@ -134,7 +134,7 @@ const PRESETS = [
   },
   { name: 'KakoomaSelect', scene: 'KakoomaSelect' },
   { name: 'ExpressionSelect', scene: 'ExpressionSelect' },
-  { name: 'Packing', scene: 'Packing' },
+  { name: 'Cages', scene: 'Cages' },
   // The briefing overlay, over a real board rather than on its own — it is
   // drawn on top of a paused mode and that is the layering worth watching.
   { name: 'Help-kakooma', scene: 'Kakooma', keys: ['h'] },

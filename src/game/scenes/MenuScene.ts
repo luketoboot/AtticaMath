@@ -60,11 +60,11 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     onSelect: () => {},
   },
   {
-    label: 'GNOMON',
-    tagline: 'PACK NUMBERS BY THE RECTANGLES THEY MAKE.',
+    label: 'CAGES',
+    tagline: 'FILL THE GRID. EVERY REGION MUST MAKE ITS TARGET.',
     icon: 'gnomon',
-    accent: PALETTE.magentaHot,
-    scene: 'Packing',
+    accent: PALETTE.yellow,
+    scene: 'Cages',
     onSelect: () => {},
   },
   {
