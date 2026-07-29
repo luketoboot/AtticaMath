@@ -5,6 +5,12 @@ Optional. Every effect here already has a synthesized version in
 fail silently, so the game runs fine with this directory empty or half-filled.
 Add one file, hear one improvement.
 
+**After dropping files in, run `npm run audio`.** A sample the game never asks
+for is the one failure this folder can hide: missing files fall back to
+synthesis silently, so a misspelled filename sounds exactly like a file you
+never added. That check tells the two apart, and lists which effects are still
+down to a single take.
+
 Files are streamed from the site root (`public/sfx/gun_fraction_a.mp3` is
 fetched as `sfx/gun_fraction_a.mp3`) and are **not** part of the JS bundle, so
 they don't count against the 2MB budget. Keep each one small — these are short
