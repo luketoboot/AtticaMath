@@ -146,7 +146,9 @@ describe('presentation helpers', () => {
       expect(MODE_LABEL[mode]).toBeTruthy();
       expect(MODE_TAB_LABEL[mode]).toBeTruthy();
     }
-    const boards = new Set(['Game', 'Expression', 'Factor', 'Collapse'].map(modeFromSceneKey));
+    const boards = new Set(
+      ['Game', 'Expression', 'Factor', 'Collapse', 'Kakooma'].map(modeFromSceneKey),
+    );
     expect([...boards].sort()).toEqual([...LEADERBOARD_MODES].sort());
   });
 

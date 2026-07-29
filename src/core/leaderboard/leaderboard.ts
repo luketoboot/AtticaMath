@@ -6,7 +6,13 @@
  */
 
 /** One board per mode: scores across modes are not comparable. */
-export type LeaderboardMode = 'meteor' | 'expression' | 'factor' | 'collapse' | 'boss';
+export type LeaderboardMode =
+  | 'meteor'
+  | 'expression'
+  | 'factor'
+  | 'collapse'
+  | 'kakooma'
+  | 'boss';
 
 /**
  * Menu order. Every playable mode has a board — adding one here adds its tab.
@@ -18,6 +24,7 @@ export const LEADERBOARD_MODES: readonly LeaderboardMode[] = [
   'expression',
   'factor',
   'collapse',
+  'kakooma',
 ];
 
 export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {
@@ -25,6 +32,7 @@ export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   expression: 'EXPRESSION BUILDER',
   factor: 'FACTOR STORM',
   collapse: 'COLLAPSE',
+  kakooma: 'KAKOOMA',
   boss: 'BOSS RUSH',
 };
 
@@ -37,6 +45,7 @@ export const MODE_TAB_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   expression: 'EXPRESSION',
   factor: 'FACTOR',
   collapse: 'COLLAPSE',
+  kakooma: 'KAKOOMA',
   boss: 'BOSS RUSH',
 };
 
@@ -49,6 +58,8 @@ export function modeFromSceneKey(key: string | undefined): LeaderboardMode {
       return 'factor';
     case 'Collapse':
       return 'collapse';
+    case 'Kakooma':
+      return 'kakooma';
     case 'Boss':
       return 'boss';
     default:

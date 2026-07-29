@@ -586,6 +586,31 @@ export interface DailyConfig {
   boardSize: number;
 }
 
+export interface KakoomaConfig {
+  /** Numbers per cell, and cells per grid. Tang runs 4, 6, 7 and 9. */
+  cellSize: number;
+  gridSize: number;
+  /**
+   * The band every number in a cell lives in, sum included. It widens as grids
+   * are cleared, which is the only difficulty knob this mode needs: more room
+   * means more near-misses to rule out before the real pair turns up.
+   */
+  startMax: number;
+  maxPerGrid: number;
+  hardestMax: number;
+  /** The clock, in seconds: what a run starts with and what clearing a grid buys back. */
+  startSeconds: number;
+  gridBonusSeconds: number;
+  /** A wrong call costs time, which is this game's existing price for a wrong answer. */
+  wrongPenaltySeconds: number;
+  /** Points for a cell and for the grid's final cell, before the combo multiplier. */
+  cellPoints: number;
+  finalPoints: number;
+  /** Consecutive correct calls needed per step of multiplier, and its ceiling. */
+  comboStep: number;
+  maxCombo: number;
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
@@ -600,6 +625,7 @@ export interface GameConfig {
   asteroid: AsteroidOptions & { minSpinDeg: number; maxSpinDeg: number };
   factor: FactorConfig;
   collapse: CollapseConfig;
+  kakooma: KakoomaConfig;
   boss: BossConfig;
   exercise: ExerciseConfig;
   hazard: HazardConfig;
@@ -829,6 +855,20 @@ export const CONFIG: GameConfig = {
     splitSpeed: 90,
     aimHysteresisDeg: 3,
     aimSnapDeg: 14,
+  },
+  kakooma: {
+    cellSize: 9,
+    gridSize: 9,
+    startMax: 20,
+    maxPerGrid: 6,
+    hardestMax: 60,
+    startSeconds: 90,
+    gridBonusSeconds: 25,
+    wrongPenaltySeconds: 4,
+    cellPoints: 100,
+    finalPoints: 400,
+    comboStep: 4,
+    maxCombo: 6,
   },
   collapse: {
     basePairs: 3,

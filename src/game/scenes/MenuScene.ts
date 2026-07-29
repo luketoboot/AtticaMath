@@ -52,6 +52,14 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     onSelect: () => {},
   },
   {
+    label: 'KAKOOMA',
+    tagline: 'ONE NUMBER IS THE SUM OF TWO OTHERS. FIND IT.',
+    icon: 'kakooma',
+    accent: PALETTE.yellow,
+    scene: 'Kakooma',
+    onSelect: () => {},
+  },
+  {
     label: 'EXERCISE',
     tagline: 'BREAK IT DOWN. SOLVE IT SMALL. BUILD IT BACK.',
     icon: 'exercise',
@@ -88,8 +96,10 @@ export class MenuScene extends Phaser.Scene {
 
     this.drawStatusStrip(saves, 176);
 
-    // Modes across one row, so no mode reads as buried under another.
-    const cardLayout = { width: 208, height: 214 };
+    // Modes across one row, so no mode reads as buried under another. The
+    // card narrows as modes are added rather than the row wrapping: a second
+    // row would make the modes on it read as lesser.
+    const cardLayout = { width: 172, height: 214 };
     const deck = new CardDeck(this, this.modeSpecs(), cardLayout, (i, n) => ({
       x: spread(width / 2, 1120, i, n),
       y: 322,

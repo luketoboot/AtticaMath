@@ -132,6 +132,12 @@ const PRESETS = [
       },
     },
   },
+  {
+    // Like Exercise, this is all layout and seeds from a stubbed Math.random,
+    // so the board it deals is the same one every time.
+    name: 'Kakooma',
+    scene: 'Kakooma',
+  },
   { name: 'ExerciseSelect', scene: 'ExerciseSelect' },
   {
     // The one play scene worth a golden: it is all layout, it needs no live

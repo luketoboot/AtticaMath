@@ -25,7 +25,8 @@ export type IconName =
   | 'brainscan'
   | 'settings'
   | 'playbook'
-  | 'exercise';
+  | 'exercise'
+  | 'kakooma';
 
 type Pt = readonly [number, number];
 
@@ -349,6 +350,29 @@ function exercise(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameOb
   return [g];
 }
 
+
+function kakooma(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameObject[] {
+  const s = st.size / 2;
+  const g = scene.add.graphics();
+  // A three-by-three of numbers with one of them lit: the cell, and the one
+  // number in it that is the sum of two others.
+  const lit = 4;
+  const parts = [1, 6];
+  for (let i = 0; i < 9; i++) {
+    const x = ((i % 3) - 1) * 0.62 * s;
+    const y = (Math.floor(i / 3) - 1) * 0.62 * s;
+    const found = i === lit;
+    const part = parts.includes(i);
+    g.fillStyle(found ? st.color : st.dim, found ? 0.9 : part ? 0.45 : 0.18);
+    g.fillCircle(x, y, (found ? 0.2 : 0.15) * s);
+    if (found || part) {
+      g.lineStyle(2, found ? st.color : st.dim, 1);
+      g.strokeCircle(x, y, (found ? 0.2 : 0.15) * s);
+    }
+  }
+  return [g];
+}
+
 const PAINTERS: Readonly<
   Record<IconName, (scene: Phaser.Scene, st: IconStyle) => Phaser.GameObjects.GameObject[]>
 > = {
@@ -363,6 +387,7 @@ const PAINTERS: Readonly<
   settings,
   playbook,
   exercise,
+  kakooma,
 };
 
 /**
