@@ -129,8 +129,8 @@ export class KakoomaSession {
    * difficulty move has no evidence they are getting anywhere.
    */
   get range(): number {
-    const k = this.cfg.kakooma;
-    return Math.min(k.hardestMax, k.startMax + this.grids * k.maxPerGrid);
+    const band = this.cfg.kakooma[this.op];
+    return Math.min(band.hardestMax, band.startMax + this.grids * band.maxPerGrid);
   }
 
   // --- play ---

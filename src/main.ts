@@ -11,6 +11,7 @@ import { ExerciseScene } from './game/scenes/ExerciseScene';
 import { ExerciseSelectScene } from './game/scenes/ExerciseSelectScene';
 import { ExpressionScene } from './game/scenes/ExpressionScene';
 import { KakoomaScene } from './game/scenes/KakoomaScene';
+import { KakoomaSelectScene } from './game/scenes/KakoomaSelectScene';
 import { FactorScene } from './game/scenes/FactorScene';
 import { GameScene } from './game/scenes/GameScene';
 import { LeaderboardScene } from './game/scenes/LeaderboardScene';
@@ -39,6 +40,7 @@ const game = new Phaser.Game({
     GameScene,
     ExpressionScene,
     FactorScene,
+    KakoomaSelectScene,
     KakoomaScene,
     CollapseScene,
     ExerciseSelectScene,

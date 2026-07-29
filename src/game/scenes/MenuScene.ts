@@ -53,10 +53,10 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
   },
   {
     label: 'KAKOOMA',
-    tagline: 'ONE NUMBER IS THE SUM OF TWO OTHERS. FIND IT.',
+    tagline: 'ONE NUMBER IS WHAT TWO OTHERS MAKE. FIND IT.',
     icon: 'kakooma',
     accent: PALETTE.yellow,
-    scene: 'Kakooma',
+    scene: 'KakoomaSelect',
     onSelect: () => {},
   },
   {

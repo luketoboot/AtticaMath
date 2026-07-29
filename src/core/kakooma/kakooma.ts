@@ -71,6 +71,16 @@ export interface KakoomaOptions {
 
 const MAX_ATTEMPTS = 200;
 
+/**
+ * Biggest factor a product cell will plant.
+ *
+ * Multiplication here is the times tables, so the pair has to be a table fact.
+ * Left unbounded the generator happily plants 29 x 2 = 58, which is arithmetic
+ * but not a fact anybody is drilling, and the skill mapping has nowhere to put
+ * it either.
+ */
+const MUL_FACTOR_MAX = 12;
+
 function combine(op: KakoomaOp, a: number, b: number): number {
   return op === 'add' ? a + b : a * b;
 }
@@ -111,13 +121,37 @@ export function isWellFormed(values: readonly number[], op: KakoomaOp): boolean 
  */
 function viablePairs(op: KakoomaOp, max: number): [number, number, number][] {
   const pairs: [number, number, number][] = [];
-  for (let a = op === 'add' ? 1 : 2; a <= max; a++) {
-    for (let b = a; b <= max; b++) {
+  const ceiling = op === 'add' ? max : Math.min(max, MUL_FACTOR_MAX);
+  for (let a = op === 'add' ? 1 : 2; a <= ceiling; a++) {
+    for (let b = a; b <= ceiling; b++) {
       const total = combine(op, a, b);
       if (total <= max) pairs.push([a, b, total]);
     }
   }
   return pairs;
+}
+
+/**
+ * Numbers worth putting on the board as distractors.
+ *
+ * A sum cell can use anything in range: every number is a plausible addend, so
+ * every number has to be ruled out. A product cell cannot. Filling one from the
+ * whole range buries the puzzle in 47s and 59s that no player ever considers as
+ * a factor or a product, and the search quietly collapses onto the handful of
+ * small numbers. So a product cell is built only from things that could be
+ * either — the factors themselves, and the products they make.
+ */
+function candidatePool(op: KakoomaOp, max: number): number[] {
+  if (op === 'add') return Array.from({ length: max - 1 }, (_, i) => i + 2);
+  const pool = new Set<number>();
+  for (let a = 2; a <= Math.min(max, MUL_FACTOR_MAX); a++) {
+    pool.add(a);
+    for (let b = a; b <= MUL_FACTOR_MAX; b++) {
+      const product = a * b;
+      if (product <= max) pool.add(product);
+    }
+  }
+  return [...pool].sort((x, y) => x - y);
 }
 
 /**
@@ -151,9 +185,7 @@ export function generateCell(
 
     // Offer every number in range, in a random order, and keep the ones that do
     // not introduce a second relationship.
-    const pool = rng.shuffle(
-      Array.from({ length: opts.max - 1 }, (_, i) => i + 2).filter((v) => !values.includes(v)),
-    );
+    const pool = rng.shuffle(candidatePool(opts.op, opts.max).filter((v) => !values.includes(v)));
     for (const candidate of pool) {
       if (values.length >= opts.cellSize) break;
       values.push(candidate);

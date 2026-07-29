@@ -132,12 +132,16 @@ const PRESETS = [
       },
     },
   },
+  { name: 'KakoomaSelect', scene: 'KakoomaSelect' },
   {
     // Like Exercise, this is all layout and seeds from a stubbed Math.random,
     // so the board it deals is the same one every time.
     name: 'Kakooma',
     scene: 'Kakooma',
   },
+  // Products are a different board, not a relabelled one: the distractors are
+  // drawn from factors and their products rather than from the whole range.
+  { name: 'Kakooma-times', scene: 'Kakooma', data: { op: 'mul' } },
   { name: 'ExerciseSelect', scene: 'ExerciseSelect' },
   {
     // The one play scene worth a golden: it is all layout, it needs no live

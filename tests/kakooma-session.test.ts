@@ -106,7 +106,7 @@ describe('KakoomaSession', () => {
       clearGrid(s);
       s.call(-1, s.final.answer);
     }
-    expect(s.range).toBe(CONFIG.kakooma.hardestMax);
+    expect(s.range).toBe(CONFIG.kakooma.add.hardestMax);
   });
 
   it('runs out of time, and stops taking calls when it does', () => {

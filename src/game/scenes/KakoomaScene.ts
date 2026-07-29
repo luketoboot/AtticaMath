@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
 import { creditsForRun } from '../../core/economy/economy';
-import { answerValue } from '../../core/kakooma/kakooma';
+import { answerValue, type KakoomaOp } from '../../core/kakooma/kakooma';
 import { KakoomaSession } from '../../core/kakooma/session';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
@@ -52,6 +52,10 @@ interface CellView {
   y: number;
 }
 
+interface KakoomaSceneData {
+  op?: KakoomaOp;
+}
+
 export class KakoomaScene extends Phaser.Scene {
   private saves!: SaveManager;
   private session!: KakoomaSession;
@@ -71,7 +75,7 @@ export class KakoomaScene extends Phaser.Scene {
     super('Kakooma');
   }
 
-  create(): void {
+  create(data: KakoomaSceneData): void {
     const { width, height } = this.scale;
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
     getAudio(this)?.playMusic('game');
@@ -85,6 +89,7 @@ export class KakoomaScene extends Phaser.Scene {
       seed: (Math.random() * 0xffffffff) >>> 0,
       skills: this.saves.save.skills,
       totalWavesBefore: this.saves.save.totalWaves,
+      ...(data.op ? { op: data.op } : {}),
     });
 
     this.buildHud();
@@ -108,7 +113,7 @@ export class KakoomaScene extends Phaser.Scene {
     const { width } = this.scale;
     makeIcon(this, width / 2 - 118, 40, 'factor', { size: 30, color: PALETTE.yellow, dim: PALETTE.magenta });
     this.add
-      .text(width / 2 + 6, 40, 'KAKOOMA', {
+      .text(width / 2 + 6, 40, this.session.operation === 'mul' ? 'KAKOOMA TIMES' : 'KAKOOMA PLUS', {
         fontFamily: FONT,
         fontSize: '28px',
         fontStyle: 'bold',
@@ -349,11 +354,12 @@ export class KakoomaScene extends Phaser.Scene {
   }
 
   private hint(): string {
+    const made = this.session.operation === 'mul' ? 'PRODUCT' : 'SUM';
     if (this.session.finalUnlocked) {
-      return 'THE NINE ANSWERS ARE A CELL — FIND THE SUM ONE LAST TIME';
+      return `THE NINE ANSWERS ARE A CELL — FIND THE ${made} ONE LAST TIME`;
     }
     if (this.picked !== undefined) return 'NOW THE NUMBER — NUMPAD, OR CLICK IT';
-    return 'IN EACH CELL, ONE NUMBER IS THE SUM OF TWO OTHERS  ·  NUMPAD PICKS THE CELL, THEN THE NUMBER';
+    return `IN EACH CELL, ONE NUMBER IS THE ${made} OF TWO OTHERS  ·  NUMPAD PICKS THE CELL, THEN THE NUMBER`;
   }
 
   // --- leaving ---

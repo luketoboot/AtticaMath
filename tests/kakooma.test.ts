@@ -10,6 +10,7 @@ import {
 import { createRng } from '../src/core/rng';
 
 const ADD: KakoomaOptions = { op: 'add', max: 20, cellSize: 9, gridSize: 9 };
+const MUL: KakoomaOptions = { op: 'mul', max: 60, cellSize: 9, gridSize: 9 };
 
 describe('relationships', () => {
   it('finds the sum hiding in a group', () => {
@@ -112,8 +113,36 @@ describe('generateCell', () => {
     }
   });
 
+  it('plants only times-table facts in a product cell', () => {
+    // Left unbounded the generator happily plants 29 x 2 = 58 — arithmetic, but
+    // not a fact anybody drills, and the skill mapping has nowhere to put it.
+    const rng = createRng(31);
+    for (let i = 0; i < 200; i++) {
+      const cell = generateCell(rng, MUL)!;
+      const [a, b] = cell.parts;
+      expect(Math.max(cell.values[a]!, cell.values[b]!)).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it('fills a product cell only with plausible factors and products', () => {
+    // A 47 on a multiplication board is dead weight: nobody considers it as a
+    // factor or a product, so the search collapses onto the small numbers.
+    const plausible = new Set<number>();
+    for (let a = 2; a <= 12; a++) {
+      plausible.add(a);
+      for (let b = a; b <= 12; b++) plausible.add(a * b);
+    }
+    const rng = createRng(8);
+    for (let i = 0; i < 200; i++) {
+      for (const value of generateCell(rng, MUL)!.values) {
+        expect(plausible.has(value)).toBe(true);
+      }
+    }
+  });
+
   it('is reproducible from a seed', () => {
     expect(generateCell(createRng(77), ADD)).toEqual(generateCell(createRng(77), ADD));
+    expect(generateCell(createRng(77), MUL)).toEqual(generateCell(createRng(77), MUL));
   });
 });
 
@@ -135,6 +164,16 @@ describe('generatePuzzle', () => {
     expect(puzzle.cells).toHaveLength(9);
     for (const cell of puzzle.cells) {
       expect(relationships(cell.values, 'add')).toHaveLength(1);
+    }
+  });
+
+  it('nests products too', () => {
+    const rng = createRng(17);
+    for (let i = 0; i < 20; i++) {
+      const puzzle = generatePuzzle(rng, MUL);
+      expect(puzzle).toBeDefined();
+      expect(puzzle!.cells.map(answerValue)).toEqual([...puzzle!.final.values]);
+      expect(isWellFormed(puzzle!.final.values, 'mul')).toBe(true);
     }
   });
 

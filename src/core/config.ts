@@ -586,18 +586,26 @@ export interface DailyConfig {
   boardSize: number;
 }
 
+/**
+ * The band every number in a cell lives in, answer included. It widens as grids
+ * are cleared, which is the only difficulty knob this mode needs: more room
+ * means more near-misses to rule out before the real pair turns up.
+ *
+ * Sums and products need different bands. Twenty is a full day's work for
+ * addition and would leave multiplication with almost no table facts to plant.
+ */
+export interface KakoomaBand {
+  startMax: number;
+  maxPerGrid: number;
+  hardestMax: number;
+}
+
 export interface KakoomaConfig {
   /** Numbers per cell, and cells per grid. Tang runs 4, 6, 7 and 9. */
   cellSize: number;
   gridSize: number;
-  /**
-   * The band every number in a cell lives in, sum included. It widens as grids
-   * are cleared, which is the only difficulty knob this mode needs: more room
-   * means more near-misses to rule out before the real pair turns up.
-   */
-  startMax: number;
-  maxPerGrid: number;
-  hardestMax: number;
+  add: KakoomaBand;
+  mul: KakoomaBand;
   /** The clock, in seconds: what a run starts with and what clearing a grid buys back. */
   startSeconds: number;
   gridBonusSeconds: number;
@@ -859,9 +867,9 @@ export const CONFIG: GameConfig = {
   kakooma: {
     cellSize: 9,
     gridSize: 9,
-    startMax: 20,
-    maxPerGrid: 6,
-    hardestMax: 60,
+    add: { startMax: 20, maxPerGrid: 6, hardestMax: 60 },
+    // Products reach 12 x 12, and start where the small tables live.
+    mul: { startMax: 36, maxPerGrid: 9, hardestMax: 144 },
     startSeconds: 90,
     gridBonusSeconds: 25,
     wrongPenaltySeconds: 4,
