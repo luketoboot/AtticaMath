@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { applyDifficulty, CONFIG, type DifficultyId } from '../../core/config';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
-import { answeredPrompt } from '../../core/generator/answered';
 import type { Problem } from '../../core/generator/problem';
 import { drillFilterFor } from '../../core/coach/techniques';
 import { burstFor, cannonFor } from '../../core/cosmetics/cosmetics';
@@ -610,55 +609,56 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
-    this.answerEcho(x, y, m.problem);
+    this.answerEcho(x, y, m.problem, shielded ? CSS.cyan : CSS.red);
     this.updateHud();
     if (this.session.gameOver) this.endRun();
   }
 
   /**
-   * What the rock was, said once as it breaks.
+   * The answer, thrown out of the blast.
    *
    * The only moment in the mode where the player is certainly missing a fact
    * and can do nothing about it — the meteor is gone, the HP is spent, and
-   * knowing the answer now costs the run nothing. So it is worth the frame:
-   * seeing "7 x 8 = 56" at the point of failure is how the next one gets typed.
+   * knowing the answer now costs the run nothing. So the number the rock was
+   * carrying comes out of the explosion, and the next one like it gets typed.
    *
-   * Deliberately quiet. It waits out the flash rather than fighting it and
-   * never uses the colours the kill feedback owns — a landing is not a reward
-   * and must not flicker like one. It sits in the dark band *above* the blast:
-   * the first attempt put it under, which is where the neon horizon and the
-   * cannon are, and dim cyan on a magenta line is unreadable.
+   * The number alone, not the equation. The problem was on screen for the whole
+   * fall and the player has just been staring at it; repeating it spends the
+   * one legible instant on the half they already know. What they never saw is
+   * the answer.
+   *
+   * Born *with* the blast rather than after it, in the blast's own colour and
+   * on the blast's own timing, so it reads as debris and not as a caption: it
+   * punches out from nothing on the shockwave, holds while the fire dies, and
+   * goes up with the smoke.
    */
-  private answerEcho(x: number, y: number, problem: Problem): void {
+  private answerEcho(x: number, y: number, problem: Problem, accent: string): void {
     const text = this.add
-      .text(x, y - 44, answeredPrompt(problem), {
+      .text(x, y - 16, problem.answer, {
         fontFamily: FONT,
-        fontSize: '19px',
-        color: CSS.cyanDim,
-        stroke: CSS.black,
-        strokeThickness: 4,
+        fontSize: '46px',
+        fontStyle: 'bold',
+        color: CSS.white,
+        stroke: accent,
+        strokeThickness: 7,
       })
       .setOrigin(0.5)
-      .setAlpha(0)
+      .setScale(0.3)
       .setDepth(4);
-    // Kept on screen: a fact glimpsed for half a second is not learned, and the
-    // wave is still going, so it has to leave on its own.
+    // Out on the shockwave: fast, overshooting, the same shape as the ring.
+    this.tweens.add({ targets: text, scale: 1, duration: 260, ease: 'Back.easeOut' });
+    // Then up and out with everything else the explosion threw. It holds a full
+    // second at opacity first — the blast is over in a blink and the number is
+    // the one thing here meant to be taken away from it.
     this.tweens.add({
       targets: text,
-      alpha: { from: 0, to: 0.85 },
-      y: y - 62,
-      duration: 260,
-      delay: 190,
-      ease: 'Cubic.easeOut',
-      onComplete: () => {
-        this.tweens.add({
-          targets: text,
-          alpha: 0,
-          duration: 500,
-          delay: 1500,
-          onComplete: () => text.destroy(),
-        });
-      },
+      alpha: 0,
+      y: y - 74,
+      scale: 0.86,
+      delay: 1000,
+      duration: 480,
+      ease: 'Cubic.easeIn',
+      onComplete: () => text.destroy(),
     });
   }
 
