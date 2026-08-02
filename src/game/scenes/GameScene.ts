@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { applyDifficulty, CONFIG, type DifficultyId } from '../../core/config';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
+import { answeredPrompt } from '../../core/generator/answered';
 import type { Problem } from '../../core/generator/problem';
 import { drillFilterFor } from '../../core/coach/techniques';
 import { burstFor, cannonFor } from '../../core/cosmetics/cosmetics';
@@ -286,8 +287,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Pickups keep falling through a freeze — otherwise the reward window would
-    // strand the reward.
-    this.updatePickups(dt);
+    // strand the reward — and they hurry with everything else on fast-forward.
+    // A drop drifting down at its own pace was the one thing the key could not
+    // hurry, so holding it to clear a wave meant waiting on the reward you had
+    // just earned. It cuts both ways, like the rest of fast-forward: the cannon
+    // still moves in real time, so a hurried drop is a harder catch. The key is
+    // under your thumb, and letting go is the answer to that.
+    this.updatePickups(dt * ff);
 
     // Overdrive and freeze pickups halt the descent but not the spawning: the
     // board fills up while you clear it for free, then it all resumes at once.
@@ -604,8 +610,56 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
+    this.answerEcho(x, y, m.problem);
     this.updateHud();
     if (this.session.gameOver) this.endRun();
+  }
+
+  /**
+   * What the rock was, said once as it breaks.
+   *
+   * The only moment in the mode where the player is certainly missing a fact
+   * and can do nothing about it — the meteor is gone, the HP is spent, and
+   * knowing the answer now costs the run nothing. So it is worth the frame:
+   * seeing "7 x 8 = 56" at the point of failure is how the next one gets typed.
+   *
+   * Deliberately quiet. It waits out the flash rather than fighting it and
+   * never uses the colours the kill feedback owns — a landing is not a reward
+   * and must not flicker like one. It sits in the dark band *above* the blast:
+   * the first attempt put it under, which is where the neon horizon and the
+   * cannon are, and dim cyan on a magenta line is unreadable.
+   */
+  private answerEcho(x: number, y: number, problem: Problem): void {
+    const text = this.add
+      .text(x, y - 44, answeredPrompt(problem), {
+        fontFamily: FONT,
+        fontSize: '19px',
+        color: CSS.cyanDim,
+        stroke: CSS.black,
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0)
+      .setDepth(4);
+    // Kept on screen: a fact glimpsed for half a second is not learned, and the
+    // wave is still going, so it has to leave on its own.
+    this.tweens.add({
+      targets: text,
+      alpha: { from: 0, to: 0.85 },
+      y: y - 62,
+      duration: 260,
+      delay: 190,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        this.tweens.add({
+          targets: text,
+          alpha: 0,
+          duration: 500,
+          delay: 1500,
+          onComplete: () => text.destroy(),
+        });
+      },
+    });
   }
 
   private tryFire(buffer: string): void {

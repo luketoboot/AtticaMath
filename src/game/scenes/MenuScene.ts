@@ -48,7 +48,6 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     icon: 'collapse',
     accent: PALETTE.magentaHot,
     scene: 'Collapse',
-    badge: 'PROTO',
     onSelect: () => {},
   },
   {
