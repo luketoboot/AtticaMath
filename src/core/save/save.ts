@@ -23,7 +23,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 8;
+export const CURRENT_SAVE_VERSION = 9;
 
 export interface SaveV1 {
   version: 1;
@@ -98,7 +98,20 @@ export interface SaveV8 extends Omit<SaveV7, 'version'> {
   daily?: DailyRecord;
 }
 
-export type Save = SaveV8;
+/**
+ * Which modes have already shown their worked example.
+ *
+ * A mode whose rules are discoverable by playing it needs no entry here. CAGES
+ * is the one that is not: a player can know both rules and still not know what
+ * a move looks like, so its walkthrough runs itself the first time and then
+ * gets out of the way — which needs exactly one bit of memory per mode.
+ */
+export interface SaveV9 extends Omit<SaveV8, 'version'> {
+  version: 9;
+  taught: string[];
+}
+
+export type Save = SaveV9;
 
 export function defaultSave(): Save {
   return {
@@ -119,6 +132,7 @@ export function defaultSave(): Save {
     milestones: [],
     keybindings: defaultBindings(),
     trouble: {},
+    taught: [],
   };
 }
 
@@ -205,6 +219,12 @@ export function migrate(raw: unknown): Save {
     // to give an existing profile: nobody has spent an attempt they never had.
     save = { ...save, version: 8 };
   }
+  if (save.version === 8) {
+    // Nobody has been taught anything yet, and an existing profile is if
+    // anything more likely to have bounced off CAGES than a new one. Empty is
+    // the honest state as well as the useful one.
+    save = { ...save, version: 9, taught: [] };
+  }
   if (save.version === CURRENT_SAVE_VERSION) {
     const current = save as unknown as Save;
     // A hand-edited or half-written settings block must not reach the shader.
@@ -213,6 +233,7 @@ export function migrate(raw: unknown): Save {
       settings: { ...current.settings, video: sanitizeVideoSettings(current.settings?.video) },
       // A hand-edited or truncated save must not hand the coach a non-object.
       trouble: typeof current.trouble === 'object' && current.trouble !== null ? current.trouble : {},
+      taught: Array.isArray(current.taught) ? current.taught : [],
     };
   }
   // Anything unrecognised below the current version: start fresh.

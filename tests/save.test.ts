@@ -181,6 +181,27 @@ describe('migrate', () => {
   });
 });
 
+describe('v8 → v9 walkthrough migration', () => {
+  it('has taught an existing profile nothing, which is the truth', () => {
+    const { taught: _drop, ...v8 } = { ...defaultSave(), version: 8 as const };
+    const out = migrate(v8);
+    expect(out.version).toBe(CURRENT_SAVE_VERSION);
+    // An existing profile is if anything likelier to have bounced off CAGES
+    // than a new one, so it gets the worked example too.
+    expect(out.taught).toEqual([]);
+  });
+
+  it('keeps a mode that has already been shown', () => {
+    const save = { ...defaultSave(), taught: ['Cages'] };
+    expect(migrate(save).taught).toEqual(['Cages']);
+  });
+
+  it('replaces a hand-edited list that is not one', () => {
+    const broken = { ...defaultSave(), taught: 7 as unknown as string[] };
+    expect(migrate(broken).taught).toEqual([]);
+  });
+});
+
 describe('v6 → v7 coach migration', () => {
   it('starts the coach empty, because the past cannot be reconstructed', () => {
     const { trouble: _drop, ...v6 } = { ...defaultSave(), version: 6 as const };

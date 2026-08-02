@@ -134,7 +134,19 @@ const PRESETS = [
   },
   { name: 'KakoomaSelect', scene: 'KakoomaSelect' },
   { name: 'ExpressionSelect', scene: 'ExpressionSelect' },
-  { name: 'Cages', scene: 'Cages' },
+  // The board as a player who has already been shown the mode sees it.
+  { name: 'Cages', scene: 'Cages', save: { taught: ['Cages'] } },
+  // And as a player who has not: the worked example runs itself on the way in,
+  // which is now the first thing anyone sees of CAGES.
+  { name: 'CagesLearn', scene: 'Cages' },
+  {
+    // Mid-walkthrough, where the drawing is doing its actual job: two cages lit,
+    // this step's digits in yellow, the ones already worked out in white.
+    name: 'CagesLearn-working',
+    scene: 'Cages',
+    keys: ['Space', 'Space', 'Space', 'Space', 'Space'],
+  },
+  { name: 'Help-cages', scene: 'Cages', keys: ['h'], save: { taught: ['Cages'] } },
   // The briefing overlay, over a real board rather than on its own — it is
   // drawn on top of a paused mode and that is the layering worth watching.
   { name: 'Help-kakooma', scene: 'Kakooma', keys: ['h'] },
@@ -181,6 +193,9 @@ const DEFAULT_SAVE = {
   placementDone: true,
   skills: {},
   milestones: [],
+  // Reset like everything else here: a mode that teaches itself once would
+  // otherwise show its walkthrough to the first shot of a batch and no other.
+  taught: [],
 };
 
 function parseArgs(argv) {
@@ -257,6 +272,7 @@ function resolveOne(target, opts) {
     name: overrides.length ? [preset.scene, ...overrides].join('-') : preset.name,
     data: { ...preset.data, ...opts.data },
     save: preset.save,
+    keys: preset.keys,
   };
 }
 
@@ -264,7 +280,7 @@ function resolveOne(target, opts) {
  * Boot the game, install a fixture, run one scene, and read the canvas back.
  * Reused across every shot in a batch so one browser serves the whole sweep.
  */
-async function shoot(page, { name, scene, data, save }, opts) {
+async function shoot(page, { name, scene, data, save, keys }, opts) {
   const settings = { ...DEFAULT_SAVE, ...save, ...opts.save };
 
   await page.evaluate(
@@ -291,8 +307,13 @@ async function shoot(page, { name, scene, data, save }, opts) {
       }
 
       // Stop whatever is currently up, or two scenes render over each other.
-      for (const active of game.scene.getScenes(true)) {
-        if (active.scene.key !== sceneKey) game.scene.stop(active.scene.key);
+      // Paused counts as up: an overlay preset leaves the mode underneath it
+      // paused rather than stopped, and a paused scene still draws — and still
+      // comes back the moment something resumes it.
+      for (const other of game.scene.getScenes(false)) {
+        const sys = other.sys;
+        if (other.scene.key === sceneKey) continue;
+        if (sys.isActive() || sys.isPaused() || sys.isSleeping()) game.scene.stop(other.scene.key);
       }
       game.scene.start(sceneKey, sceneData);
 
@@ -336,8 +357,12 @@ async function shoot(page, { name, scene, data, save }, opts) {
 
   await page.waitForTimeout(opts.settle);
 
-  if (opts.keys) {
-    for (const key of opts.keys) await page.keyboard.press(key);
+  // A preset's own keys, unless the command line asked for others. Without this
+  // an overlay preset in an `all` batch quietly shot the scene underneath it —
+  // `Help-kakooma` was a second copy of `Kakooma` for as long as it existed.
+  const pressed = opts.keys ?? keys;
+  if (pressed) {
+    for (const key of pressed) await page.keyboard.press(key);
     await page.waitForTimeout(opts.after);
   }
 

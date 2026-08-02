@@ -112,20 +112,39 @@ export class HelpScene extends Phaser.Scene {
         .setOrigin(0.5, 0);
     }
 
-    this.closeOn(data.target, height);
+    this.closeOn(data.target, height, page.walkthrough);
   }
 
-  private closeOn(target: string, height: number): void {
+  private closeOn(target: string, height: number, walkthrough?: string): void {
     const close = (): void => {
       this.scene.stop();
       this.scene.resume(target);
     };
-    neonButton(this, this.scale.width / 2, height - 74, 'BACK TO IT', close, {
+    // A mode with a walkthrough leaves the panel two ways: back to the grid, or
+    // to a worked example — which is the one a player who read this and is
+    // still stuck actually needs. The target stays paused underneath either way.
+    const shift = walkthrough === undefined ? 0 : 160;
+    neonButton(this, this.scale.width / 2 - shift, height - 74, 'BACK TO IT', close, {
       width: 260,
       height: 50,
       fontSize: 20,
       accent: PALETTE.yellow,
     });
+    if (walkthrough !== undefined) {
+      const show = (): void => {
+        this.scene.stop();
+        this.scene.launch(walkthrough, { target });
+      };
+      neonButton(this, this.scale.width / 2 + shift, height - 74, 'SHOW ME ONE', show, {
+        width: 260,
+        height: 50,
+        fontSize: 20,
+      });
+      // The same key the page tells you about, and the same one the mode itself
+      // answers to. A button nothing on the keyboard reaches is a dead end in a
+      // game played with both hands on the keys.
+      this.input.keyboard?.once('keydown-E', show);
+    }
     // Any of the ways a player reaches for "make this go away".
     this.input.keyboard?.once('keydown-H', close);
     this.input.keyboard?.once('keydown-ESC', close);

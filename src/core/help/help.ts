@@ -27,6 +27,14 @@ export interface HelpPage {
   lines: readonly HelpLine[];
   /** The thing players get wrong, said plainly. Omitted when there isn't one. */
   gotcha?: string;
+  /**
+   * Scene that shows the mode being played, for a mode where the rules are not
+   * the hard part. A page can say what a cage is in one line and still leave a
+   * player with no idea what a move looks like; when that is true, telling them
+   * again in different words is not the fix, and this is the way out of the
+   * panel rather than back to the grid they were stuck on.
+   */
+  walkthrough?: string;
 }
 
 export const HELP: Readonly<Record<string, HelpPage>> = {
@@ -108,16 +116,18 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
   },
   Cages: {
     title: 'CAGES',
-    goal: 'Fill every row and column with 1 to N once, and make every cage hit its target.',
+    goal: 'On a 4x4, every row and column holds 1, 2, 3, 4 once — and every cage makes its target.',
     lines: [
-      { key: 'ARROWS', text: 'Move around the grid. Clicking a cell works too.' },
-      { key: 'DIGITS', text: 'Write a digit into the selected cell.' },
-      { key: 'BACKSPACE', text: 'Rub it out.' },
-      { key: '24×', text: 'A cage label: those cells must multiply to 24. Also + and − and ÷.' },
+      { key: '24×', text: 'A cage label. Those cells must multiply to 24. Also + and − and ÷.' },
       { key: '3', text: 'A label with no sign is a one-cell cage — that digit, given to you.' },
+      { key: 'HOW', text: '24 over three cells is 2×3×4 and nothing else, so those are your digits.' },
+      { key: 'ARROWS', text: 'Move around the grid. Clicking a cell works too.' },
+      { key: 'DIGITS', text: 'Write a digit into the selected cell. BACKSPACE rubs it out.' },
+      { key: 'E', text: 'Watch a whole puzzle worked out, one deduction at a time.' },
     ],
     gotcha:
-      'A cage is only judged once every cell in it is filled, so a half-written one is never wrong. Start with the small cages: they pin down the rows the big ones need.',
+      'A cage is only judged once every cell in it is filled, so a half-written one is never wrong. Start with the cage that has the fewest ways to be filled — it pins down the rows the others need.',
+    walkthrough: 'CagesLearn',
   },
   Boss: {
     title: 'BOSS RUSH',

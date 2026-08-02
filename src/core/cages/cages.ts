@@ -87,6 +87,55 @@ export function latinSquare(rng: Rng, size: number): number[] {
   return out;
 }
 
+/** One side of one cell that wants a heavy line drawn along it. */
+export interface CageEdge {
+  cell: number;
+  /** Offsets from the cell's top-left corner, in cell widths. */
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/**
+ * Where a cage's outline runs: every side whose neighbour is in another cage,
+ * plus the outside of the grid.
+ *
+ * Geometry rather than drawing, so the board and the worked example draw the
+ * same boxes from the same rule instead of two loops that can drift apart.
+ */
+export function cageEdges(size: number, cages: readonly Cage[]): CageEdge[] {
+  const cageOf = new Array<number>(size * size).fill(-1);
+  cages.forEach((cage, i) => {
+    for (const cell of cage.cells) cageOf[cell] = i;
+  });
+
+  const out: CageEdge[] = [];
+  for (let i = 0; i < size * size; i++) {
+    const r = rowOf(i, size);
+    const c = colOf(i, size);
+    if (r === 0 || cageOf[i - size] !== cageOf[i]) out.push({ cell: i, x1: 0, y1: 0, x2: 1, y2: 0 });
+    if (r === size - 1 || cageOf[i + size] !== cageOf[i]) {
+      out.push({ cell: i, x1: 0, y1: 1, x2: 1, y2: 1 });
+    }
+    if (c === 0 || cageOf[i - 1] !== cageOf[i]) out.push({ cell: i, x1: 0, y1: 0, x2: 0, y2: 1 });
+    if (c === size - 1 || cageOf[i + 1] !== cageOf[i]) {
+      out.push({ cell: i, x1: 1, y1: 0, x2: 1, y2: 1 });
+    }
+  }
+  return out;
+}
+
+/** The cell a cage's label is written in: its top-left, the way it is on paper. */
+export function cageHead(cage: Cage): number {
+  return [...cage.cells].sort((a, b) => a - b)[0]!;
+}
+
+/** What a cage wears in its corner. A one-cell cage is a digit; an operator would be noise. */
+export function cageLabel(cage: Cage): string {
+  return cage.cells.length === 1 ? `${cage.target}` : `${cage.target}${OP_SIGN[cage.op]}`;
+}
+
 /** Cells sharing an edge with `index`. */
 export function neighbours(index: number, size: number): number[] {
   const r = rowOf(index, size);
@@ -166,8 +215,18 @@ export function cageSatisfied(cage: Cage, values: readonly number[]): boolean {
  * Used for one thing: proving a generated puzzle has exactly one answer. A
  * second solution means the player can be right and told they are wrong, which
  * is the worst thing a puzzle can do.
+ *
+ * `given` pins cells that are already written (0 for empty), which is how the
+ * worked example proves it never asks the player to guess: a cell is forced
+ * when every other digit in it leaves the rest of the grid with no filling at
+ * all.
  */
-export function countSolutions(size: number, cages: readonly Cage[], limit = 2): number {
+export function countSolutions(
+  size: number,
+  cages: readonly Cage[],
+  limit = 2,
+  given?: readonly number[],
+): number {
   const cageOf = new Array<number>(size * size).fill(-1);
   cages.forEach((cage, i) => {
     for (const cell of cage.cells) cageOf[cell] = i;
@@ -201,7 +260,9 @@ export function countSolutions(size: number, cages: readonly Cage[], limit = 2):
     }
     const r = rowOf(index, size);
     const c = colOf(index, size);
+    const pinned = given?.[index] ?? 0;
     for (let value = 1; value <= size; value++) {
+      if (pinned !== 0 && value !== pinned) continue;
       let clash = false;
       for (let i = 0; i < size; i++) {
         if (grid[r * size + i] === value || grid[i * size + c] === value) {

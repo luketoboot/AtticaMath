@@ -68,6 +68,20 @@ describe('mode briefings', () => {
     }
   });
 
+  it('points at a walkthrough scene that exists, and says which key opens it', () => {
+    // A page naming a scene the build does not have would leave a button that
+    // does nothing — and the panel is where a player goes when already stuck.
+    for (const [scene, page] of Object.entries(HELP)) {
+      if (page.walkthrough === undefined) continue;
+      expect(() => sourceOf(page.walkthrough!.replace(/Scene$/, '')), scene).not.toThrow();
+      expect(
+        page.lines.some((line) => line.key === 'E'),
+        `${scene} offers a walkthrough but never says which key opens it`,
+      ).toBe(true);
+      expect(sourceOf(scene), `${scene}Scene does not answer E`).toContain('keydown-E');
+    }
+  });
+
   it('has no page for a scene that is not a mode', () => {
     expect(helpFor('Menu')).toBeUndefined();
     expect(helpFor('Shop')).toBeUndefined();

@@ -10,7 +10,7 @@ import {
   seedForDate,
 } from '../src/core/daily/daily';
 import { createRng } from '../src/core/rng';
-import { migrate, type SaveV7 } from '../src/core/save/save';
+import { CURRENT_SAVE_VERSION, migrate, type SaveV7 } from '../src/core/save/save';
 import { RunSession } from '../src/core/session';
 import { createSkillTable, type SkillTable } from '../src/core/skills/rating';
 import { allSkillIds, getSkill } from '../src/core/skills/taxonomy';
@@ -236,12 +236,14 @@ describe('a daily run is the same run for everyone', () => {
   });
 });
 
-describe('save migration to v8', () => {
+describe('save migration from v7', () => {
   it('leaves an existing profile with an unspent run and its credits intact', () => {
     const current = migrate({});
     const v7: SaveV7 = { ...current, version: 7, credits: 750 };
     const migrated = migrate(v7);
-    expect(migrated.version).toBe(8);
+    // Whatever the newest version is: the chain runs to the end, and what this
+    // test is about is what survives it.
+    expect(migrated.version).toBe(CURRENT_SAVE_VERSION);
     // No record means available, which is the right thing to give a profile
     // that never had an attempt to spend.
     expect(migrated.daily).toBeUndefined();

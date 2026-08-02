@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
-import { colOf, OP_SIGN, rowOf } from '../../core/cages/cages';
+import { cageEdges, cageHead, cageLabel, colOf, rowOf } from '../../core/cages/cages';
 import { CageSession } from '../../core/cages/session';
 import { CONFIG } from '../../core/config';
 import { creditsForRun } from '../../core/economy/economy';
@@ -95,8 +95,18 @@ export class CagesScene extends Phaser.Scene {
       this.scene.launch('Help', { target: 'Cages' });
       this.scene.pause();
     });
+    this.input.keyboard?.on('keydown-E', () => this.walkThrough());
 
     this.redraw();
+
+    // The rules of this mode are two sentences and knowing them is still not
+    // enough to make a move, so the worked example is not something a new
+    // player has to go looking for. Once, then never again unless asked.
+    if (!this.saves.save.taught.includes('Cages')) {
+      this.saves.save.taught.push('Cages');
+      this.saves.persist();
+      this.walkThrough();
+    }
   }
 
   private buildHud(): void {
@@ -230,6 +240,13 @@ export class CagesScene extends Phaser.Scene {
     this.redraw();
   }
 
+  /** The example, over the paused board, so a player comes back to their own grid. */
+  private walkThrough(): void {
+    if (this.scene.isActive('CagesLearn') || this.scene.isActive('Help')) return;
+    this.scene.launch('CagesLearn', { target: 'Cages' });
+    this.scene.pause();
+  }
+
   private buzz(): void {
     getAudio(this)?.play('error');
     shake(this, 70, 0.003);
@@ -266,33 +283,22 @@ export class CagesScene extends Phaser.Scene {
     const g = this.cageLines;
     g.clear();
     g.lineStyle(4, PALETTE.cyan, 0.95);
-    for (let i = 0; i < size * size; i++) {
-      const x = this.originX + colOf(i, size) * CELL;
-      const y = this.originY + rowOf(i, size) * CELL;
-      const r = rowOf(i, size);
-      const c = colOf(i, size);
-      if (r === 0 || cageOf[i - size] !== cageOf[i]) g.lineBetween(x, y, x + CELL, y);
-      if (r === size - 1 || cageOf[i + size] !== cageOf[i]) {
-        g.lineBetween(x, y + CELL, x + CELL, y + CELL);
-      }
-      if (c === 0 || cageOf[i - 1] !== cageOf[i]) g.lineBetween(x, y, x, y + CELL);
-      if (c === size - 1 || cageOf[i + 1] !== cageOf[i]) {
-        g.lineBetween(x + CELL, y, x + CELL, y + CELL);
-      }
+    for (const edge of cageEdges(size, puzzle.cages)) {
+      const x = this.originX + colOf(edge.cell, size) * CELL;
+      const y = this.originY + rowOf(edge.cell, size) * CELL;
+      g.lineBetween(x + edge.x1 * CELL, y + edge.y1 * CELL, x + edge.x2 * CELL, y + edge.y2 * CELL);
     }
 
     // The label sits in each cage's top-left cell, the way it is written on paper.
     puzzle.cages.forEach((cage, i) => {
-      const head = [...cage.cells].sort((a, b) => a - b)[0]!;
+      const head = cageHead(cage);
       const x = this.originX + colOf(head, size) * CELL;
       const y = this.originY + rowOf(head, size) * CELL;
       const text = this.label(i);
-      // A one-cell cage is simply the digit, so the operator would be noise.
-      const shown = cage.cells.length === 1 ? `${cage.target}` : `${cage.target}${OP_SIGN[cage.op]}`;
       text
         .setVisible(true)
         .setPosition(x + 8, y + 5)
-        .setText(shown)
+        .setText(cageLabel(cage))
         .setColor(broken.has(i) ? CSS.red : CSS.yellow);
     });
     for (let i = puzzle.cages.length; i < this.labels.length; i++) this.labels[i]!.setVisible(false);
@@ -324,7 +330,7 @@ export class CagesScene extends Phaser.Scene {
     this.promptText.setText(
       state.brokenLines
         ? 'A DIGIT IS REPEATED IN A ROW OR COLUMN'
-        : `EACH ROW AND COLUMN TAKES 1 TO ${size} ONCE  ·  A CAGE MUST MAKE ITS TARGET  ·  H FOR THE RULES`,
+        : `EACH ROW AND COLUMN TAKES 1 TO ${size} ONCE  ·  A CAGE MUST MAKE ITS TARGET  ·  H RULES  ·  E EXAMPLE`,
     );
   }
 
