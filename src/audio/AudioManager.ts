@@ -173,10 +173,14 @@ const SAMPLES: Partial<Record<SfxName, readonly SampleLayer[]>> = {
   // a good run does not repeat the same reading, and a low reverb send because
   // a voice line wants to sit forward of the field rather than in it. Until a
   // file exists it synthesizes a ricochet, which reads as the same event.
+  // Gain above unity on purpose. The take peaks at -1.2dBFS where the kill
+  // samples sit at 0, and its average energy is ~8dB under the detonation it
+  // has to be heard over — a voice is intelligibility, not impact, so it needs
+  // the level back. 1.15 lands the peak at full scale and no further.
   sniper: [
     {
       files: ['sfx/vo_sniper_a.mp3', 'sfx/vo_sniper_b.mp3', 'sfx/vo_sniper_c.mp3'],
-      gain: 1,
+      gain: 1.15,
       send: 0.18,
     },
   ],
