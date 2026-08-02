@@ -643,11 +643,19 @@ export interface KakoomaConfig {
 }
 
 export interface CagesConfig {
-  /** Grid width when nothing else is chosen. */
+  /** Grid width when nothing else is chosen. Every run is this size, so times compare. */
   defaultSize: number;
-  puzzlesPerSet: number;
-  solvePoints: number;
-  cleanBonus: number;
+  /** Paid for solving the grid at all. The run has no other result. */
+  solveCredits: number;
+  /** On top, for a grid solved without a wrong cage. */
+  cleanCredits: number;
+  /**
+   * The time a solve is measured against. Finishing at par pays nothing extra;
+   * an instant solve pays the full speed award, and past par it is simply zero
+   * rather than a debt — a slow solve is still a solve.
+   */
+  parSeconds: number;
+  speedCredits: number;
   /** Difficulty added per cell beyond a pair — a four-cell cage is real work. */
   perCellDifficulty: number;
 }
@@ -932,9 +940,11 @@ export const CONFIG: GameConfig = {
   },
   cages: {
     defaultSize: 4,
-    puzzlesPerSet: 3,
-    solvePoints: 500,
-    cleanBonus: 250,
+    solveCredits: 120,
+    cleanCredits: 60,
+    // A 4x4 read carefully rather than guessed at lands around two minutes.
+    parSeconds: 150,
+    speedCredits: 120,
     perCellDifficulty: 60,
   },
   kakooma: {

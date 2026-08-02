@@ -4,6 +4,9 @@ import {
   LEADERBOARD_MODES,
   MODE_LABEL,
   MODE_TAB_LABEL,
+  formatBoardScore,
+  formatBoardSecondary,
+  formatClock,
   insertScore,
   isInitialChar,
   modeFromSceneKey,
@@ -11,6 +14,7 @@ import {
   normalizeInitials,
   ordinal,
   qualifies,
+  rankingFor,
   type ScoreEntry,
 } from '../src/core/leaderboard/leaderboard';
 import { LocalLeaderboardStore } from '../src/game/leaderboardStore';
@@ -129,6 +133,87 @@ describe('insertScore', () => {
   });
 });
 
+describe('a board that ranks on time', () => {
+  it('puts the smallest number first', () => {
+    const board = normalizeBoard(
+      [entry('SLO', 240_000), entry('FST', 92_000), entry('MID', 143_000)],
+      BOARD_SIZE,
+      'low',
+    );
+    expect(board.map((e) => e.initials)).toEqual(['FST', 'MID', 'SLO']);
+  });
+
+  it('still keeps the older of two identical times ahead', () => {
+    const board = normalizeBoard(
+      [entry('NEW', 90_000, 2000), entry('OLD', 90_000, 1000)],
+      BOARD_SIZE,
+      'low',
+    );
+    expect(board.map((e) => e.initials)).toEqual(['OLD', 'NEW']);
+  });
+
+  it('qualifies a time that is under the slowest on a full board', () => {
+    const full = Array.from({ length: BOARD_SIZE }, (_, i) => entry('AAA', 100_000 + i * 1000));
+    const board = normalizeBoard(full, BOARD_SIZE, 'low');
+    expect(qualifies(board, 99_000, BOARD_SIZE, 'low')).toBe(true);
+    expect(qualifies(board, 200_000, BOARD_SIZE, 'low')).toBe(false);
+    // Matching the cut is not beating it, exactly as on a points board.
+    expect(qualifies(board, board[BOARD_SIZE - 1]!.score, BOARD_SIZE, 'low')).toBe(false);
+  });
+
+  it('ranks a new time where it belongs', () => {
+    const board = normalizeBoard([entry('AAA', 100_000), entry('BBB', 200_000)], BOARD_SIZE, 'low');
+    expect(insertScore(board, entry('NEW', 150_000, 3000), BOARD_SIZE, 'low').rank).toBe(1);
+    expect(insertScore(board, entry('WIN', 50_000, 3000), BOARD_SIZE, 'low').rank).toBe(0);
+  });
+
+  it('is how the store reads and writes the CAGES board, without being told', () => {
+    // The direction belongs to the mode. A caller that had to remember it would
+    // eventually forget, and a backwards board looks completely normal.
+    const store = new LocalLeaderboardStore(memoryStorage());
+    return (async (): Promise<void> => {
+      await store.submit('cages', entry('SLO', 240_000, 1));
+      await store.submit('cages', entry('FST', 92_000, 2));
+      expect((await store.load('cages')).map((e) => e.initials)).toEqual(['FST', 'SLO']);
+      // And the points boards are untouched by any of it.
+      await store.submit('meteor', entry('LOW', 100, 1));
+      await store.submit('meteor', entry('TOP', 9000, 2));
+      expect((await store.load('meteor')).map((e) => e.initials)).toEqual(['TOP', 'LOW']);
+    })();
+  });
+
+  it('names CAGES as the timed one and everything else as points', () => {
+    expect(rankingFor('cages')).toBe('low');
+    for (const mode of LEADERBOARD_MODES) {
+      if (mode !== 'cages') expect(rankingFor(mode), mode).toBe('high');
+    }
+  });
+});
+
+describe('reading a board out', () => {
+  it('writes a duration as a stopwatch does', () => {
+    expect(formatClock(0)).toBe('0:00.00');
+    expect(formatClock(9_990)).toBe('0:09.99');
+    expect(formatClock(62_500)).toBe('1:02.50');
+    expect(formatClock(600_000)).toBe('10:00.00');
+    // Long enough to be embarrassing is still printed honestly rather than
+    // rolling over into a good-looking time.
+    expect(formatClock(3_723_000)).toBe('62:03.00');
+    expect(formatClock(-5)).toBe('0:00.00');
+  });
+
+  it('prints points as points and times as times', () => {
+    expect(formatBoardScore('meteor', 42_000)).toBe('42000');
+    expect(formatBoardScore('cages', 92_340)).toBe('1:32.34');
+  });
+
+  it('says what the second number means in the mode it came from', () => {
+    expect(formatBoardSecondary('meteor', 12)).toBe('WAVE 12');
+    expect(formatBoardSecondary('cages', 0)).toBe('CLEAN');
+    expect(formatBoardSecondary('cages', 1)).toBe('1 WRONG');
+  });
+});
+
 describe('presentation helpers', () => {
   it('maps scene keys to boards, defaulting to meteor', () => {
     expect(modeFromSceneKey('Expression')).toBe('expression');
@@ -147,7 +232,7 @@ describe('presentation helpers', () => {
       expect(MODE_TAB_LABEL[mode]).toBeTruthy();
     }
     const boards = new Set(
-      ['Game', 'Expression', 'Factor', 'Collapse', 'Kakooma'].map(modeFromSceneKey),
+      ['Game', 'Expression', 'Factor', 'Collapse', 'Kakooma', 'Cages'].map(modeFromSceneKey),
     );
     expect([...boards].sort()).toEqual([...LEADERBOARD_MODES].sort());
   });

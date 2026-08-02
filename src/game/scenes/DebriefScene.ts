@@ -9,6 +9,7 @@ import {
   modeFromSceneKey,
   ordinal,
   qualifies,
+  rankingFor,
   type LeaderboardMode,
 } from '../../core/leaderboard/leaderboard';
 import {
@@ -24,6 +25,7 @@ import { InitialsEntry } from '../../ui/InitialsEntry';
 import { MenuNav, navHint } from '../../ui/MenuNav';
 import { spread } from '../../ui/ModeCard';
 import { neonButton } from '../../ui/panels';
+import { keyEventGate } from '../input/freshKey';
 import { LEADERBOARD_REGISTRY_KEY } from '../leaderboardStore';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
@@ -51,6 +53,13 @@ interface DebriefData {
   titleColor?: string;
   /** Row labels a mode counts differently, and rows it does not count at all. */
   wavesLabel?: string;
+  /**
+   * The whole stat block, for a mode whose result is not a score at all. CAGES
+   * ends with a time and a mistake count and has no waves, kills or streak to
+   * print — and a row of zeroes reads as failure rather than as "not applicable".
+   * The credits row is still appended below whatever is given here.
+   */
+  statRows?: readonly (readonly [string, string])[];
   /** Modes with no streak to speak of drop the row rather than printing x0. */
   hideStreak?: boolean;
   /** Closing line, for modes the Operator would not talk to about rocks. */
@@ -92,11 +101,13 @@ export class DebriefScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const s = data.stats;
-    const rows = [
-      ['SCORE', String(s.score)],
-      [data.wavesLabel ?? 'WAVES CLEARED', String(s.wavesCleared)],
-      [data.killsLabel ?? 'KILLS', String(s.kills)],
-      ...(data.hideStreak ? [] : [[data.streakLabel ?? 'BEST STREAK', `x${s.bestStreak}`]]),
+    const rows: string[][] = [
+      ...(data.statRows?.map((row) => [...row]) ?? [
+        ['SCORE', String(s.score)],
+        [data.wavesLabel ?? 'WAVES CLEARED', String(s.wavesCleared)],
+        [data.killsLabel ?? 'KILLS', String(s.kills)],
+        ...(data.hideStreak ? [] : [[data.streakLabel ?? 'BEST STREAK', `x${s.bestStreak}`]]),
+      ]),
       ['CREDITS EARNED', `+${data.credits}`],
     ];
     // Stats keep the left half; the rating movement takes the right, so a run
@@ -225,20 +236,26 @@ export class DebriefScene extends Phaser.Scene {
     }
     if (!this.scene.isActive()) return;
 
-    if (!qualifies(board, score)) {
+    if (!qualifies(board, score, undefined, rankingFor(mode))) {
       this.showButtons(data, mode);
       return;
     }
 
-    const rank = insertScore(board, {
-      initials: initial,
-      score,
-      wave: data.stats.wavesCleared,
-      at: 0,
-    }).rank;
+    const rank = insertScore(
+      board,
+      { initials: initial, score, wave: data.stats.wavesCleared, at: 0 },
+      undefined,
+      rankingFor(mode),
+    ).rank;
 
+    // A board that ranks on time has no "high score" to announce, and calling a
+    // 1:58 one would be nonsense. It has a best time.
+    const headline =
+      rankingFor(mode) === 'low'
+        ? `BEST TIME — ${ordinal(rank + 1)}`
+        : `NEW HIGH SCORE — ${ordinal(rank + 1)}`;
     const header = this.add
-      .text(width / 2, height * 0.7, `NEW HIGH SCORE — ${ordinal(rank + 1)}`, {
+      .text(width / 2, height * 0.7, headline, {
         fontFamily: FONT,
         fontSize: '26px',
         fontStyle: 'bold',
@@ -261,8 +278,12 @@ export class DebriefScene extends Phaser.Scene {
       hint.destroy();
       void this.submitScore(store, mode, initials, data, header);
     });
+    // Gated, like every other keydown handler in the game: Phaser can redeliver
+    // the same DOM event to a handler more than once in a frame, and here that
+    // turns "LTB" into "LLB" — on the one screen whose typing is permanent.
+    const fresh = keyEventGate();
     const route = (event: KeyboardEvent): void => {
-      entry.handleKey(event);
+      if (fresh(event)) entry.handleKey(event);
     };
     this.input.keyboard?.on('keydown', route);
   }
@@ -314,8 +335,12 @@ export class DebriefScene extends Phaser.Scene {
       hint.destroy();
       void this.submitDaily(store, modeStore, dateKey, initials, data);
     });
+    // Gated, like every other keydown handler in the game: Phaser can redeliver
+    // the same DOM event to a handler more than once in a frame, and here that
+    // turns "LTB" into "LLB" — on the one screen whose typing is permanent.
+    const fresh = keyEventGate();
     const route = (event: KeyboardEvent): void => {
-      entry.handleKey(event);
+      if (fresh(event)) entry.handleKey(event);
     };
     this.input.keyboard?.on('keydown', route);
   }

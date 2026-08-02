@@ -9,6 +9,7 @@ import {
   insertScore,
   normalizeBoard,
   normalizeInitials,
+  rankingFor,
   BOARD_SIZE,
   DEFAULT_INITIALS,
   type LeaderboardMode,
@@ -36,7 +37,7 @@ export class LocalLeaderboardStore implements LeaderboardStore {
       if (!Array.isArray(parsed)) return [];
       // Anything on disk is suspect — it may predate a schema change or have
       // been edited by hand. Normalising is the repair path.
-      return normalizeBoard(parsed as ScoreEntry[], BOARD_SIZE);
+      return normalizeBoard(parsed as ScoreEntry[], BOARD_SIZE, rankingFor(mode));
     } catch {
       return [];
     }
@@ -47,7 +48,7 @@ export class LocalLeaderboardStore implements LeaderboardStore {
   }
 
   submit(mode: LeaderboardMode, entry: ScoreEntry): Promise<SubmitResult> {
-    const result = insertScore(this.read(mode), entry, BOARD_SIZE);
+    const result = insertScore(this.read(mode), entry, BOARD_SIZE, rankingFor(mode));
     this.storage.write(KEY_PREFIX + mode, JSON.stringify(result.board));
     return Promise.resolve(result);
   }

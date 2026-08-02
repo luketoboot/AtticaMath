@@ -114,6 +114,25 @@ const PRESETS = [
       },
     },
   },
+  {
+    // The one board that ranks the other way: times, smallest first, with the
+    // mistake count where the wave number goes.
+    name: 'Leaderboard-cages',
+    scene: 'Leaderboard',
+    data: {
+      mode: 'cages',
+      __board: {
+        mode: 'cages',
+        entries: [
+          { initials: 'LTB', score: 71_450, wave: 0, at: 1 },
+          { initials: 'AAA', score: 88_120, wave: 1, at: 2 },
+          { initials: 'ZZZ', score: 104_800, wave: 0, at: 3 },
+          { initials: 'QQQ', score: 132_010, wave: 3, at: 4 },
+          { initials: 'MNO', score: 240_990, wave: 2, at: 5 },
+        ],
+      },
+    },
+  },
   { name: 'Playbook', scene: 'Playbook' },
   { name: 'BrainScan', scene: 'BrainScan' },
   {
@@ -334,6 +353,14 @@ async function shoot(page, { name, scene, data, save, keys }, opts) {
         // Two things make the same screen render differently twice, and a shot
         // that is not reproducible cannot be compared to a stored one.
         const target = game.scene.getScene(sceneKey);
+
+        // Three, now that a mode ranks on time: a clock reading hundredths
+        // never renders the same twice, and how many update() calls land inside
+        // the settle wait is a property of the machine, not of the layout. The
+        // clock belongs to the mode's session, so stopping it there stops it
+        // everywhere it is drawn — including behind a briefing panel.
+        const session = target.session;
+        if (session && typeof session.tick === 'function') session.tick = () => {};
 
         // Tween phase depends on wall-clock. Pausing before the settle wait
         // leaves every tween at its opening value.

@@ -61,7 +61,7 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
   },
   {
     label: 'CAGES',
-    tagline: 'FILL THE GRID. EVERY REGION MUST MAKE ITS TARGET.',
+    tagline: 'ONE GRID, ONE CLOCK. EVERY REGION MUST MAKE ITS TARGET.',
     icon: 'gnomon',
     accent: PALETTE.yellow,
     scene: 'Cages',

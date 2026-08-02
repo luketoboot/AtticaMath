@@ -3,7 +3,8 @@ import { getAudio } from '../../audio/getAudio';
 import { cageEdges, cageHead, cageLabel, colOf, rowOf } from '../../core/cages/cages';
 import { CageSession } from '../../core/cages/session';
 import { CONFIG } from '../../core/config';
-import { creditsForRun } from '../../core/economy/economy';
+import { creditsForCages } from '../../core/economy/economy';
+import { formatClock } from '../../core/leaderboard/leaderboard';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
 import { impact, shake, shockwave } from '../../fx/juice';
@@ -15,7 +16,7 @@ import { keyEventGate } from '../input/freshKey';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 /**
- * CAGES — a grid you can only fill by computing.
+ * CAGES — a grid you can only fill by computing, against a clock.
  *
  * Every row and column holds each digit once, and the grid is carved into
  * regions carrying a target: "these three multiply to 24". Nothing is offered
@@ -23,9 +24,15 @@ import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
  * to find which factorisations fit the cage and which of those survive the
  * digits already committed in that row.
  *
- * Untimed. The claim is that it cannot be played without arithmetic, and a
- * clock would push a stuck player into guessing digits, which is the one way to
- * play it that teaches nothing.
+ * A run is one grid and the result is the time on it. The clock is the whole
+ * reason to come back: the puzzle stops being "can I do this" after a few runs
+ * and becomes "can I do it faster than last time", which is a question the mode
+ * can keep asking forever.
+ *
+ * Reading is free. The clock is the session's and only advances from `update`,
+ * so opening the rules or the worked example — both of which pause this scene —
+ * stops it. A mode that charged for looking something up would teach players
+ * not to look things up.
  */
 
 const CELL = 92;
@@ -46,9 +53,11 @@ export class CagesScene extends Phaser.Scene {
   private originX = 0;
   private originY = 0;
   private progressText!: Phaser.GameObjects.Text;
-  private scoreText!: Phaser.GameObjects.Text;
+  private clockText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
   private busy = false;
+  /** Timestamp of the last frame the clock was charged for. See `update`. */
+  private lastAt: number | undefined;
   private readonly fresh = keyEventGate();
 
   constructor() {
@@ -65,6 +74,12 @@ export class CagesScene extends Phaser.Scene {
     this.labels = [];
     this.cursor = 0;
     this.busy = false;
+    this.lastAt = undefined;
+    // Coming back from the rules or the worked example resumes the scene, and
+    // the clock has to pick up where it stopped rather than swallow the gap.
+    this.events.on(Phaser.Scenes.Events.RESUME, () => {
+      this.lastAt = undefined;
+    });
 
     this.session = new CageSession({
       seed: (Math.random() * 0xffffffff) >>> 0,
@@ -128,10 +143,12 @@ export class CagesScene extends Phaser.Scene {
     this.progressText = this.add
       .text(64, 44, '', { fontFamily: FONT, fontSize: '15px', color: CSS.white })
       .setOrigin(0, 0.5);
-    this.scoreText = this.add
-      .text(width - 64, 44, '0', {
+    // The clock is the score here, so it is where the score used to be and it
+    // is the biggest number on the screen after the digits themselves.
+    this.clockText = this.add
+      .text(width - 64, 44, formatClock(0), {
         fontFamily: FONT,
-        fontSize: '22px',
+        fontSize: '26px',
         fontStyle: 'bold',
         color: CSS.yellow,
       })
@@ -164,6 +181,24 @@ export class CagesScene extends Phaser.Scene {
         .setDepth(5);
       this.cells.push({ bg, text });
     }
+  }
+
+  /**
+   * The clock, off the wall rather than off the frame counter.
+   *
+   * Phaser's `delta` is smoothed and capped, so a machine rendering at fifteen
+   * frames a second advances it at a quarter speed — which on a board that
+   * ranks by time would hand out records for having a worse computer. The
+   * timestamp is real, so the difference between two of them is real.
+   *
+   * `lastAt` going undefined is how a pause is handled: nothing is charged for
+   * the frame the scene comes back on, so the time spent reading the rules or
+   * the worked example never lands on the clock.
+   */
+  update(time: number): void {
+    if (this.lastAt !== undefined) this.session.tick((time - this.lastAt) / 1000);
+    this.lastAt = time;
+    this.clockText.setText(formatClock(this.session.elapsedMs));
   }
 
   // --- input ---
@@ -219,12 +254,10 @@ export class CagesScene extends Phaser.Scene {
       shockwave(this, this.scale.width / 2, this.originY + (this.session.width * CELL) / 2, PALETTE.yellow);
       this.busy = true;
       this.redraw();
-      this.time.delayedCall(900, () => {
-        this.busy = false;
-        this.cursor = 0;
-        if (this.session.setComplete) this.finishSet();
-        else this.redraw();
-      });
+      // A beat to see the solved grid before the debrief takes it away. The
+      // clock stopped inside the session on the digit that finished it, so this
+      // pause costs the player nothing.
+      this.time.delayedCall(1100, () => this.finishRun());
       return;
     }
 
@@ -323,10 +356,10 @@ export class CagesScene extends Phaser.Scene {
       this.cursorGfx.lineBetween(cx + ox, cy + oy, cx + ox, cy + oy + dy * tick);
     }
 
-    this.progressText.setText(
-      `PUZZLE ${Math.min(this.session.solved + 1, CONFIG.cages.puzzlesPerSet)} / ${CONFIG.cages.puzzlesPerSet}`,
-    );
-    this.scoreText.setText(String(this.session.score));
+    const wrong = this.session.mistakes;
+    this.progressText.setText(wrong === 0 ? 'CLEAN' : `${wrong} WRONG CAGE${wrong === 1 ? '' : 'S'}`);
+    this.progressText.setColor(wrong === 0 ? CSS.cyanDim : CSS.red);
+    this.clockText.setText(formatClock(this.session.elapsedMs));
     this.promptText.setText(
       state.brokenLines
         ? 'A DIGIT IS REPEATED IN A ROW OR COLUMN'
@@ -347,19 +380,10 @@ export class CagesScene extends Phaser.Scene {
 
   // --- leaving ---
 
-  private finishSet(): void {
+  private finishRun(): void {
     const summary = this.session.summary();
     const save = this.saves.save;
-    const credits = creditsForRun(
-      {
-        score: summary.score,
-        wavesCleared: summary.solved,
-        kills: summary.cleanPuzzles,
-        misses: summary.mistakes,
-        bestStreak: 0,
-      },
-      CONFIG.economy,
-    );
+    const credits = creditsForCages(summary.timeMs, summary.mistakes, CONFIG.cages);
     save.skills = this.session.skillTable;
     save.credits += credits;
     const unlocked = newMilestones(this.session.skillTable, save.milestones, CONFIG);
@@ -367,26 +391,27 @@ export class CagesScene extends Phaser.Scene {
     this.saves.persist();
 
     this.scene.start('Debrief', {
+      // The board ranks on time, so the time *is* the score — see MODE_RANKING.
+      // `wave` carries the mistakes, which is the second number this mode has.
       stats: {
-        score: summary.score,
-        wavesCleared: summary.solved,
-        kills: summary.cleanPuzzles,
+        score: Math.round(summary.timeMs),
+        wavesCleared: summary.mistakes,
+        kills: 0,
         misses: summary.mistakes,
         bestStreak: 0,
       },
       credits,
       mode: 'Cages',
-      title: summary.mistakes === 0 ? 'NOT ONE WRONG CAGE' : 'SET COMPLETE',
+      title: summary.clean ? 'SOLVED CLEAN' : 'SOLVED',
       titleColor: CSS.yellow,
-      wavesLabel: 'PUZZLES SOLVED',
-      killsLabel: 'SOLVED CLEAN',
-      missesLabel: 'WRONG CAGES',
-      hideStreak: true,
-      leaderboard: false,
-      operatorLine:
-        summary.mistakes === 0
-          ? 'OPERATOR // Every cage right first time. You were reading, not guessing.'
-          : 'OPERATOR // Work the small cages first. They pin down the rows the big ones need.',
+      statRows: [
+        ['TIME', formatClock(summary.timeMs)],
+        ['GRID', `${summary.size} x ${summary.size}`],
+        ['WRONG CAGES', String(summary.mistakes)],
+      ],
+      operatorLine: summary.clean
+        ? 'OPERATOR // Every cage right first time. You were reading, not guessing.'
+        : 'OPERATOR // Work the cage with the fewest ways to be filled. It pins down the rows the others need.',
       milestones: unlocked.map((m) => m.label),
     });
   }

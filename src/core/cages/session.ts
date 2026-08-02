@@ -5,12 +5,20 @@ import { SKILLS, type SkillId } from '../skills/taxonomy';
 import { cageSatisfied, checkGrid, generate, type Cage, type CageOp, type CagePuzzle } from './cages';
 
 /**
- * A CAGES set: puzzles worked at your own pace.
+ * One CAGES puzzle, against a clock.
  *
- * Untimed on purpose. The mode's whole claim is that it cannot be played
- * without arithmetic, and a clock would push a stuck player into guessing
- * digits — which is the one way to play it that teaches nothing. Exercise made
- * the same call for the same reason.
+ * A run is a single grid and the run's result is how long it took, which is
+ * what reaches the board. That makes the mode a race, and a race is only fair
+ * if the clock measures the same thing for everyone: it starts when the grid is
+ * first shown, it stops the moment the last digit lands, and it does not run
+ * while the rules or the worked example are open — the scene pauses for those,
+ * and a paused scene stops ticking, so reading is free by construction.
+ *
+ * Rating stays untimed even though the run is not. The clock here is mostly
+ * deduction — hunting for the cage that gives, backtracking a wrong guess —
+ * and reading that as slowness at the seven times table would teach the model
+ * something false about the player's arithmetic. What the ratings see is which
+ * cages were right, exactly as before.
  *
  * Rating happens per cage rather than per puzzle. A cage is a self-contained
  * arithmetic claim: fill "24×" with three digits and either they multiply to
@@ -31,14 +39,15 @@ export interface CageSessionInit {
 export type EnterOutcome =
   | { kind: 'set'; cell: number }
   | { kind: 'cage'; cage: number; correct: boolean }
-  | { kind: 'solved'; points: number }
+  | { kind: 'solved'; timeMs: number }
   | { kind: 'refused' };
 
 export interface CageSummary {
-  score: number;
-  solved: number;
+  /** The run's result, and what the board ranks. */
+  timeMs: number;
   mistakes: number;
-  cleanPuzzles: number;
+  clean: boolean;
+  size: number;
 }
 
 export class CageSession {
@@ -55,12 +64,10 @@ export class CageSession {
   private rated = new Set<number>();
   private elapsed = 0;
   private cageShownAt = 0;
+  /** Where the clock stopped, so a solved run's time cannot creep afterwards. */
+  private finishedAt: number | undefined;
 
-  private scoreValue = 0;
-  private solvedCount = 0;
   private mistakeCount = 0;
-  private cleanCount = 0;
-  private mistakesThisPuzzle = 0;
   private done = false;
 
   constructor(init: CageSessionInit) {
@@ -81,15 +88,14 @@ export class CageSession {
   get grid(): readonly number[] {
     return this.values;
   }
-  get score(): number {
-    return this.scoreValue;
-  }
-  get solved(): number {
-    return this.solvedCount;
+  /** Milliseconds on the clock: live while playing, frozen once solved. */
+  get elapsedMs(): number {
+    return this.finishedAt ?? this.elapsed;
   }
   get mistakes(): number {
     return this.mistakeCount;
   }
+  /** True once the puzzle is solved. A run is one grid. */
   get setComplete(): boolean {
     return this.done;
   }
@@ -111,7 +117,9 @@ export class CageSession {
 
   // --- play ---
 
+  /** Advance the clock. Not called while the scene is paused, which is the point. */
   tick(dtSeconds: number): void {
+    if (this.done) return;
     this.elapsed += dtSeconds * 1000;
   }
 
@@ -133,7 +141,7 @@ export class CageSession {
     // A cage only becomes a claim once it is full. Rating a half-written one
     // would mark a player wrong for not having finished.
     const correct = cageSatisfied(cage, filled);
-    if (!correct) this.mistakeCount += 1, (this.mistakesThisPuzzle += 1);
+    if (!correct) this.mistakeCount += 1;
     if (!this.rated.has(id)) {
       this.rated.add(id);
       this.rate(cage, filled, correct);
@@ -141,24 +149,21 @@ export class CageSession {
 
     const state = checkGrid(this.board, this.values);
     if (state.complete) {
-      const points =
-        this.cfg.cages.solvePoints + (this.mistakesThisPuzzle === 0 ? this.cfg.cages.cleanBonus : 0);
-      this.scoreValue += points;
-      this.solvedCount += 1;
-      if (this.mistakesThisPuzzle === 0) this.cleanCount += 1;
-      if (this.solvedCount >= this.cfg.cages.puzzlesPerSet) this.done = true;
-      else this.deal();
-      return { kind: 'solved', points };
+      // The clock stops on the digit that finishes the grid, not on whatever
+      // the scene gets around to doing about it.
+      this.finishedAt = this.elapsed;
+      this.done = true;
+      return { kind: 'solved', timeMs: this.finishedAt };
     }
     return { kind: 'cage', cage: id, correct };
   }
 
   summary(): CageSummary {
     return {
-      score: this.scoreValue,
-      solved: this.solvedCount,
+      timeMs: this.elapsedMs,
       mistakes: this.mistakeCount,
-      cleanPuzzles: this.cleanCount,
+      clean: this.mistakeCount === 0,
+      size: this.size,
     };
   }
 
@@ -182,7 +187,9 @@ export class CageSession {
         correct,
         responseMs: Math.max(1, this.elapsed - this.cageShownAt),
         difficulty: base + (cage.cells.length - 2) * this.cfg.cages.perCellDifficulty,
-        // Nothing here is a race, so the clock is not read as evidence.
+        // The run is a race; this is not. Time between cages is mostly spent
+        // deducing which cage to open next, and charging that to the seven
+        // times table would teach the model something false.
         untimed: true,
         wave: this.globalWave,
       },
@@ -193,12 +200,11 @@ export class CageSession {
 
   private deal(): void {
     const puzzle = generate(this.rng, { size: this.size, ops: this.ops });
-    // Falling back to sums rather than failing: a set that stopped dealing
+    // Falling back to sums rather than failing: a run that never dealt a grid
     // would read as the game breaking, and every cage can carry a sum.
     this.board = puzzle ?? generate(this.rng, { size: this.size, ops: ['add'] })!;
     this.values = new Array(this.size * this.size).fill(0);
     this.rated = new Set();
-    this.mistakesThisPuzzle = 0;
     this.cageShownAt = this.elapsed;
   }
 }

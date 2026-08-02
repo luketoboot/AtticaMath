@@ -77,6 +77,14 @@ Both benches share a set: eight problems, one gentle untimed rating attempt each
 
 Rebuilding is automatic. There is only ever one place to bring back and one moment to bring it, so asking for a keypress was a formality; the ladder walks itself down as the player answers. Breaking a problem apart stays the player's decision, because that one is a real choice — and answering the whole thing without breaking it is always allowed, since the mode exists to become unnecessary.
 
+### Mode 4: Cages
+
+KenKen, essentially — the puzzle Tetsuya Miyamoto built in 2004 to teach arithmetic by refusing to teach it. (The name is trademarked; ours is Cages, and the generic names are Calcudoku and MathDoku.) A Latin square carved into regions, each carrying a target and an operator: "these three multiply to 24". Nothing is offered as a choice, so nothing can be picked by eye — placing one digit means finding which factorisations fit the cage and which of those survive the row. Generation retries until the solver proves exactly one solution exists, because a puzzle with two answers can tell a player they are wrong for being right.
+
+A run is one grid and the result is the time on it, which goes on its own board — the first board in the game where the smallest number wins, so ranking direction is a property of the mode (`MODE_RANKING`) rather than something each caller remembers. The clock is wall time, not accumulated frame deltas: Phaser smooths and caps `delta`, so a machine dropping frames would otherwise post records for being slow. It stops while the rules or the worked example are open, which the scene gets for free by pausing. Ratings stay untimed even though the run is not — time between cages is mostly deduction, and charging that to the seven times table would teach the model something false.
+
+The rules fit in two lines and knowing them still leaves a player with no idea what a move looks like, which no amount of rewording fixes. So the mode demonstrates itself: a worked 4x4, one forced digit at a time, each step naming the cage or the line that forced it. It runs once on first entry and lives on `E` after that. The example and its reasoning are data in `core/cages/example.ts`, and the tests prove every digit it writes was forced — an example that leaps is teaching guessing.
+
 ### Daily Challenge
 
 Meteor Defense on a seed the UTC date decides. One run per day, one shared board per day.

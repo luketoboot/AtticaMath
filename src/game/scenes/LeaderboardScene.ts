@@ -2,10 +2,13 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import {
   BOARD_SIZE,
+  formatBoardScore,
+  formatBoardSecondary,
   LEADERBOARD_MODES,
   MODE_LABEL,
   MODE_TAB_LABEL,
   ordinal,
+  rankingFor,
   type LeaderboardMode,
   type ScoreEntry,
 } from '../../core/leaderboard/leaderboard';
@@ -131,11 +134,14 @@ export class LeaderboardScene extends Phaser.Scene {
     // The player may have switched tabs while that was in flight.
     if (this.mode !== mode || !this.scene.isActive()) return;
 
-    // The tab is abbreviated, so the full mode name lands here.
+    // The tab is abbreviated, so the full mode name lands here. A board that
+    // ranks on time says so: a column of numbers gives no clue which way it
+    // sorts, and "top" means the opposite thing on it.
+    const timed = rankingFor(mode) === 'low';
     this.titleText.setText(
       board.length > 0
-        ? `${MODE_LABEL[mode]} — TOP ${BOARD_SIZE}`
-        : `${MODE_LABEL[mode]} — NO SCORES YET, GO SET ONE`,
+        ? `${MODE_LABEL[mode]} — ${timed ? `FASTEST ${BOARD_SIZE}` : `TOP ${BOARD_SIZE}`}`
+        : `${MODE_LABEL[mode]} — NO ${timed ? 'TIMES' : 'SCORES'} YET, GO SET ONE`,
     );
     this.renderBoard(board);
   }
@@ -255,7 +261,7 @@ export class LeaderboardScene extends Phaser.Scene {
           })
           .setOrigin(0, 0.5),
         this.add
-          .text(left + rowW - 108, y + 11, String(entry.score), {
+          .text(left + rowW - 108, y + 11, formatBoardScore(this.mode, entry.score), {
             fontFamily: FONT,
             fontSize: '25px',
             fontStyle: 'bold',
@@ -263,7 +269,7 @@ export class LeaderboardScene extends Phaser.Scene {
           })
           .setOrigin(1, 0.5),
         this.add
-          .text(left + rowW - 90, y + 11, `WAVE ${entry.wave}`, {
+          .text(left + rowW - 90, y + 11, formatBoardSecondary(this.mode, entry.wave), {
             fontFamily: FONT,
             fontSize: '14px',
             color: CSS.cyanDim,

@@ -12,6 +12,7 @@ export type LeaderboardMode =
   | 'factor'
   | 'collapse'
   | 'kakooma'
+  | 'cages'
   | 'boss';
 
 /**
@@ -25,6 +26,7 @@ export const LEADERBOARD_MODES: readonly LeaderboardMode[] = [
   'factor',
   'collapse',
   'kakooma',
+  'cages',
 ];
 
 export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {
@@ -33,6 +35,7 @@ export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   factor: 'FACTOR STORM',
   collapse: 'COLLAPSE',
   kakooma: 'KAKOOMA',
+  cages: 'CAGES',
   boss: 'BOSS RUSH',
 };
 
@@ -46,8 +49,34 @@ export const MODE_TAB_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   factor: 'FACTOR',
   collapse: 'COLLAPSE',
   kakooma: 'KAKOOMA',
+  cages: 'CAGES',
   boss: 'BOSS RUSH',
 };
+
+/**
+ * Which way a board reads.
+ *
+ * Every mode until now scored points, where more is better. CAGES is one puzzle
+ * against a clock, so its number is a duration and the smallest one wins — the
+ * board is a race result, not a high score. The direction is a property of the
+ * mode rather than a flag each caller remembers to pass, because a board sorted
+ * the wrong way would look completely normal and be exactly backwards.
+ */
+export type Ranking = 'high' | 'low';
+
+export const MODE_RANKING: Readonly<Record<LeaderboardMode, Ranking>> = {
+  meteor: 'high',
+  expression: 'high',
+  factor: 'high',
+  collapse: 'high',
+  kakooma: 'high',
+  cages: 'low',
+  boss: 'high',
+};
+
+export function rankingFor(mode: LeaderboardMode): Ranking {
+  return MODE_RANKING[mode];
+}
 
 /** Scene keys are what the debrief is handed; boards are keyed by mode. */
 export function modeFromSceneKey(key: string | undefined): LeaderboardMode {
@@ -60,6 +89,8 @@ export function modeFromSceneKey(key: string | undefined): LeaderboardMode {
       return 'collapse';
     case 'Kakooma':
       return 'kakooma';
+    case 'Cages':
+      return 'cages';
     case 'Boss':
       return 'boss';
     default:
@@ -70,7 +101,9 @@ export function modeFromSceneKey(key: string | undefined): LeaderboardMode {
 export interface ScoreEntry {
   /** Exactly INITIALS_LENGTH characters from INITIALS_ALPHABET. */
   initials: string;
+  /** Points on a 'high' board, milliseconds on a 'low' one. See MODE_RANKING. */
   score: number;
+  /** The run's second number, in whatever the mode counts: waves, grids, wrong cages. */
   wave: number;
   /** Epoch milliseconds. */
   at: number;
@@ -108,14 +141,18 @@ export function normalizeInitials(raw: string): string {
   return chars.join('');
 }
 
-/** Highest first. Ties keep the older entry ahead, as an arcade cabinet does. */
-function compare(a: ScoreEntry, b: ScoreEntry): number {
-  if (b.score !== a.score) return b.score - a.score;
+/** Best first. Ties keep the older entry ahead, as an arcade cabinet does. */
+function compare(a: ScoreEntry, b: ScoreEntry, ranking: Ranking): number {
+  if (b.score !== a.score) return ranking === 'low' ? a.score - b.score : b.score - a.score;
   return a.at - b.at;
 }
 
 /** Sort, trim and sanitise a board — also the repair path for stored data. */
-export function normalizeBoard(entries: readonly ScoreEntry[], size = BOARD_SIZE): ScoreEntry[] {
+export function normalizeBoard(
+  entries: readonly ScoreEntry[],
+  size = BOARD_SIZE,
+  ranking: Ranking = 'high',
+): ScoreEntry[] {
   return entries
     .filter((e) => Number.isFinite(e.score) && e.score > 0)
     .map((e) => ({
@@ -127,7 +164,7 @@ export function normalizeBoard(entries: readonly ScoreEntry[], size = BOARD_SIZE
       // stored shape stays exactly what it was for pre-badge boards.
       ...(typeof e.badge === 'string' ? { badge: e.badge } : {}),
     }))
-    .sort(compare)
+    .sort((a, b) => compare(a, b, ranking))
     .slice(0, size);
 }
 
@@ -139,11 +176,13 @@ export function qualifies(
   board: readonly ScoreEntry[],
   score: number,
   size = BOARD_SIZE,
+  ranking: Ranking = 'high',
 ): boolean {
   if (score <= 0) return false;
   if (board.length < size) return true;
   const last = board[size - 1];
-  return last !== undefined && score > last.score;
+  if (last === undefined) return false;
+  return ranking === 'low' ? score < last.score : score > last.score;
 }
 
 export interface InsertResult {
@@ -157,6 +196,7 @@ export function insertScore(
   board: readonly ScoreEntry[],
   entry: ScoreEntry,
   size = BOARD_SIZE,
+  ranking: Ranking = 'high',
 ): InsertResult {
   const clean: ScoreEntry = {
     initials: normalizeInitials(entry.initials),
@@ -164,11 +204,41 @@ export function insertScore(
     wave: Math.max(0, Math.floor(entry.wave)),
     at: entry.at,
   };
-  const next = normalizeBoard([...board, clean], size);
+  const next = normalizeBoard([...board, clean], size, ranking);
   const rank = next.findIndex(
     (e) => e.at === clean.at && e.score === clean.score && e.initials === clean.initials,
   );
   return { board: next, rank };
+}
+
+/**
+ * A duration as a stopwatch reads it: M:SS.CS.
+ *
+ * Hundredths rather than tenths because two players who both "did it in about
+ * a minute forty" want to know which of them was faster, and rounder than
+ * milliseconds because nobody reads four decimal places off a board. Minutes
+ * are not capped: a puzzle left open over lunch should say so rather than
+ * quietly roll over and claim a good time.
+ */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms));
+  const minutes = Math.floor(total / 60000);
+  const seconds = Math.floor((total % 60000) / 1000);
+  const cs = Math.floor((total % 1000) / 10);
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
+
+/** What a board prints for an entry's number: points, or a time. */
+export function formatBoardScore(mode: LeaderboardMode, score: number): string {
+  return rankingFor(mode) === 'low' ? formatClock(score) : String(score);
+}
+
+/** The small print beside it — the run's second number, in the mode's own words. */
+export function formatBoardSecondary(mode: LeaderboardMode, wave: number): string {
+  if (mode !== 'cages') return `WAVE ${wave}`;
+  // On a timed puzzle the interesting second number is how much of the time was
+  // spent being wrong. Nobody solves it clean by accident.
+  return wave === 0 ? 'CLEAN' : `${wave} WRONG`;
 }
 
 /** Ordinal suffix for the rank readout: 1ST, 2ND, 3RD, 4TH. */

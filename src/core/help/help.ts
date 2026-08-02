@@ -116,7 +116,7 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
   },
   Cages: {
     title: 'CAGES',
-    goal: 'On a 4x4, every row and column holds 1, 2, 3, 4 once — and every cage makes its target.',
+    goal: 'One grid, against the clock. Every row and column holds 1 to 4 once, every cage makes its target.',
     lines: [
       { key: '24×', text: 'A cage label. Those cells must multiply to 24. Also + and − and ÷.' },
       { key: '3', text: 'A label with no sign is a one-cell cage — that digit, given to you.' },
@@ -126,7 +126,7 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
       { key: 'E', text: 'Watch a whole puzzle worked out, one deduction at a time.' },
     ],
     gotcha:
-      'A cage is only judged once every cell in it is filled, so a half-written one is never wrong. Start with the cage that has the fewest ways to be filled — it pins down the rows the others need.',
+      'Your time is the score, and it stops while you read this — looking is always free. Start with the cage that has the fewest ways to be filled: it pins down the rows the others need.',
     walkthrough: 'CagesLearn',
   },
   Boss: {

@@ -85,39 +85,51 @@ describe('CageSession', () => {
     expect(s.mistakes + (s.check.brokenLines ? 1 : 0)).toBeGreaterThan(0);
   });
 
-  it('solves a puzzle when the whole grid is right, and deals the next', () => {
+  it('ends the run when the grid is right — a run is one puzzle', () => {
     const s = fresh();
-    const first = s.puzzle;
-    const last = first.solution.length - 1;
+    const last = s.puzzle.solution.length - 1;
     fillAllBut(s, last);
-    const out = s.enter(last, first.solution[last]!);
+    const out = s.enter(last, s.puzzle.solution[last]!);
     expect(out).toMatchObject({ kind: 'solved' });
-    expect(s.solved).toBe(1);
-    expect(s.score).toBeGreaterThan(0);
-    // A fresh, empty grid follows.
-    expect(s.grid.every((v) => v === 0)).toBe(true);
-  });
-
-  it('ends the set after the configured number of puzzles', () => {
-    const s = fresh();
-    for (let i = 0; i < CONFIG.cages.puzzlesPerSet; i++) {
-      const last = s.puzzle.solution.length - 1;
-      const answer = s.puzzle.solution[last]!;
-      fillAllBut(s, last);
-      s.enter(last, answer);
-    }
     expect(s.setComplete).toBe(true);
-    expect(s.solved).toBe(CONFIG.cages.puzzlesPerSet);
     expect(s.enter(0, 1).kind).toBe('refused');
   });
 
-  it('pays a bonus for a puzzle solved without a wrong cage', () => {
+  it('reports a clean solve as clean', () => {
     const s = fresh();
     const last = s.puzzle.solution.length - 1;
     fillAllBut(s, last);
     s.enter(last, s.puzzle.solution[last]!);
-    expect(s.score).toBe(CONFIG.cages.solvePoints + CONFIG.cages.cleanBonus);
-    expect(s.summary().cleanPuzzles).toBe(1);
+    expect(s.summary()).toMatchObject({ mistakes: 0, clean: true, size: s.width });
+  });
+});
+
+describe('the clock', () => {
+  it('starts at zero and runs while the puzzle is open', () => {
+    const s = fresh();
+    expect(s.elapsedMs).toBe(0);
+    s.tick(1.5);
+    expect(s.elapsedMs).toBeCloseTo(1500);
+  });
+
+  it('stops on the digit that finishes the grid', () => {
+    // The scene has an explosion and a beat of silence to get through before it
+    // hands over; none of that is the player's time.
+    const s = fresh();
+    const last = s.puzzle.solution.length - 1;
+    fillAllBut(s, last);
+    s.tick(20);
+    const out = s.enter(last, s.puzzle.solution[last]!);
+    expect(out).toMatchObject({ kind: 'solved', timeMs: 20000 });
+    s.tick(30);
+    expect(s.elapsedMs).toBe(20000);
+    expect(s.summary().timeMs).toBe(20000);
+  });
+
+  it('is the number the run is judged on', () => {
+    const s = fresh();
+    s.tick(12.34);
+    expect(s.summary().timeMs).toBeCloseTo(12340);
   });
 
   it('rates a cage once, not once per edit', () => {

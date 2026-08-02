@@ -145,7 +145,7 @@ export class CagesLearnScene extends Phaser.Scene {
       fontSize: 17,
     });
     this.add
-      .text(PANEL_X, height - 112, 'SPACE  NEXT   ·   BACKSPACE  BACK   ·   ESC  OUT', {
+      .text(PANEL_X, height - 112, 'SPACE  NEXT   ·   BACKSPACE  BACK   ·   ESC  OUT   ·   YOUR CLOCK IS STOPPED', {
         fontFamily: FONT,
         fontSize: '12px',
         color: CSS.cyanDim,
