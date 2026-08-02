@@ -116,13 +116,15 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
   },
   Cages: {
     title: 'CAGES',
-    goal: 'One grid, against the clock. Every row and column holds 1 to 4 once, every cage makes its target.',
+    goal: 'One grid, against the clock. Rows and columns hold 1 to 4 once; cages must make their target.',
     lines: [
       { key: '24×', text: 'A cage label. Those cells must multiply to 24. Also + and − and ÷.' },
       { key: '3', text: 'A label with no sign is a one-cell cage — that digit, given to you.' },
       { key: 'HOW', text: '24 over three cells is 2×3×4 and nothing else, so those are your digits.' },
-      { key: 'ARROWS', text: 'Move around the grid. Clicking a cell works too.' },
-      { key: 'DIGITS', text: 'Write a digit into the selected cell. BACKSPACE rubs it out.' },
+      // The one rule nobody guesses, and the one that makes a legal cage look
+      // broken: 5+ over three cells is impossible with three different digits.
+      { key: 'REPEATS', text: 'A digit may repeat inside a bent cage: 5+ over three cells is 1+2+2.' },
+      { key: 'ARROWS', text: 'Move around the grid, or click a cell. Type a digit; BACKSPACE rubs it out.' },
       { key: 'E', text: 'Watch a whole puzzle worked out, one deduction at a time.' },
     ],
     gotcha:

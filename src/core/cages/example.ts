@@ -60,7 +60,7 @@ export const EXAMPLE_STEPS: readonly ExampleStep[] = [
   {
     fills: [],
     lit: [],
-    say: 'Two rules. Every row and every column takes 1, 2, 3, 4 — each exactly once. And every heavy outline is a cage: the small number in its corner is what the digits inside it have to make.',
+    say: 'Two rules. Every row and column takes 1, 2, 3, 4 — each exactly once. Every heavy outline is a cage, and the number in its corner is what the digits inside it must make. Note that a cage is not a line: a digit may appear twice inside one.',
   },
   {
     fills: [{ cell: 3, value: 1 }],
