@@ -142,6 +142,51 @@ throttle rather than two different engines.
 
 ---
 
+## The sniper callout — a voice, not a sound effect
+
+**`vo_sniper_a.mp3` / `_b` / `_c`** · under 1 second
+
+This one is **Text to Speech**, not the Sound Effects tool. It fires in COLLAPSE
+when a bolt crosses 700px of field before it lands, which is rare enough to stay
+special and frequent enough that a bad reading will grate within a session.
+
+**The text is one word:**
+
+```
+Sniper.
+```
+
+**Voice.** Pick from the Operator's brief, not an announcer's: terse, cool, a
+little dry, faintly bored. The joke is that the operator has seen you do this
+before and is noting it, not celebrating it. A low-to-mid voice with some
+grain; avoid anything breathy, warm, or enthusiastic. Sports-announcer energy is
+the failure mode — it turns a synthwave shooter into a party game.
+
+**Settings.** Stability ~0.35 (a flat read is the point, but not robotic),
+similarity ~0.8, style/exaggeration at or near 0, speaker boost on. Generate the
+line six or eight times and keep the three readings that differ most — the
+engine picks one at random per trigger, and three identical takes are worth no
+more than one.
+
+**Dry, as always.** No reverb, no room, no processing. The engine sends it to
+its own convolution bus at 18% and anything baked in gets applied twice.
+
+**Trim hard.** Cut to the first sample of the consonant and leave nothing after
+the tail — a voice line that starts 80ms late reads as the game hesitating
+before it compliments you:
+
+```sh
+ffmpeg -i raw.mp3 -af "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse,loudnorm=I=-16" -c:a libmp3lame -b:a 128k -ar 44100 vo_sniper_a.mp3
+```
+
+**If you want the other tiers too.** `LONG SHOT` (420px) deliberately gets a
+sting rather than a voice — a callout on every slightly-long shot stops being a
+callout. `DEAD EYE` (900px, near the gun's maximum range) currently reuses this
+same line; give it `vo_deadeye_a.mp3` and a slot of its own in `SAMPLES` if it
+earns one.
+
+---
+
 ## After generating
 
 Export as `.mp3`, keep each file small (10–40KB is normal for these lengths),

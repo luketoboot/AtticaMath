@@ -61,6 +61,9 @@ Filenames are exact. Anything marked *(optional)* can be added later.
 | `explosion_a.mp3` | — | General kill explosion, used by other modes too |
 | `explosion_b.mp3` | — *(optional)* | A second take |
 | `player_hit.mp3` | — | Taking damage. Blunt, unpleasant, short |
+| `vo_sniper_a.mp3` | **voice** *(optional)* | A called-out "SNIPER" for a long shot in COLLAPSE. See `PROMPTS.md` |
+| `vo_sniper_b.mp3` | voice *(optional)* | A second reading |
+| `vo_sniper_c.mp3` | voice *(optional)* | A third reading |
 | `thruster_loop.mp3` | **loop** | Engine burn, held while thrust is on. See below |
 
 ### The thruster loop is special

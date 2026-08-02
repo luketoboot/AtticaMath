@@ -34,6 +34,7 @@ export type SfxName =
   | 'phase'
   | 'comboUp'
   | 'nearMiss'
+  | 'sniper'
   | 'waveClear';
 
 export interface SfxOptions {
@@ -166,6 +167,18 @@ const SAMPLES: Partial<Record<SfxName, readonly SampleLayer[]>> = {
   fast: [
     { files: ['sfx/explosion_a.mp3', 'sfx/explosion_b.mp3'], gain: 0.85, send: 0.4, rate: 1.3 },
     { files: ['sfx/gun_fraction_tail.mp3'], delay: 0.03, gain: 0.4, send: 0.6, rate: 1.15 },
+  ],
+  // The long-shot callout. This is the one sample slot meant for a *voice*: a
+  // called-out "SNIPER" the way an arcade shooter announces one. Three takes so
+  // a good run does not repeat the same reading, and a low reverb send because
+  // a voice line wants to sit forward of the field rather than in it. Until a
+  // file exists it synthesizes a ricochet, which reads as the same event.
+  sniper: [
+    {
+      files: ['sfx/vo_sniper_a.mp3', 'sfx/vo_sniper_b.mp3', 'sfx/vo_sniper_c.mp3'],
+      gain: 1,
+      send: 0.18,
+    },
   ],
   // A meteor reaching the ground. The detonation slowed down and weighted.
   land: [
@@ -821,6 +834,19 @@ export class AudioManager {
         this.tone(ctx, t, 'square', 660 * p, 0.06, 0.09 * g, 0, 0.45);
         this.tone(ctx, t + 0.045, 'square', 990 * p, 0.08, 0.08 * g, 0, 0.55);
         this.click(ctx, t, 0.012, 0.08 * g);
+        break;
+
+      /**
+       * A shot that crossed the field. No synthesizer says "SNIPER", so this
+       * says the other half of the trope instead: the ricochet whine, a bright
+       * strike falling away in two whistles that drift apart as they go.
+       */
+      case 'sniper':
+        this.click(ctx, t, 0.01, 0.1 * g);
+        this.tone(ctx, t, 'triangle', 2600 * p, 0.05, 0.07 * g, 0, 0.5);
+        this.zap(ctx, t + 0.02, 'sine', 3200 * p, 900 * p, 0.42, 0.06 * g, 0, 0.8);
+        this.zap(ctx, t + 0.09, 'sine', 2400 * p, 700 * p, 0.5, 0.045 * g, 22, 0.85);
+        this.noiseBurst(ctx, t, 0.12, 4200, 0.04 * g, 'highpass', 0.6);
         break;
 
       /** Threaded a gap: a thin doppler whip, mostly tail. */

@@ -457,10 +457,26 @@ export interface CollapseConfig {
   nearMissBonus: number;
   /** Chain meter — see core/collapse/chain.ts. */
   chain: ChainConfig;
+  /** Paying for distance — see core/collapse/longshot.ts. */
+  longShot: LongShotConfig;
   /** Scoring. */
   matchBase: number;
   tierBonus: number;
   unreducedBonus: number;
+}
+
+export interface LongShotTierConfig {
+  /** Pixels the bolt must have travelled. */
+  minDistance: number;
+  /** Callout printed across the screen. */
+  label: string;
+  /** Extra points, as a fraction of what the collapse paid. */
+  bonus: number;
+}
+
+export interface LongShotConfig {
+  /** Ascending by distance. The longest tier a shot reaches is the one it earns. */
+  tiers: readonly LongShotTierConfig[];
 }
 
 /** Feel tunables: shake, hit-stop, glow pulses, particle counts, sfx pitch. */
@@ -991,6 +1007,16 @@ export const CONFIG: GameConfig = {
       minWindowSeconds: 3.5,
       tierThresholds: [2, 4, 7, 11],
       tierMultipliers: [1, 1.5, 2, 3, 4],
+    },
+    // A bolt lives 1.6s at 620px/s, so it can cover about 990px before it dies
+    // — the top tier is deliberately near that ceiling, where the shot has to
+    // be taken at the edge of the gun's range to count.
+    longShot: {
+      tiers: [
+        { minDistance: 420, label: 'LONG SHOT', bonus: 0.25 },
+        { minDistance: 700, label: 'SNIPER', bonus: 0.6 },
+        { minDistance: 900, label: 'DEAD EYE', bonus: 1 },
+      ],
     },
     matchBase: 150,
     tierBonus: 75,

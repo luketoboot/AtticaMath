@@ -20,6 +20,7 @@ import {
   type ChainState,
 } from '../../core/collapse/chain';
 import { recordTrouble } from '../../core/coach/trouble';
+import { longShotBonus, longShotFor, type LongShot } from '../../core/collapse/longshot';
 import { collapseAttempt } from '../../core/collapse/skills';
 import { opposite, resolveShot, type GunKind, type TokenRef } from '../../core/collapse/targeting';
 import { CONFIG } from '../../core/config';
@@ -95,6 +96,12 @@ interface Bolt {
   vx: number;
   vy: number;
   diesAt: number;
+  /**
+   * Ground covered so far, in pixels. Accumulated from speed rather than from
+   * the change in position, because a bolt that wraps the screen edge jumps
+   * across it — and that shot has still travelled the whole way.
+   */
+  flown: number;
   /** Ghost segments dropped behind the bolt, oldest first. */
   trail: Phaser.GameObjects.Arc[];
   trailAt: number;
@@ -546,6 +553,7 @@ export class CollapseScene extends Phaser.Scene {
       vx,
       vy,
       diesAt: this.time.now + c.projectileLifeSeconds * 1000,
+      flown: 0,
       trail: [],
       trailAt: 0,
     });
@@ -593,6 +601,7 @@ export class CollapseScene extends Phaser.Scene {
       const prevY = b.y;
       b.x = this.wrapX(b.x + b.vx * dt);
       b.y = this.wrapY(b.y + b.vy * dt);
+      b.flown += Math.hypot(b.vx, b.vy) * dt;
       b.gfx.setPosition(b.x, b.y);
       this.dropTrail(b, prevX, prevY);
 
@@ -607,8 +616,9 @@ export class CollapseScene extends Phaser.Scene {
         const normal = Math.atan2(b.y - hit.y, b.x - hit.x);
         this.impactSparks(b.x, b.y, normal, GUN_COLOR[b.gun]);
         getAudio(this)?.play('boltHit');
+        const flown = b.flown;
         this.killBolt(b);
-        this.resolveHit(hit, b.gun);
+        this.resolveHit(hit, b.gun, flown);
       }
     }
   }
@@ -644,7 +654,7 @@ export class CollapseScene extends Phaser.Scene {
 
   // --- hit resolution ---
 
-  private resolveHit(target: LiveToken, gun: GunKind): void {
+  private resolveHit(target: LiveToken, gun: GunKind, flown: number): void {
     const held = this.armedToken();
     const outcome = resolveShot(held ? this.refOf(held) : null, this.refOf(target), gun);
 
@@ -662,7 +672,7 @@ export class CollapseScene extends Phaser.Scene {
         getAudio(this)?.play('prime');
         break;
       case 'collapse':
-        if (held) this.collapsePair(held, target);
+        if (held) this.collapsePair(held, target, flown);
         break;
       case 'mismatch':
         this.mismatchFeedback(target, held);
@@ -775,7 +785,7 @@ export class CollapseScene extends Phaser.Scene {
    * The payoff. Both halves are yanked off their drift into the midpoint,
    * wound up as they go, and annihilate — a beat of inrush, then detonation.
    */
-  private collapsePair(a: LiveToken, b: LiveToken): void {
+  private collapsePair(a: LiveToken, b: LiveToken, flown: number): void {
     const c = CONFIG.collapse;
     const { juice } = CONFIG;
     const x = (a.x + b.x) / 2;
@@ -789,7 +799,12 @@ export class CollapseScene extends Phaser.Scene {
     this.bestChain = Math.max(this.bestChain, step.state.count);
     const base = c.matchBase + (a.tier - 1) * c.tierBonus + (fractionHalf.unreduced ? c.unreducedBonus : 0);
     const points = Math.round(base * step.multiplier * this.drops.multiplier);
-    this.score += points;
+    // Distance rides on top of everything the collapse already earned, so a
+    // long shot into a hot chain is worth taking rather than a separate,
+    // smaller game played beside the chain.
+    const shot = longShotFor(flown, c.longShot);
+    const bonus = longShotBonus(points, shot);
+    this.score += points + bonus;
     this.matched += 1;
     this.armedId = null;
     this.resolving += 1;
@@ -829,7 +844,13 @@ export class CollapseScene extends Phaser.Scene {
         fractionHalf.unreduced && fractionHalf.fraction
           ? `   ${formatFraction(fractionHalf.fraction)} = ${formatFraction(reduce(fractionHalf.fraction))}`
           : '';
-      this.popup(x, y, `+${points}${step.multiplier > 1 ? `  x${step.multiplier}` : ''}${suffix}`, CSS.yellow);
+      // One payout line, not two: the collapse can land anywhere on screen and
+      // a second floating number would sometimes print straight through the
+      // callout. The distance bonus reads as part of what the shot paid.
+      const chain = step.multiplier > 1 ? `  x${step.multiplier}` : '';
+      const long = shot ? `  +${bonus} ${shot.label}` : '';
+      this.popup(x, y, `+${points}${chain}${long}${suffix}`, CSS.yellow);
+      if (shot) this.callOutLongShot(shot);
 
       // Feedback scales with the chain: a first collapse should not feel the
       // same as a fifth, or the ladder means nothing.
@@ -1246,6 +1267,49 @@ export class CollapseScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onComplete: () => text.destroy(),
     });
+  }
+
+  /**
+   * The callout for a shot that crossed the field.
+   *
+   * Sits below the chain banner rather than on it, because a long shot into a
+   * rising chain fires both in the same frame and that is the best moment the
+   * mode has — the two must not draw over each other.
+   *
+   * The voice line is held back for SNIPER and above. A callout that fires on
+   * every slightly-long shot stops being a callout within a minute, and the
+   * bottom tier gets a sting instead so distance still reads without shouting.
+   */
+  private callOutLongShot(shot: LongShot): void {
+    const color = [CSS.cyan, CSS.magentaHot, CSS.yellow][shot.tier] ?? CSS.yellow;
+    const { width, height } = this.scale;
+    const text = this.add
+      .text(width / 2, height * 0.34, shot.label, {
+        fontFamily: FONT,
+        fontSize: '46px',
+        fontStyle: 'bold',
+        color,
+        stroke: CSS.black,
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0)
+      .setScale(1.5)
+      .setDepth(11);
+    this.tweens.add({
+      targets: text,
+      alpha: 1,
+      scale: 1,
+      duration: 160,
+      ease: 'Back.easeOut',
+      hold: 620,
+      yoyo: true,
+      onComplete: () => text.destroy(),
+    });
+    const audio = getAudio(this);
+    if (shot.tier >= 1) audio?.play('sniper');
+    else audio?.play('fast', { pitch: 1.25 });
+    cameraPunch(this, 0.03 + shot.tier * 0.02, 320);
   }
 
   private banner(message: string, color: string): void {
