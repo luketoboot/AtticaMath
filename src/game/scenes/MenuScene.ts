@@ -20,7 +20,7 @@ import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 const MODES: readonly (ModeCardSpec & { scene: string })[] = [
   {
     label: 'METEOR\nDEFENSE',
-    tagline: 'TYPE THE ANSWER. KILL THE ROCK BEFORE IT LANDS.',
+    tagline: 'TYPE THE ANSWER BEFORE THE ROCK LANDS.',
     icon: 'meteor',
     accent: PALETTE.magenta,
     scene: 'ModeSelect',
@@ -28,7 +28,7 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
   },
   {
     label: 'EXPRESSION\nBUILDER',
-    tagline: 'BUILD THE TARGET OUT OF THE HAND YOU ARE DEALT.',
+    tagline: 'BUILD THE TARGET FROM THE HAND YOU HOLD.',
     icon: 'expression',
     accent: PALETTE.cyan,
     scene: 'ExpressionSelect',
@@ -36,7 +36,7 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
   },
   {
     label: 'FACTOR\nSTORM',
-    tagline: 'SHOOT ROCKS WITH THEIR FACTORS. SPLIT THEM TO PRIMES.',
+    tagline: 'SHOOT ROCKS WITH THEIR OWN FACTORS.',
     icon: 'factor',
     accent: PALETTE.yellow,
     scene: 'Factor',
@@ -60,20 +60,24 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
   },
   {
     label: 'CAGES',
-    tagline: 'ONE GRID, ONE CLOCK. EVERY REGION MUST MAKE ITS TARGET.',
+    tagline: 'ONE GRID, ONE CLOCK. EVERY CAGE MAKES ITS TARGET.',
     icon: 'gnomon',
     accent: PALETTE.yellow,
     scene: 'Cages',
     onSelect: () => {},
   },
-  {
-    label: 'EXERCISE',
-    tagline: 'BREAK IT DOWN. SOLVE IT SMALL. BUILD IT BACK.',
-    icon: 'exercise',
-    accent: PALETTE.cyan,
-    scene: 'ExerciseSelect',
-    onSelect: () => {},
-  },
+  // Exercise is off the deck. It is the one mode here that never became a game
+  // — the dial teaches, and everything built on top of it to make that fun
+  // (the pictures, the untimed set, the falling scaffold depth) only ever made
+  // it a better lesson. A menu is a promise about what is in there, and putting
+  // a lesson beside five arcade modes mis-sells both.
+  //
+  // Benched rather than deleted, like Boss Rush: core/exercise and its scenes
+  // stay in the tree, and the two places that open it *on a named skill* still
+  // work — the Coach's PRACTISE for a skill with a bench, and the Playbook's
+  // per-skill drill. Those are a different offer from a tile: they answer "help
+  // me with this one thing", which is the question the dial is actually good at.
+  //
   // Boss Rush is benched, not deleted: with no target to hit, any expression
   // counted as correct, which both flattened the game (optimal play was
   // "multiply the big chips", forever) and let ratings inflate off attempts
@@ -106,7 +110,7 @@ export class MenuScene extends Phaser.Scene {
     // Modes across one row, so no mode reads as buried under another. The
     // card narrows as modes are added rather than the row wrapping: a second
     // row would make the modes on it read as lesser.
-    const cardLayout = { width: 148, height: 214 };
+    const cardLayout = { width: 170, height: 214 };
     const deck = new CardDeck(this, this.modeSpecs(), cardLayout, (i, n) => ({
       x: spread(width / 2, 1120, i, n),
       y: 322,

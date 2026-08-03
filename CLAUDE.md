@@ -58,7 +58,10 @@ Stamina is the price of a wrong answer beyond time. Because the buffer fires on 
 ### Mode 2: Expression Builder (second)
 A target number falls. The player has ammunition: a hand of numbers and operators. They compose an expression that evaluates to the target and fire it. Multiple valid solutions exist; award bonuses for ammo efficiency and operator variety. This is Countdown numbers round as an action game. Same skill model feeds it, and which operators the player avoids is itself a rating signal.
 
-### Mode 3: Exercise (the focus dial)
+### Mode 3: Exercise (the focus dial) — benched
+
+**Off the menu.** It never became a game: the dial teaches, and everything built on top of it to make that fun only ever made it a better lesson. A menu is a promise about what is in there, and a lesson sitting beside five arcade modes mis-sells both. Benched rather than deleted, like Boss Rush — `core/exercise` and its scenes stay in the tree, with their tests, and the two routes that open it *on a named skill* still work: the Coach's PRACTISE for a skill with a bench, and the Playbook's per-skill drill. Those answer "help me with this one thing", which is the question the dial is actually good at. The rest of this section describes what is still in there.
+
 The teaching mode, and the only one that is not a race — no HP, no clock, no combo. A problem opens downward into coarser versions of itself: DECONSTRUCT drops the ones out of focus, then the tens, until what is left is small enough to see whole (`679 + 834` → `670 + 830` → `600 + 800`). The player answers that rung, RECONSTRUCTs to bring the next place back, and answers again — so the answer arrives place by place and the carrying never has to be tracked apart from the running total. Solved rungs stay on screen, because `670 + 830` is only easy while `1400` is still in front of you.
 
 The point is to make base-10 structure something the player performs rather than reads. Every other mode can be beaten by recall; this one cannot. Its output is `scaffoldDepth` — how far out the player had to zoom before the problem looked solvable — which falls as a technique internalises and reaching zero means they are solving these whole. Rating updates are gentle (half K) and untimed, since a mode that invites you to think must not read your pace as slowness.

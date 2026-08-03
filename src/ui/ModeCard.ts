@@ -77,8 +77,13 @@ class ModeCard {
     });
     this.container.add(this.icon);
 
+    // Text flows from a single top anchor rather than sitting at two fixed
+    // heights. Both blocks change height with their copy — a two-line label,
+    // a tagline that wraps to three — and pinned centres meant the label grew
+    // downwards into the tagline and printed straight through it.
+    const textTop = -half + 118;
     this.title = scene.add
-      .text(0, half - 66, spec.label, {
+      .text(0, textTop, spec.label, {
         fontFamily: FONT,
         fontSize: '19px',
         fontStyle: 'bold',
@@ -86,20 +91,28 @@ class ModeCard {
         align: 'center',
         wordWrap: { width: layout.width - 24 },
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5, 0);
     this.container.add(this.title);
 
-    this.container.add(
-      scene.add
-        .text(0, half - 32, spec.tagline, {
-          fontFamily: FONT,
-          fontSize: '11px',
-          color: CSS.cyanDim,
-          align: 'center',
-          wordWrap: { width: layout.width - 30 },
-        })
-        .setOrigin(0.5),
-    );
+    const tagTop = textTop + this.title.height + 8;
+    const room = half - 12 - tagTop;
+    const tagline = scene.add
+      .text(0, tagTop, spec.tagline, {
+        fontFamily: FONT,
+        fontSize: '11px',
+        color: CSS.cyanDim,
+        align: 'center',
+        wordWrap: { width: layout.width - 26 },
+      })
+      .setOrigin(0.5, 0);
+    // Last resort, and it should stay unused: copy is written to fit. But a
+    // card is a fixed box and a tagline is a sentence somebody will edit one
+    // day, so the card gets the final say on how small it has to be printed
+    // rather than letting it run off the bottom edge.
+    for (let size = 11; size > 8 && tagline.height > room; size--) {
+      tagline.setFontSize(size - 1);
+    }
+    this.container.add(tagline);
 
     // Arcade cabinet numbering. Cheap, and it makes a row of cards read as a
     // set rather than as five unrelated boxes.
