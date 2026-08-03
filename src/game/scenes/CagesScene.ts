@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
-import { cageEdges, cageHead, cageLabel, colOf, rowOf } from '../../core/cages/cages';
+import { cageEdges, cageHead, cageLabel, colOf, rowOf, shadeCages } from '../../core/cages/cages';
 import { CageSession } from '../../core/cages/session';
 import { CONFIG } from '../../core/config';
 import { creditsForCages } from '../../core/economy/economy';
@@ -36,6 +36,17 @@ import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
  */
 
 const CELL = 92;
+
+/**
+ * Fill strengths for the cage tones, deepest first.
+ *
+ * Four, because cage adjacency on a grid is planar and four is always enough —
+ * and kept close together on purpose. The tones are there to group cells, not
+ * to be noticed: a board of four obviously different colours would read as a
+ * decoration fighting the digits, which are the only thing here worth looking
+ * at. Spread far enough apart to see, near enough not to look at.
+ */
+export const CAGE_SHADES: readonly number[] = [0.18, 0.48, 0.78, 1];
 
 interface CellView {
   bg: Phaser.GameObjects.Graphics;
@@ -300,26 +311,42 @@ export class CagesScene extends Phaser.Scene {
       for (const cell of cage.cells) cageOf[cell] = i;
     });
 
+    // Each cage gets a tone, and no two touching cages get the same one, so a
+    // region reads as one block of colour before any outline is traced.
+    const shades = shadeCages(size, puzzle.cages);
+
     this.cells.forEach((view, i) => {
       const value = this.session.grid[i] ?? 0;
       const id = cageOf[i]!;
       const wrong = broken.has(id);
       view.bg.clear();
-      view.bg.fillStyle(wrong ? PALETTE.red : PALETTE.deepPurple, wrong ? 0.3 : 0.4);
+      view.bg.fillStyle(wrong ? PALETTE.red : PALETTE.deepPurple, wrong ? 0.3 : CAGE_SHADES[shades[id]! % CAGE_SHADES.length]!);
       view.bg.fillRect(1, 1, CELL - 2, CELL - 2);
-      view.bg.lineStyle(1, PALETTE.purple, 0.7);
+      // Faint, and fainter than it was. The cell divider only has to say that
+      // two digits are separate; the cage boundary has to be seen across the
+      // board, and the two lines were competing at nearly the same weight.
+      view.bg.lineStyle(1, PALETTE.purple, 0.28);
       view.bg.strokeRect(1, 1, CELL - 2, CELL - 2);
       view.text.setText(value === 0 ? '' : String(value)).setColor(wrong ? CSS.red : CSS.white);
     });
 
-    // Cage borders: a heavy line wherever a cell's neighbour is in another cage.
+    // Cage borders: a heavy line wherever a cell's neighbour is in another cage,
+    // drawn twice — a wide dim pass under a bright narrow one. The CRT bloom
+    // then has something to catch, and the outline reads as lit rather than
+    // merely thick.
     const g = this.cageLines;
     g.clear();
-    g.lineStyle(4, PALETTE.cyan, 0.95);
-    for (const edge of cageEdges(size, puzzle.cages)) {
-      const x = this.originX + colOf(edge.cell, size) * CELL;
-      const y = this.originY + rowOf(edge.cell, size) * CELL;
-      g.lineBetween(x + edge.x1 * CELL, y + edge.y1 * CELL, x + edge.x2 * CELL, y + edge.y2 * CELL);
+    const edges = cageEdges(size, puzzle.cages);
+    for (const [thickness, alpha] of [
+      [10, 0.16],
+      [5, 1],
+    ] as const) {
+      g.lineStyle(thickness, PALETTE.cyan, alpha);
+      for (const edge of edges) {
+        const x = this.originX + colOf(edge.cell, size) * CELL;
+        const y = this.originY + rowOf(edge.cell, size) * CELL;
+        g.lineBetween(x + edge.x1 * CELL, y + edge.y1 * CELL, x + edge.x2 * CELL, y + edge.y2 * CELL);
+      }
     }
 
     // The label sits in each cage's top-left cell, the way it is written on paper.

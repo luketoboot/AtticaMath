@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
-import { cageEdges, cageHead, cageLabel, colOf, rowOf } from '../../core/cages/cages';
+import { cageEdges, cageHead, cageLabel, colOf, rowOf, shadeCages } from '../../core/cages/cages';
+import { CAGE_SHADES } from './CagesScene';
 import { EXAMPLE_PUZZLE, EXAMPLE_STEPS } from '../../core/cages/example';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -232,14 +233,20 @@ export class CagesLearnScene extends Phaser.Scene {
     }
     const fresh = new Set(step.fills.map((f) => f.cell));
 
+    // Same tones as the board, dimmed together when the step is pointing at
+    // something else. A walkthrough that did not look like the thing it is
+    // teaching would be teaching the wrong picture.
+    const shades = shadeCages(size, EXAMPLE_PUZZLE.cages);
+
     this.cellBg.clear();
     for (let i = 0; i < size * size; i++) {
       const x = ORIGIN_X + colOf(i, size) * CELL;
       const y = ORIGIN_Y + rowOf(i, size) * CELL;
       const inFocus = lit.size === 0 || lit.has(cageOf[i]!);
-      this.cellBg.fillStyle(PALETTE.deepPurple, inFocus ? 0.5 : 0.25);
+      const shade = CAGE_SHADES[shades[cageOf[i]!]! % CAGE_SHADES.length]!;
+      this.cellBg.fillStyle(PALETTE.deepPurple, inFocus ? shade : shade * 0.45);
       this.cellBg.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-      this.cellBg.lineStyle(1, PALETTE.purple, inFocus ? 0.7 : 0.3);
+      this.cellBg.lineStyle(1, PALETTE.purple, inFocus ? 0.28 : 0.14);
       this.cellBg.strokeRect(x + 1, y + 1, CELL - 2, CELL - 2);
 
       const view = this.cellText[i]!;
@@ -254,19 +261,25 @@ export class CagesLearnScene extends Phaser.Scene {
       }
     }
 
-    // Cage outlines, from the same geometry the board draws.
+    // Cage outlines, from the same geometry the board draws: a wide dim pass
+    // under a bright narrow one, so the CRT bloom has something to catch.
     this.borders.clear();
-    for (const edge of cageEdges(size, EXAMPLE_PUZZLE.cages)) {
-      const x = ORIGIN_X + colOf(edge.cell, size) * CELL;
-      const y = ORIGIN_Y + rowOf(edge.cell, size) * CELL;
-      const hot = lit.has(cageOf[edge.cell]!);
-      this.borders.lineStyle(hot ? 5 : 4, hot ? PALETTE.magentaHot : PALETTE.cyan, hot ? 1 : 0.5);
-      this.borders.lineBetween(
-        x + edge.x1 * CELL,
-        y + edge.y1 * CELL,
-        x + edge.x2 * CELL,
-        y + edge.y2 * CELL,
-      );
+    const edges = cageEdges(size, EXAMPLE_PUZZLE.cages);
+    for (const pass of [0, 1]) {
+      for (const edge of edges) {
+        const x = ORIGIN_X + colOf(edge.cell, size) * CELL;
+        const y = ORIGIN_Y + rowOf(edge.cell, size) * CELL;
+        const hot = lit.has(cageOf[edge.cell]!);
+        const color = hot ? PALETTE.magentaHot : PALETTE.cyan;
+        if (pass === 0) this.borders.lineStyle(10, color, hot ? 0.28 : 0.12);
+        else this.borders.lineStyle(hot ? 6 : 5, color, hot ? 1 : 0.6);
+        this.borders.lineBetween(
+          x + edge.x1 * CELL,
+          y + edge.y1 * CELL,
+          x + edge.x2 * CELL,
+          y + edge.y2 * CELL,
+        );
+      }
     }
 
     EXAMPLE_PUZZLE.cages.forEach((_, i) => {

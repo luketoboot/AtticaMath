@@ -131,6 +131,87 @@ export function cageHead(cage: Cage): number {
   return [...cage.cells].sort((a, b) => a - b)[0]!;
 }
 
+/** Which cages share an edge with which, by cage index. */
+function cageAdjacency(size: number, cages: readonly Cage[]): Set<number>[] {
+  const cageOf = new Array<number>(size * size).fill(-1);
+  cages.forEach((cage, i) => {
+    for (const cell of cage.cells) cageOf[cell] = i;
+  });
+  const touching = cages.map(() => new Set<number>());
+  for (let cell = 0; cell < size * size; cell++) {
+    for (const n of neighbours(cell, size)) {
+      const a = cageOf[cell]!;
+      const b = cageOf[n]!;
+      if (a !== b) touching[a]!.add(b);
+    }
+  }
+  return touching;
+}
+
+/**
+ * A shade index per cage, chosen so no two cages that touch share one.
+ *
+ * The heavy outline says where a cage *ends*; the shade says where it *is*.
+ * Reading a boundary means tracing it, and a player halfway through a puzzle is
+ * tracing the same outlines over and over to remember which cells the target
+ * they are working on covers. A fill answers that without being read at all.
+ *
+ * Four tones, and it really has to fit in four: cage adjacency on a grid is a
+ * map drawn on a plane, so four is always enough, and a fifth would have to
+ * wrap round the palette and hand two neighbours the same tone — exactly the
+ * confusion the fill exists to remove.
+ *
+ * Greedy alone does not get there. It wants five on a real board often enough
+ * to matter (the first sweep of 520 grids found one), because greedy takes
+ * cages in the order they were carved rather than in an order that leaves room.
+ * So: backtracking, hardest cage first, with greedy as a floor if the search is
+ * ever starved. Boards are tiny — at most three dozen cages — so the search
+ * settles immediately.
+ */
+export function shadeCages(size: number, cages: readonly Cage[], tones = 4): number[] {
+  const touching = cageAdjacency(size, cages);
+  const shades = new Array<number>(cages.length).fill(-1);
+
+  // Most-constrained first: a cage with many neighbours is the one that runs
+  // out of tones, so colouring it while the board is still open avoids most of
+  // the backtracking that would otherwise happen.
+  const order = cages
+    .map((_, i) => i)
+    .sort((a, b) => touching[b]!.size - touching[a]!.size || a - b);
+
+  let budget = 20000;
+  const assign = (at: number): boolean => {
+    if (at === order.length) return true;
+    if (budget-- <= 0) return false;
+    const cage = order[at]!;
+    for (let tone = 0; tone < tones; tone++) {
+      let clash = false;
+      for (const other of touching[cage]!) {
+        if (shades[other] === tone) {
+          clash = true;
+          break;
+        }
+      }
+      if (clash) continue;
+      shades[cage] = tone;
+      if (assign(at + 1)) return true;
+      shades[cage] = -1;
+    }
+    return false;
+  };
+  if (assign(0)) return shades;
+
+  // Unreachable for a planar map with four tones, and cheap insurance if this
+  // is ever called with fewer: every cage still gets *a* tone, and the outlines
+  // are still doing the real work.
+  return cages.map((_, i) => {
+    const taken = new Set([...touching[i]!].map((other) => shades[other]));
+    let tone = 0;
+    while (taken.has(tone)) tone += 1;
+    return (shades[i] = tone);
+  });
+}
+
 /** What a cage wears in its corner. A one-cell cage is a digit; an operator would be noise. */
 export function cageLabel(cage: Cage): string {
   return cage.cells.length === 1 ? `${cage.target}` : `${cage.target}${OP_SIGN[cage.op]}`;

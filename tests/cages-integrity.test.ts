@@ -6,6 +6,7 @@ import {
   generate,
   neighbours,
   rowOf,
+  shadeCages,
   targetFor,
   type Cage,
   type CageOp,
@@ -85,20 +86,18 @@ function addRange(cage: Cage, size: number): { min: number; max: number } {
   return { min: n, max: size * n };
 }
 
-describe('every puzzle the game deals', () => {
-  const puzzles = SIZES.flatMap((size) => {
-    const rng = createRng(20260802 + size);
-    // Enough grids that a one-in-a-hundred generation fault cannot hide, and
-    // still fast: the solver stops counting at two.
-    const runs = size === 4 ? 400 : 60;
-    return Array.from({ length: runs }, () => {
-      const puzzle = generate(rng, { size, ops: ALL_OPS });
-      expect(puzzle, `generation gave up at size ${size}`).toBeDefined();
-      return puzzle!;
-    });
-  });
+/** The sweep every check below runs against: hundreds of dealt grids, once. */
+const puzzles = SIZES.flatMap((size) => {
+  const rng = createRng(20260802 + size);
+  // Enough grids that a one-in-a-hundred generation fault cannot hide, and
+  // still fast: the solver stops counting at two.
+  const runs = size === 4 ? 400 : 60;
+  return Array.from({ length: runs }, () => generate(rng, { size, ops: ALL_OPS })!);
+});
 
+describe('every puzzle the game deals', () => {
   it('deals a grid every time it is asked', () => {
+    for (const puzzle of puzzles) expect(puzzle).toBeDefined();
     expect(puzzles.length).toBe(400 + 60 + 60);
   });
 
@@ -172,6 +171,47 @@ describe('every puzzle the game deals', () => {
     const rng = createRng(7);
     const puzzle = generate(rng, { size: CONFIG.cages.defaultSize, ops: ALL_OPS })!;
     expect(puzzle.size).toBe(CONFIG.cages.defaultSize);
+  });
+});
+
+describe('cage shading', () => {
+  it('never gives two touching cages the same tone', () => {
+    // The whole point of the fill is that a region reads as one block without
+    // being traced. Two neighbours sharing a tone merge into one bigger block
+    // that is not a cage, which is worse than no shading at all.
+    for (const puzzle of puzzles) {
+      const shades = shadeCages(puzzle.size, puzzle.cages);
+      const cageOf = new Array<number>(puzzle.size * puzzle.size).fill(-1);
+      puzzle.cages.forEach((cage, i) => {
+        for (const cell of cage.cells) cageOf[cell] = i;
+      });
+      for (let cell = 0; cell < puzzle.size * puzzle.size; cell++) {
+        for (const n of neighbours(cell, puzzle.size)) {
+          if (cageOf[n] === cageOf[cell]) continue;
+          expect(
+            shades[cageOf[n]!],
+            `cages ${cageOf[cell]} and ${cageOf[n]} touch and share a tone`,
+          ).not.toBe(shades[cageOf[cell]!]);
+        }
+      }
+    }
+  });
+
+  it('needs no more tones than the palette has', () => {
+    // Four is enough for any map drawn on a plane, and the palette holds four.
+    // A fifth would wrap round it and put two neighbours in the same tone.
+    for (const puzzle of puzzles) {
+      const shades = shadeCages(puzzle.size, puzzle.cages);
+      expect(Math.max(...shades), `${puzzle.size}x${puzzle.size}`).toBeLessThan(4);
+    }
+  });
+
+  it('gives every cage a tone, and the same one every time', () => {
+    const puzzle = puzzles[0]!;
+    const shades = shadeCages(puzzle.size, puzzle.cages);
+    expect(shades).toHaveLength(puzzle.cages.length);
+    expect(shades.every((s) => s >= 0)).toBe(true);
+    expect(shadeCages(puzzle.size, puzzle.cages)).toEqual(shades);
   });
 });
 
