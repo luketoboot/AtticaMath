@@ -13,12 +13,14 @@ export interface BackdropOptions {
   /** Fraction of the screen height where the grid starts. */
   horizon?: number;
   /**
-   * Fraction of the screen height the sun is anchored to, if the sun should not
-   * sit on the horizon line. Defaults to `horizon`. The menu drops its line
-   * below the sun's waist so the line reads as the sun's base rather than
-   * cutting across its face.
+   * Fraction of the screen height the sun's *base* rests on. Defaults to
+   * `horizon`, which is what it should almost always be: the line is the
+   * ground, and a sun floating above it or sunk halfway through it reads as a
+   * mistake rather than as a sunset.
    */
   sunHorizon?: number;
+  /** Sun radius in pixels. Defaults to a size that suits a full screen. */
+  sunRadius?: number;
   /** Draw the sun. Off for screens with content low on the glass. */
   sun?: boolean;
   /**
@@ -40,7 +42,13 @@ export function drawBackdrop(scene: Phaser.Scene, opts: BackdropOptions = {}): v
 
   if (opts.stars !== false) drawStars(scene, horizon);
   if (opts.sun !== false) {
-    drawSun(scene, width / 2, sunHorizon + 30, Math.min(210, height * 0.3), opts.sunAlpha ?? 1);
+    // Sitting *on* the line, not through it: the disc's centre is one radius
+    // above its base. It used to be dropped 30px below the line instead, which
+    // put the horizon across the sun's face — and then the menu shoved the
+    // whole thing a further 130px down to get it out of the way, which left a
+    // sliver of a much bigger sun poking up and a bright line ruled across it.
+    const radius = opts.sunRadius ?? Math.min(210, height * 0.3);
+    drawSun(scene, width / 2, sunHorizon - radius, radius, opts.sunAlpha ?? 1);
   }
   drawGrid(scene, horizon);
 }

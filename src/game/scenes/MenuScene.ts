@@ -96,9 +96,11 @@ export class MenuScene extends Phaser.Scene {
     getAudio(this)?.playMusic('menu');
     applyCrt(this);
 
-    // The utility row sits over the sun's upper half, so the sun comes down to
-    // atmosphere here — still synthwave, no longer a second thing to read.
-    drawBackdrop(this, { sunAlpha: 0.32, horizon: 0.88, sunHorizon: 1.06 });
+    // The sun sits on the horizon and the rows sit over the sun, so it is
+    // dialled down to atmosphere — still synthwave, no longer a second thing to
+    // read. Its radius is the gap between the mode cards and the line, so it
+    // rises behind the two lower rows and never climbs into the art.
+    drawBackdrop(this, { sunAlpha: 0.2, horizon: 0.88, sunRadius: 210 });
 
     titleLogo(this, width / 2, 86, 'NUMERACY', {
       fontSize: 66,
@@ -177,7 +179,7 @@ export class MenuScene extends Phaser.Scene {
     // straight through the panel's half-transparent fill, which the date line
     // is too small to survive. A backing plate buys the contrast back without
     // dimming the sun for every other row on the screen.
-    this.add.rectangle(x, y, 446, 64, PALETTE.black, 0.82);
+    this.add.rectangle(x, y, 446, 64, PALETTE.black, 0.5);
     return neonButton(this, x, y, 'DAILY CHALLENGE', () => this.scene.start('Daily'), {
       width: 440,
       height: 58,
