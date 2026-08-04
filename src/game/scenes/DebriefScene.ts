@@ -19,12 +19,14 @@ import {
 import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { topMovers, type SkillDelta } from '../../core/skills/report';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { InitialsEntry } from '../../ui/InitialsEntry';
 import { MenuNav, navHint } from '../../ui/MenuNav';
 import { spread } from '../../ui/ModeCard';
 import { neonButton } from '../../ui/panels';
+import { revealIn } from '../../ui/reveal';
 import { keyEventGate } from '../input/freshKey';
 import { LEADERBOARD_REGISTRY_KEY } from '../leaderboardStore';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
@@ -91,14 +93,28 @@ export class DebriefScene extends Phaser.Scene {
     // Sun off: the button row sits low enough that it would fight for the space.
     drawBackdrop(this, { sun: false, horizon: 0.93 });
 
-    this.add
+    // The debrief is the one screen whose whole job is to make the player feel
+    // the run they just had, so nothing on it appears instantly: the headline
+    // lands, the ledger deals in row by row, and the numbers roll up.
+    const title = this.add
       .text(width / 2, height * 0.18, data.title ?? 'BASE DESTROYED', {
         fontFamily: FONT,
         fontSize: '56px',
         fontStyle: 'bold',
         color: data.titleColor ?? CSS.red,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setAlpha(0)
+      .setScale(1.12);
+    const titleP = { t: 0 };
+    this.tweens.add({
+      targets: titleP,
+      t: 1,
+      duration: 260,
+      ease: 'Quad.easeOut',
+      onUpdate: () => title.setAlpha(titleP.t).setScale(1.12 - 0.12 * titleP.t),
+      onComplete: () => title.setAlpha(1).setScale(1),
+    });
 
     const s = data.stats;
     const rows: string[][] = [
@@ -116,15 +132,51 @@ export class DebriefScene extends Phaser.Scene {
     const statsMid = movers.length > 0 ? 0.31 : 0.5;
     rows.forEach(([label, value], i) => {
       const y = height * 0.3 + i * 36;
-      this.add.text(width * (statsMid - 0.18), y, label!, { fontFamily: FONT, fontSize: '22px', color: CSS.cyanDim });
-      this.add
+      const delay = 250 + i * 120;
+      const isCredits = i === rows.length - 1;
+      const labelText = this.add.text(width * (statsMid - 0.18), y, label!, {
+        fontFamily: FONT,
+        fontSize: '22px',
+        color: CSS.cyanDim,
+      });
+      revealIn(this, labelText, delay);
+      const valueText = this.add
         .text(width * (statsMid + 0.18), y, value!, {
           fontFamily: FONT,
           fontSize: '22px',
           fontStyle: 'bold',
-          color: i === rows.length - 1 ? CSS.yellow : CSS.white,
+          color: isCredits ? CSS.yellow : CSS.white,
         })
         .setOrigin(1, 0);
+
+      // Numbers roll up; anything that is not a bare number (a clock, a grid
+      // size) fades in whole — counting up a "4 x 4" would be gibberish.
+      const numeric = /^([+x]?)(\d+)$/.exec(value!);
+      if (!numeric) {
+        revealIn(this, valueText, delay);
+        return;
+      }
+      const prefix = numeric[1]!;
+      const target = Number(numeric[2]!);
+      const p = { n: 0 };
+      valueText.setAlpha(0);
+      this.tweens.add({
+        targets: p,
+        n: target,
+        delay,
+        duration: 450,
+        ease: 'Cubic.easeOut',
+        onStart: () => {
+          valueText.setAlpha(1);
+          getAudio(this)?.play('ui', { pitch: 1.5, gain: 0.35 });
+        },
+        onUpdate: () => valueText.setText(`${prefix}${Math.round(p.n)}`),
+        onComplete: () => {
+          valueText.setText(`${prefix}${target}`);
+          // Credits land last and land as money.
+          if (isCredits) getAudio(this)?.play('purchase', { gain: 0.7 });
+        },
+      });
     });
     this.drawDeltas(movers);
 
@@ -140,7 +192,18 @@ export class DebriefScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setAlpha(0);
-      this.tweens.add({ targets: text, alpha: 1, duration: 300, delay: 400 + i * 250 });
+      // After the ledger has finished rolling, and no longer silent — a new
+      // milestone is the biggest thing a run can produce.
+      const p = { t: 0 };
+      this.tweens.add({
+        targets: p,
+        t: 1,
+        duration: 300,
+        delay: 1000 + i * 250,
+        onStart: () => getAudio(this)?.play('comboUp', { gain: 0.8 }),
+        onUpdate: () => text.setAlpha(p.t),
+        onComplete: () => text.setAlpha(1),
+      });
     });
 
     const quote =
@@ -148,7 +211,7 @@ export class DebriefScene extends Phaser.Scene {
         ? 'OPERATOR // New hardware in the brain. Logged. Go break it in.'
         : (data.operatorLine ??
           'OPERATOR // Debrief logged. The rocks don’t care. Neither do I. Go again.');
-    this.add
+    const quoteText = this.add
       .text(width / 2, height * 0.66, quote, {
         fontFamily: FONT,
         fontSize: '17px',
@@ -157,6 +220,7 @@ export class DebriefScene extends Phaser.Scene {
         align: 'center',
       })
       .setOrigin(0.5);
+    revealIn(this, quoteText, 800);
 
     // A qualifying score gets the initials prompt first; the buttons appear
     // once it is answered, so ENTER cannot relaunch out from under the entry.
@@ -179,19 +243,24 @@ export class DebriefScene extends Phaser.Scene {
       const y = height * 0.3 + i * 36;
       const up = m.delta > 0;
       const label = m.label.toUpperCase();
-      this.add.text(width * 0.56, y + 3, label, {
-        fontFamily: FONT,
-        fontSize: label.length > 26 ? '13px' : '16px',
-        color: CSS.cyanDim,
-      });
-      this.add
-        .text(width * 0.87, y, `${up ? '+' : '−'}${Math.abs(m.delta)}`, {
+      // Deals in on the same beat as the stat rows to its left.
+      const delay = 250 + i * 120;
+      const row = [
+        this.add.text(width * 0.56, y + 3, label, {
           fontFamily: FONT,
-          fontSize: '22px',
-          fontStyle: 'bold',
-          color: up ? CSS.cyan : CSS.red,
-        })
-        .setOrigin(1, 0);
+          fontSize: label.length > 26 ? '13px' : '16px',
+          color: CSS.cyanDim,
+        }),
+        this.add
+          .text(width * 0.87, y, `${up ? '+' : '−'}${Math.abs(m.delta)}`, {
+            fontFamily: FONT,
+            fontSize: '22px',
+            fontStyle: 'bold',
+            color: up ? CSS.cyan : CSS.red,
+          })
+          .setOrigin(1, 0),
+      ];
+      for (const text of row) revealIn(this, text, delay);
     });
   }
 
@@ -448,22 +517,23 @@ export class DebriefScene extends Phaser.Scene {
     const specs: { label: string; go: () => void; accent?: number }[] =
       data.daily !== undefined
         ? [
-            { label: 'DAILY', go: () => this.scene.start('Daily'), accent: PALETTE.magenta },
-            { label: 'HANGAR', go: () => this.scene.start('Shop') },
-            { label: 'MENU', go: () => this.scene.start('Menu') },
+            { label: 'DAILY', go: () => goTo(this, 'Daily'), accent: PALETTE.magenta },
+            { label: 'HANGAR', go: () => goTo(this, 'Shop') },
+            { label: 'MENU', go: () => goTo(this, 'Menu') },
           ]
         : [
-            { label: 'RELAUNCH', go: () => this.scene.start(relaunchScene), accent: PALETTE.magenta },
+            { label: 'RELAUNCH', go: () => goTo(this, relaunchScene), accent: PALETTE.magenta },
             {
               label: 'SCORES',
               go: () =>
-                this.scene.start(
+                goTo(
+                  this,
                   'Leaderboard',
                   highlightAt === undefined ? { mode } : { mode, highlightAt },
                 ),
             },
-            { label: 'HANGAR', go: () => this.scene.start('Shop') },
-            { label: 'MENU', go: () => this.scene.start('Menu') },
+            { label: 'HANGAR', go: () => goTo(this, 'Shop') },
+            { label: 'MENU', go: () => goTo(this, 'Menu') },
           ];
 
     const buttons = specs.map((spec, i) =>
