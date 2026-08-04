@@ -7,7 +7,7 @@ import type { Problem } from '../../core/generator/problem';
 import { newMilestones } from '../../core/skills/milestones';
 import { DROP_LABEL, type DropKind } from '../../core/drops';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '../../fx/juice';
+import { clearHitStop, glowPulse, goTo, impact, shake, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { ExpressionComposer } from '../../ui/ExpressionComposer';
 import { onActionKey, sceneBindings } from '../input/KeyState';
@@ -531,7 +531,7 @@ export class BossScene extends Phaser.Scene {
     getAudio(this)?.play('gameover');
     shake(this, 500, 0.02);
     this.time.delayedCall(900, () => {
-      this.scene.start('Debrief', {
+      goTo(this, 'Debrief', {
         stats: this.session.stats(),
         credits,
         mode: 'Boss',

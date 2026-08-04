@@ -19,7 +19,17 @@ import { generateAsteroid, hitsCircle, type AsteroidShape } from '../../core/sha
 import { newMilestones } from '../../core/skills/milestones';
 import { runDeltas } from '../../core/skills/report';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
+import {
+  clearHitStop,
+  glowPulse,
+  goTo,
+  impact,
+  shake,
+  shockwave,
+  slowMo,
+  streakPitch,
+  timeScale,
+} from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
 import { announceDrop, carrierRing, effectsLine, pickupPod } from '../DropGfx';
@@ -680,16 +690,20 @@ export class FactorScene extends Phaser.Scene {
     this.phase = 'breather';
     const pick = this.session.endWave();
     const { width, height } = this.scale;
-    const lines: Phaser.GameObjects.GameObject[] = [
-      this.add
-        .text(width / 2, height * 0.3, 'ARENA CLEAR', {
-          fontFamily: FONT,
-          fontSize: '48px',
-          fontStyle: 'bold',
-          color: CSS.cyan,
-        })
-        .setOrigin(0.5),
-    ];
+    // Same clear payoff as Meteor Defense — one game, one language for "won".
+    getAudio(this)?.play('waveClear');
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    const cleared = this.add
+      .text(width / 2, height * 0.3, 'ARENA CLEAR', {
+        fontFamily: FONT,
+        fontSize: '48px',
+        fontStyle: 'bold',
+        color: CSS.cyan,
+      })
+      .setOrigin(0.5)
+      .setScale(0.8);
+    this.tweens.add({ targets: cleared, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    const lines: Phaser.GameObjects.GameObject[] = [cleared];
     if (pick) {
       getAudio(this)?.play('tip');
       lines.push(
@@ -905,8 +919,11 @@ export class FactorScene extends Phaser.Scene {
     getAudio(this)?.play('gameover');
     this.cameras.main.flash(400, 255, 45, 149);
     glowPulse(this, CONFIG.juice.glowPulseHeavy);
-    this.time.delayedCall(900, () => {
-      this.scene.start('Debrief', {
+    // The world sinks through the flash; 550 slowed clock-ms lands the cut on
+    // the same real-time beat the bare 900 used to.
+    slowMo(this, 600, 0.3);
+    this.time.delayedCall(550, () => {
+      goTo(this, 'Debrief', {
         stats: this.session.stats(),
         credits,
         mode: 'Factor',

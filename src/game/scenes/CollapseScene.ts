@@ -44,7 +44,7 @@ import { applyAttempt, type SkillTable } from '../../core/skills/rating';
 import { runDeltas } from '../../core/skills/report';
 import { generateAsteroid, hitsCircle, maxRadius, type AsteroidShape } from '../../core/shapes/asteroid';
 import { applyCrt } from '../../fx/applyCrt';
-import { cameraPunch, clearHitStop, glowPulse, impact, shake, shockwave, timeScale } from '../../fx/juice';
+import { cameraPunch, clearHitStop, glowPulse, goTo, impact, shake, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
 import { announceDrop, carrierRing, effectsLine, pickupPod, DROP_CSS } from '../DropGfx';
@@ -1578,7 +1578,7 @@ export class CollapseScene extends Phaser.Scene {
     this.cameras.main.flash(400, 255, 45, 149);
     glowPulse(this, CONFIG.juice.glowPulseHeavy);
     this.time.delayedCall(900, () => {
-      this.scene.start('Debrief', {
+      goTo(this, 'Debrief', {
         stats,
         credits,
         mode: 'Collapse',

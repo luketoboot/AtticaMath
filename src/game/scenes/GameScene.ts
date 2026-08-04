@@ -15,7 +15,18 @@ import type { MeteorPayload } from '../../core/waves/compose';
 import { newMilestones } from '../../core/skills/milestones';
 import { targetLatencyMs, type SkillTable } from '../../core/skills/rating';
 import { applyCrt } from '../../fx/applyCrt';
-import { clearHitStop, glowPulse, impact, shake, shockwave, streakPitch, timeScale } from '../../fx/juice';
+import {
+  cameraPunch,
+  clearHitStop,
+  glowPulse,
+  goTo,
+  impact,
+  shake,
+  shockwave,
+  slowMo,
+  streakPitch,
+  timeScale,
+} from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { isTouchDevice, Numpad, PAD_CLAIMED_CODES } from '../../ui/Numpad';
 import { announceDrop, effectsLine, DROP_CSS } from '../DropGfx';
@@ -361,17 +372,24 @@ export class GameScene extends Phaser.Scene {
     const pick = this.session.endWave();
     const { width, height } = this.scale;
 
+    // The clear is a payoff, not a pause — it gets the sting the kill sounds
+    // have been building toward, and the world flinches once to mark it.
+    getAudio(this)?.play('waveClear');
+    glowPulse(this, CONFIG.juice.glowPulseHeavy);
+    cameraPunch(this, 0.02, 320);
+
     const lines: Phaser.GameObjects.GameObject[] = [];
-    lines.push(
-      this.add
-        .text(width / 2, height * 0.32, 'WAVE CLEARED', {
-          fontFamily: FONT,
-          fontSize: '48px',
-          fontStyle: 'bold',
-          color: CSS.cyan,
-        })
-        .setOrigin(0.5),
-    );
+    const cleared = this.add
+      .text(width / 2, height * 0.32, 'WAVE CLEARED', {
+        fontFamily: FONT,
+        fontSize: '48px',
+        fontStyle: 'bold',
+        color: CSS.cyan,
+      })
+      .setOrigin(0.5)
+      .setScale(0.8);
+    this.tweens.add({ targets: cleared, scale: 1, duration: 220, ease: 'Back.easeOut' });
+    lines.push(cleared);
     if (pick) {
       getAudio(this)?.play('tip');
       lines.push(
@@ -1388,8 +1406,12 @@ export class GameScene extends Phaser.Scene {
       shakeIntensity: CONFIG.juice.gameOverShakeIntensity,
       glow: CONFIG.juice.glowPulseHeavy,
     });
-    this.time.delayedCall(900, () => {
-      this.scene.start('Debrief', {
+    // The world sinks rather than stopping: whatever was still falling falls
+    // in slow motion through the flash. The delay is in slowed clock-ms, so
+    // 550 here lands the cut at roughly the one-second beat the flash implies.
+    slowMo(this, 600, 0.3);
+    this.time.delayedCall(550, () => {
+      goTo(this, 'Debrief', {
         stats: this.session.stats(),
         credits,
         milestones: unlocked.map((m) => m.label),

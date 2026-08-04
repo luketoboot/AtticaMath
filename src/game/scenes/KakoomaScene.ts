@@ -7,7 +7,7 @@ import { KakoomaSession } from '../../core/kakooma/session';
 import { candidates, exactIndex, matchBuffer } from '../../core/kakooma/typing';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
-import { impact, shake, shockwave } from '../../fx/juice';
+import { goTo, impact, shake, shockwave } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -453,6 +453,15 @@ export class KakoomaScene extends Phaser.Scene {
   private finish(): void {
     if (this.ended) return;
     this.ended = true;
+    // Time-up gets the same flash-and-beat every other mode ends on. This was
+    // the one run end that jumped straight to the stats with no cue at all.
+    getAudio(this)?.play('gameover');
+    this.cameras.main.flash(320, 255, 45, 149);
+    impact(this, {
+      shakeMs: CONFIG.juice.gameOverShakeMs,
+      shakeIntensity: CONFIG.juice.gameOverShakeIntensity,
+      glow: CONFIG.juice.glowPulseHeavy,
+    });
     const summary = this.session.summary();
     const save = this.saves.save;
     const credits = creditsForRun(
@@ -472,25 +481,28 @@ export class KakoomaScene extends Phaser.Scene {
     save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
 
-    this.scene.start('Debrief', {
-      stats: {
-        score: summary.score,
-        wavesCleared: summary.gridsCleared,
-        kills: summary.cellsSolved,
-        misses: summary.misses,
-        bestStreak: summary.bestCombo,
-      },
-      credits,
-      mode: 'Kakooma',
-      title: summary.gridsCleared > 0 ? 'TIME' : 'NO GRIDS CLEARED',
-      titleColor: summary.gridsCleared > 0 ? CSS.yellow : CSS.red,
-      wavesLabel: 'GRIDS CLEARED',
-      killsLabel: 'CELLS FOUND',
-      operatorLine:
-        summary.cellsSolved > 0
-          ? `OPERATOR // ${summary.cellsSolved} found. You did the arithmetic sideways and barely noticed.`
-          : 'OPERATOR // Nothing found. Read the pairs, not the numbers.',
-      milestones: unlocked.map((m) => m.label),
-    });
+    // The beat between the flash and the cut, same as the other modes.
+    this.time.delayedCall(800, () =>
+      goTo(this, 'Debrief', {
+        stats: {
+          score: summary.score,
+          wavesCleared: summary.gridsCleared,
+          kills: summary.cellsSolved,
+          misses: summary.misses,
+          bestStreak: summary.bestCombo,
+        },
+        credits,
+        mode: 'Kakooma',
+        title: summary.gridsCleared > 0 ? 'TIME' : 'NO GRIDS CLEARED',
+        titleColor: summary.gridsCleared > 0 ? CSS.yellow : CSS.red,
+        wavesLabel: 'GRIDS CLEARED',
+        killsLabel: 'CELLS FOUND',
+        operatorLine:
+          summary.cellsSolved > 0
+            ? `OPERATOR // ${summary.cellsSolved} found. You did the arithmetic sideways and barely noticed.`
+            : 'OPERATOR // Nothing found. Read the pairs, not the numbers.',
+        milestones: unlocked.map((m) => m.label),
+      }),
+    );
   }
 }

@@ -17,7 +17,7 @@ import { benchKindFor, ExerciseSession, exerciseFromProblem } from '../../core/e
 import { newMilestones } from '../../core/skills/milestones';
 import type { SkillId } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
-import { impact, shake, shockwave } from '../../fx/juice';
+import { goTo, impact, shake, shockwave } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -1007,7 +1007,10 @@ export class ExerciseScene extends Phaser.Scene {
     // weakest by then — the player picked this one.
     this.registry.set(EXERCISE_SKILL_KEY, this.session.skillId);
 
-    this.scene.start('Debrief', {
+    // A completed set gets the fade and the tip chime, not the death flash —
+    // this is the one mode where the run ending is not a loss.
+    getAudio(this)?.play('tip');
+    goTo(this, 'Debrief', {
       stats: {
         score: summary.score,
         wavesCleared: summary.solved,
@@ -1036,6 +1039,6 @@ export class ExerciseScene extends Phaser.Scene {
     const save = this.saves.save;
     save.skills = this.session.skillTable;
     this.saves.persist();
-    this.scene.start('ExerciseSelect');
+    goTo(this, 'ExerciseSelect');
   }
 }

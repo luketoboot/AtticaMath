@@ -7,7 +7,7 @@ import { creditsForCages } from '../../core/economy/economy';
 import { formatClock } from '../../core/leaderboard/leaderboard';
 import { newMilestones } from '../../core/skills/milestones';
 import { applyCrt } from '../../fx/applyCrt';
-import { impact, shake, shockwave } from '../../fx/juice';
+import { goTo, impact, shake, shockwave } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -114,7 +114,10 @@ export class CagesScene extends Phaser.Scene {
     });
 
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
-    this.input.keyboard?.once('keydown-ESC', () => this.leave());
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      this.leave();
+    });
     // One key, same everywhere: the rules over a paused game.
     this.input.keyboard?.on('keydown-H', () => {
       if (this.scene.isActive('Help')) return;
@@ -257,6 +260,9 @@ export class CagesScene extends Phaser.Scene {
 
     if (out.kind === 'solved') {
       audio?.play('explosion');
+      // The clear sting rides just behind the blast — solving the grid is this
+      // mode's wave clear, and it was the one run end with no voice at all.
+      this.time.delayedCall(220, () => audio?.play('waveClear'));
       impact(this, {
         shakeMs: CONFIG.juice.killShakeMs,
         shakeIntensity: CONFIG.juice.killShakeIntensity,
@@ -417,7 +423,7 @@ export class CagesScene extends Phaser.Scene {
     save.milestones.push(...unlocked.map((m) => m.id));
     this.saves.persist();
 
-    this.scene.start('Debrief', {
+    goTo(this, 'Debrief', {
       // The board ranks on time, so the time *is* the score — see MODE_RANKING.
       // `wave` carries the mistakes, which is the second number this mode has.
       stats: {
@@ -447,6 +453,6 @@ export class CagesScene extends Phaser.Scene {
     const save = this.saves.save;
     save.skills = this.session.skillTable;
     this.saves.persist();
-    this.scene.start('Menu');
+    goTo(this, 'Menu');
   }
 }
