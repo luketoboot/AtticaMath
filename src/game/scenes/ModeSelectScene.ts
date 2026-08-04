@@ -3,6 +3,7 @@ import { getAudio } from '../../audio/getAudio';
 import { CONFIG, type DifficultyId } from '../../core/config';
 import type { SkillFilter } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -143,12 +144,15 @@ export class ModeSelectScene extends Phaser.Scene {
       fontSize: 28,
       accent: PALETTE.yellow,
     });
-    const back = neonButton(this, width / 2, height * 0.885, 'BACK', () => this.scene.start('Menu'), {
+    const back = neonButton(this, width / 2, height * 0.885, 'BACK', () => goTo(this, 'Menu'), {
       width: 200,
       height: 42,
       fontSize: 18,
     });
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goTo(this, 'Menu');
+    });
 
     const nav = new MenuNav(this, [
       this.opChips,
@@ -230,6 +234,6 @@ export class ModeSelectScene extends Phaser.Scene {
     this.registry.set(METEOR_DIFFICULTY_KEY, this.difficulty);
     // An ordinary launch is not a Playbook drill; never inherit a stale one.
     this.registry.remove(METEOR_DRILL_KEY);
-    this.scene.start('Game');
+    goTo(this, 'Game');
   }
 }

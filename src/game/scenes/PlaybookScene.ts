@@ -10,6 +10,7 @@ import { benchKindFor } from '../../core/exercise/session';
 import { earnedMilestones } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -173,14 +174,17 @@ export class PlaybookScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const goBack = (): void => {
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     const back = neonButton(this, width * 0.2, height - 84, 'BACK', goBack, {
       width: 180,
       height: 54,
       fontSize: 20,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     const nav = new MenuNav(this, [
       tabs,
@@ -291,7 +295,7 @@ export class PlaybookScene extends Phaser.Scene {
   private drill(def: SkillDef): void {
     getAudio(this)?.play('ui');
     this.registry.set(METEOR_DRILL_KEY, def.id);
-    this.scene.start('Game');
+    goTo(this, 'Game');
   }
 
   /** Open Exercise on this skill, if the focus dial can take it apart. */
@@ -303,6 +307,6 @@ export class PlaybookScene extends Phaser.Scene {
     }
     getAudio(this)?.play('ui');
     this.registry.set(EXERCISE_SKILL_KEY, def.id);
-    this.scene.start('Exercise');
+    goTo(this, 'Exercise');
   }
 }

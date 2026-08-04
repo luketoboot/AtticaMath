@@ -146,7 +146,11 @@ class ModeCard {
       Phaser.Geom.Rectangle.Contains,
     );
     this.container.input!.cursor = 'pointer';
-    this.container.on('pointerdown', () => this.select(spec));
+    this.container.on('pointerdown', () => {
+      // Mouse path only — the keyboard path gets its confirm from MenuNav.
+      getAudio(scene)?.play('confirm');
+      this.select(spec);
+    });
   }
 
   item(spec: ModeCardSpec, setFocused: (on: boolean) => void): MenuItem {
@@ -186,7 +190,6 @@ class ModeCard {
   }
 
   private select(spec: ModeCardSpec): void {
-    getAudio(this.scene)?.play('ui');
     // A quick punch on the card so a launch reads as a press, not a cut.
     this.scene.tweens.add({
       targets: this.container,
@@ -235,6 +238,11 @@ export class CardDeck {
       this.cards.push(card);
       this.items.push(card.item(spec, (on) => (on ? this.focus(i) : this.blur())));
     });
+  }
+
+  /** The card containers, in deck order — for entry animation. */
+  get containers(): Phaser.GameObjects.Container[] {
+    return this.cards.map((card) => card.container);
   }
 
   focus(index: number): void {

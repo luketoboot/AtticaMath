@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { AUDIO_REGISTRY_KEY, type AudioManager } from '../../audio/AudioManager';
 import { getAudio } from '../../audio/getAudio';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { defaultSave } from '../../core/save/save';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -74,7 +75,7 @@ export class SettingsScene extends Phaser.Scene {
       width / 2,
       height * 0.56,
       'VIDEO',
-      () => this.scene.start('Video'),
+      () => goTo(this, 'Video'),
       {
         width: 340,
         height: 54,
@@ -88,7 +89,7 @@ export class SettingsScene extends Phaser.Scene {
       width / 2,
       height * 0.66,
       'CONTROLS',
-      () => this.scene.start('Controls'),
+      () => goTo(this, 'Controls'),
       { width: 340, height: 54, fontSize: 22, sub: 'REBIND EVERY KEY' },
     );
 
@@ -103,7 +104,7 @@ export class SettingsScene extends Phaser.Scene {
       saves.save = defaultSave();
       saves.persist();
       getAudio(this)?.play('land');
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     const reset = neonButton(this, width / 2, height * 0.78, 'RESET SAVE', resetSave, {
       width: 340,
@@ -113,14 +114,17 @@ export class SettingsScene extends Phaser.Scene {
     });
 
     const goBack = (): void => {
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     const back = neonButton(this, width / 2, height * 0.88, 'BACK', goBack, {
       width: 200,
       height: 46,
       fontSize: 20,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     new MenuNav(this, [[sfx], [music], [video], [controls], [reset], [back]]);
     navHint(this, height * 0.96);

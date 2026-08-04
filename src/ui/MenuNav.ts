@@ -61,6 +61,8 @@ export class MenuNav {
   private enabled = true;
   /** Whoever was last told it is lit, so it can be told when it is not. */
   private lit: MenuItem | undefined;
+  /** The cursor's in-flight glide, so a fast walk retargets instead of stacking. */
+  private glide: Phaser.Tweens.Tween | undefined;
   /** Drops Phaser's queue-replay duplicates; see game/input/freshKey. */
   private readonly fresh = keyEventGate();
 
@@ -170,6 +172,10 @@ export class MenuNav {
   private activate(): void {
     const item = this.current();
     if (!item?.onSelect) return;
+    // The confirm voice lives here, not in each widget, so a row of raw Text
+    // items sounds the same as a panelled button. Widgets play it themselves
+    // only on their own pointerdown path, which never passes through here.
+    getAudio(this.scene)?.play('confirm');
     item.onSelect();
     this.render(); // selecting often rewrites the label under the cursor
   }
@@ -195,10 +201,28 @@ export class MenuNav {
       return;
     }
     const b = frameOf(item.target);
-    this.cursor
-      .setPosition(b.centerX, b.centerY)
-      .setSize(b.width + PAD_X, b.height + PAD_Y)
-      .setVisible(true);
+    const w = b.width + PAD_X;
+    const h = b.height + PAD_Y;
+    this.glide?.stop();
+    if (!this.cursor.visible) {
+      // Appearing, not travelling — a glide in from wherever the cursor last
+      // sat (often another screen's layout) would read as a glitch.
+      this.cursor.setPosition(b.centerX, b.centerY).setSize(w, h).setVisible(true);
+      return;
+    }
+    // The glide runs on a proxy because Rectangle's width/height are plain
+    // fields — tweening them directly would skip the geometry update.
+    const p = { x: this.cursor.x, y: this.cursor.y, w: this.cursor.width, h: this.cursor.height };
+    this.glide = this.scene.tweens.add({
+      targets: p,
+      x: b.centerX,
+      y: b.centerY,
+      w,
+      h,
+      duration: 140,
+      ease: 'Quad.easeOut',
+      onUpdate: () => this.cursor.setPosition(p.x, p.y).setSize(p.w, p.h),
+    });
   }
 }
 

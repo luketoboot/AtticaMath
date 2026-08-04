@@ -4,6 +4,7 @@ import { CONFIG } from '../../core/config';
 import { earnedMilestones, masteryProgress } from '../../core/skills/milestones';
 import { SKILLS, type SkillDef } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -92,7 +93,7 @@ export class BrainScanScene extends Phaser.Scene {
     });
 
     const goBack = (): void => {
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     // The scan says which skills are weak; the coach says which problems. One
     // is the map and the other is the itinerary, so the way to the second is
@@ -102,7 +103,7 @@ export class BrainScanScene extends Phaser.Scene {
       width / 2 - 170,
       height - 52,
       'THE COACH',
-      () => this.scene.start('Coach'),
+      () => goTo(this, 'Coach'),
       { width: 280, height: 44, fontSize: 19, accent: PALETTE.magenta, sub: 'PROBLEM BY PROBLEM' },
     );
     // Sits a line higher than the other screens' BACK to leave room for the
@@ -112,7 +113,10 @@ export class BrainScanScene extends Phaser.Scene {
       height: 44,
       fontSize: 19,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     new MenuNav(this, [[coach, back]]);
     navHint(this);

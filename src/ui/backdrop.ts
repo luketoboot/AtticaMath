@@ -7,6 +7,7 @@
  * competing with the text laid over it.
  */
 import Phaser from 'phaser';
+import { createRng } from '../core/rng';
 import { PALETTE } from '../fx/palette';
 
 export interface BackdropOptions {
@@ -101,26 +102,32 @@ function drawGrid(scene: Phaser.Scene, horizon: number): void {
 }
 
 function drawStars(scene: Phaser.Scene, horizon: number): void {
-  const { width } = scene.scale;
+  const { width, height } = scene.scale;
+  // Seeded, so every screen draws the *same* sky. When each scene rolled its
+  // own, the whole universe visibly reshuffled on navigation — the one thing
+  // guaranteed to make a cut between two near-identical menus read as a cut.
+  // Stars are laid out over the full height and cropped to this screen's
+  // horizon, so screens with different horizons still share the field.
+  const rng = createRng(0x57a2f1ed);
   for (let i = 0; i < 70; i++) {
+    const x = rng.int(0, width);
+    const y = rng.int(0, height);
+    const alpha = 0.15 + rng.next() * 0.45;
+    const twinkleMs = rng.int(1200, 2600);
+    const twinkleDelay = rng.int(0, 2000);
+    if (y > horizon - 10) continue; // consumed the stream; keeps screens in sync
     const star = scene.add
-      .rectangle(
-        Phaser.Math.Between(0, width),
-        Phaser.Math.Between(0, horizon - 10),
-        2,
-        2,
-        i % 5 === 0 ? PALETTE.magentaHot : PALETTE.cyan,
-      )
-      .setAlpha(Phaser.Math.FloatBetween(0.15, 0.6))
+      .rectangle(x, y, 2, 2, i % 5 === 0 ? PALETTE.magentaHot : PALETTE.cyan)
+      .setAlpha(alpha)
       .setDepth(-95);
     if (i % 4 !== 0) continue;
     scene.tweens.add({
       targets: star,
       alpha: 0.05,
-      duration: Phaser.Math.Between(1200, 2600),
+      duration: twinkleMs,
       yoyo: true,
       repeat: -1,
-      delay: Phaser.Math.Between(0, 2000),
+      delay: twinkleDelay,
     });
   }
 }

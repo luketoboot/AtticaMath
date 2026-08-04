@@ -158,7 +158,10 @@ export function neonChip(
     Phaser.Geom.Rectangle.Contains,
   );
   container.input!.cursor = 'pointer';
-  container.on('pointerdown', onSelect);
+  container.on('pointerdown', () => {
+    getAudio(scene)?.play('confirm');
+    onSelect();
+  });
 
   return { target: container, onSelect, container, setChosen: repaint };
 }
@@ -253,15 +256,16 @@ export function neonButton(
     });
   };
 
-  const select = (): void => {
-    getAudio(scene)?.play('ui');
+  // MenuNav voices the keyboard path; only the mouse path sounds here, or a
+  // click would ring twice.
+  container.on('pointerdown', () => {
+    getAudio(scene)?.play('confirm');
     onSelect();
-  };
-  container.on('pointerdown', select);
+  });
 
   return {
     target: container,
-    onSelect: select,
+    onSelect,
     setFocused,
     container,
     label: text,

@@ -61,6 +61,31 @@ export function clearHitStop(scene: Phaser.Scene): void {
   scene.time.timeScale = 1;
 }
 
+/**
+ * A dying fall: ramp the scene's clocks down toward `to` and hold there.
+ * Unlike hitStop this never restores itself — it is for run-end beats where
+ * the scene leaves before normal speed would matter again. The clocks are
+ * restored on shutdown so the next run does not inherit a slowed world.
+ *
+ * The ramp tween runs under the timescale it is itself lowering, so it
+ * decelerates as it deepens — an ease-out the implementation gets for free.
+ */
+export function slowMo(scene: Phaser.Scene, durationMs: number, to: number): void {
+  const p = { s: timeScale(scene) };
+  scene.events.once('shutdown', () => clearHitStop(scene));
+  scene.tweens.add({
+    targets: p,
+    s: to,
+    duration: durationMs,
+    ease: 'Quad.easeOut',
+    onUpdate: () => {
+      freezes.set(scene, p.s);
+      scene.tweens.timeScale = p.s;
+      scene.time.timeScale = p.s;
+    },
+  });
+}
+
 export interface ImpactOptions {
   shakeMs: number;
   shakeIntensity: number;
@@ -111,4 +136,45 @@ export function shockwave(scene: Phaser.Scene, x: number, y: number, tint: numbe
 export function streakPitch(streak: number): number {
   const { streakPitchStep, maxStreakPitch } = CONFIG.juice;
   return Math.min(maxStreakPitch, 1 + streak * streakPitchStep);
+}
+
+/** Scenes mid-departure. A second ENTER during the fade must not fire twice. */
+const departing = new WeakSet<Phaser.Scene>();
+
+const FADE_OUT_MS = 140;
+const FADE_IN_MS = 200;
+
+/**
+ * Fade the screen down, then run `fn` — the visual half of a scene change.
+ * The music manager already crossfades between screens; this is the picture
+ * catching up with the sound. Kept to a two-frame-feel 140ms so navigation
+ * stays snappy: a transition you can perceive as a *wait* is worse than a cut.
+ */
+export function fadeThen(scene: Phaser.Scene, fn: () => void): void {
+  if (departing.has(scene)) return;
+  departing.add(scene);
+  // A scene instance survives scene.start and can come back later; if the fade
+  // never completed (shutdown raced it), the flag must not stick.
+  scene.events.once('shutdown', () => departing.delete(scene));
+  const cam = scene.cameras.main;
+  cam.once('camerafadeoutcomplete', () => {
+    departing.delete(scene);
+    fn();
+  });
+  cam.fadeOut(FADE_OUT_MS, 0, 0, 0);
+}
+
+/**
+ * The way to leave a scene: fade out, start the next scene, fade it in.
+ * Replaces bare `scene.start`, which cuts on a single frame. Data is passed
+ * through untouched.
+ */
+export function goTo(scene: Phaser.Scene, key: string, data?: object): void {
+  const target = scene.scene.get(key);
+  fadeThen(scene, () => {
+    target?.events.once('create', () => {
+      target.cameras.main.fadeIn(FADE_IN_MS, 0, 0, 0);
+    });
+    scene.scene.start(key, data);
+  });
 }

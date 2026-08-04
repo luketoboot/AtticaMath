@@ -15,6 +15,7 @@ import {
 import { badgeFor, DEFAULT_BADGE } from '../../core/cosmetics/cosmetics';
 import type { LeaderboardStore } from '../../core/leaderboard/store';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintBadge } from '../../ui/badges';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -90,14 +91,17 @@ export class LeaderboardScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const goBack = (): void => {
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     const back = neonButton(this, width / 2, height - 58, 'BACK', goBack, {
       width: 200,
       height: 46,
       fontSize: 20,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     const nav = new MenuNav(this, [
       this.tabs.map((tab, i) => ({

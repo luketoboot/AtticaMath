@@ -8,11 +8,13 @@ import {
   msUntilNextDaily,
 } from '../../core/daily/daily';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { MenuNav, navHint } from '../../ui/MenuNav';
 import { CardDeck, spread, type ModeCardSpec } from '../../ui/ModeCard';
 import { neonButton, type NeonButton } from '../../ui/panels';
+import { revealIn } from '../../ui/reveal';
 import { titleLogo } from '../../ui/TitleLogo';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
@@ -122,7 +124,7 @@ export class MenuScene extends Phaser.Scene {
     // the Playbook fits without the row crowding the screen edges.
     const util = { width: 206, height: 54, fontSize: 17 };
     const utility = [
-      neonButton(this, spread(width / 2, 1120, 0, 5), 470, 'HANGAR', () => this.scene.start('Shop'), {
+      neonButton(this, spread(width / 2, 1120, 0, 5), 470, 'HANGAR', () => goTo(this, 'Shop'), {
         ...util,
         icon: 'hangar',
         sub: 'SHIPS & COLOURS',
@@ -132,7 +134,7 @@ export class MenuScene extends Phaser.Scene {
         spread(width / 2, 1120, 1, 5),
         470,
         'SCORES',
-        () => this.scene.start('Leaderboard'),
+        () => goTo(this, 'Leaderboard'),
         { ...util, icon: 'leaderboard', sub: 'HALL OF FAME' },
       ),
       neonButton(
@@ -140,7 +142,7 @@ export class MenuScene extends Phaser.Scene {
         spread(width / 2, 1120, 2, 5),
         470,
         'PLAYBOOK',
-        () => this.scene.start('Playbook'),
+        () => goTo(this, 'Playbook'),
         { ...util, icon: 'playbook', sub: 'MENTAL MATH MOVES' },
       ),
       neonButton(
@@ -148,7 +150,7 @@ export class MenuScene extends Phaser.Scene {
         spread(width / 2, 1120, 3, 5),
         470,
         'BRAIN SCAN',
-        () => this.scene.start('BrainScan'),
+        () => goTo(this, 'BrainScan'),
         { ...util, icon: 'brainscan', sub: 'YOUR SKILL MAP' },
       ),
       neonButton(
@@ -156,7 +158,7 @@ export class MenuScene extends Phaser.Scene {
         spread(width / 2, 1120, 4, 5),
         470,
         'SETTINGS',
-        () => this.scene.start('Settings'),
+        () => goTo(this, 'Settings'),
         { ...util, icon: 'settings', sub: 'CRT · AUDIO · KEYS' },
       ),
     ];
@@ -169,6 +171,13 @@ export class MenuScene extends Phaser.Scene {
     new MenuNav(this, [deck.items, utility, [daily]]);
 
     navHint(this, height - 20);
+
+    // The deck deals in, then the rows beneath it. Cards keep their y — focus
+    // already owns that axis (the −8 lift), and two writers on one axis leave
+    // the card wherever the last one died — so only the lower rows rise.
+    deck.containers.forEach((card, i) => revealIn(this, card, i * 45));
+    utility.forEach((button, i) => revealIn(this, button.container, 180 + i * 35, 12));
+    revealIn(this, daily.container, 360, 12);
   }
 
   /** The daily strip, labelled with whether today's run is still there to take. */
@@ -180,7 +189,7 @@ export class MenuScene extends Phaser.Scene {
     // is too small to survive. A backing plate buys the contrast back without
     // dimming the sun for every other row on the screen.
     this.add.rectangle(x, y, 446, 64, PALETTE.black, 0.5);
-    return neonButton(this, x, y, 'DAILY CHALLENGE', () => this.scene.start('Daily'), {
+    return neonButton(this, x, y, 'DAILY CHALLENGE', () => goTo(this, 'Daily'), {
       width: 440,
       height: 58,
       fontSize: 22,
@@ -196,7 +205,7 @@ export class MenuScene extends Phaser.Scene {
   private modeSpecs(): ModeCardSpec[] {
     return MODES.map((mode) => {
       const { scene, ...spec } = mode;
-      return { ...spec, onSelect: () => this.scene.start(scene) };
+      return { ...spec, onSelect: () => goTo(this, scene) };
     });
   }
 

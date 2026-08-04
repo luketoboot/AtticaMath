@@ -16,6 +16,7 @@ import {
   type DailyLeaderboardStore,
 } from '../../core/leaderboard/dailyStore';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintBadge } from '../../ui/badges';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -128,14 +129,17 @@ export class DailyScene extends Phaser.Scene {
     });
 
     const goBack = (): void => {
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     const back = neonButton(this, width / 2, height - 74, 'BACK', goBack, {
       width: 200,
       height: 42,
       fontSize: 18,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     new MenuNav(this, [[launch], [back]]);
     navHint(this, height - 18);
@@ -172,7 +176,7 @@ export class DailyScene extends Phaser.Scene {
     }
     getAudio(this)?.play('ui');
     this.registry.set(DAILY_RUN_KEY, true);
-    this.scene.start('Game');
+    goTo(this, 'Game');
   }
 
   private async retryUpload(): Promise<void> {

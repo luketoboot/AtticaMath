@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getAudio } from '../../audio/getAudio';
 import { helpFor } from '../../core/help/help';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { neonButton } from '../../ui/panels';
@@ -19,6 +20,9 @@ interface HelpData {
  * charges for time.
  */
 export class HelpScene extends Phaser.Scene {
+  /** Set once a leave animation is running — ESC then ENTER must not close twice. */
+  private closing = false;
+
   constructor() {
     super('Help');
   }
@@ -26,6 +30,10 @@ export class HelpScene extends Phaser.Scene {
   create(data: HelpData): void {
     const { width, height } = this.scale;
     const page = helpFor(data.target);
+    this.closing = false;
+    // Ease the briefing over the game rather than snapping it on.
+    this.cameras.main.alpha = 0;
+    this.tweens.add({ targets: this.cameras.main, alpha: 1, duration: 120 });
     this.add.rectangle(0, 0, width, height, PALETTE.black, 0.86).setOrigin(0);
 
     if (!page) {
@@ -116,15 +124,27 @@ export class HelpScene extends Phaser.Scene {
   }
 
   private closeOn(target: string, height: number, walkthrough?: string): void {
-    const close = (): void => {
-      this.scene.stop();
-      this.scene.resume(target);
+    // The button voices itself (confirm); the dismiss keys get the back tone.
+    const close = (sound = false): void => {
+      if (this.closing) return;
+      this.closing = true;
+      if (sound) getAudio(this)?.play('back');
+      this.tweens.add({
+        targets: this.cameras.main,
+        alpha: 0,
+        duration: 100,
+        onComplete: () => {
+          this.scene.stop();
+          this.scene.resume(target);
+        },
+      });
     };
+    const closeKey = (): void => close(true);
     // A mode with a walkthrough leaves the panel two ways: back to the grid, or
     // to a worked example — which is the one a player who read this and is
     // still stuck actually needs. The target stays paused underneath either way.
     const shift = walkthrough === undefined ? 0 : 160;
-    neonButton(this, this.scale.width / 2 - shift, height - 74, 'BACK TO IT', close, {
+    neonButton(this, this.scale.width / 2 - shift, height - 74, 'BACK TO IT', () => close(), {
       width: 260,
       height: 50,
       fontSize: 20,
@@ -146,8 +166,8 @@ export class HelpScene extends Phaser.Scene {
       this.input.keyboard?.once('keydown-E', show);
     }
     // Any of the ways a player reaches for "make this go away".
-    this.input.keyboard?.once('keydown-H', close);
-    this.input.keyboard?.once('keydown-ESC', close);
-    this.input.keyboard?.once('keydown-ENTER', close);
+    this.input.keyboard?.once('keydown-H', closeKey);
+    this.input.keyboard?.once('keydown-ESC', closeKey);
+    this.input.keyboard?.once('keydown-ENTER', closeKey);
   }
 }

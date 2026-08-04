@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { AudioManager, AUDIO_REGISTRY_KEY } from '../../audio/AudioManager';
 import { CrtPipeline } from '../../fx/CrtPipeline';
+import { goTo } from '../../fx/juice';
 import { PALETTE } from '../../fx/palette';
 import { setVideoSettings } from '../../fx/videoSettings';
 import { DAILY_REGISTRY_KEY } from '../../core/leaderboard/dailyStore';
@@ -40,7 +41,7 @@ export class BootScene extends Phaser.Scene {
     this.makeParticleTexture();
     this.makeGlowDotTexture();
 
-    this.scene.start('Menu');
+    goTo(this, 'Menu');
   }
 
   private makeMeteorTexture(): void {

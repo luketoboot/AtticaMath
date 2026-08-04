@@ -4,6 +4,7 @@ import { CONFIG } from '../../core/config';
 import { benchKindFor, EXERCISE_GROUPS, suggestedSkill } from '../../core/exercise/session';
 import { getSkill, type SkillId } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -124,12 +125,15 @@ export class ExerciseSelectScene extends Phaser.Scene {
       () => this.launch(suggested),
       { width: 320, height: 50, fontSize: 19, accent: PALETTE.yellow },
     );
-    const back = neonButton(this, width / 2 + 180, height - 74, 'BACK', () => this.scene.start('Menu'), {
+    const back = neonButton(this, width / 2 + 180, height - 74, 'BACK', () => goTo(this, 'Menu'), {
       width: 220,
       height: 50,
       fontSize: 19,
     });
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goTo(this, 'Menu');
+    });
 
     rows.push([pick, back]);
     const nav = new MenuNav(this, rows);
@@ -169,6 +173,6 @@ export class ExerciseSelectScene extends Phaser.Scene {
     getAudio(this)?.play('ui');
     this.registry.set(LAST_PICK_KEY, id);
     this.registry.set(EXERCISE_SKILL_KEY, id);
-    this.scene.start('Exercise');
+    goTo(this, 'Exercise');
   }
 }

@@ -12,6 +12,7 @@ import { CONFIG } from '../../core/config';
 import { benchKindFor } from '../../core/exercise/session';
 import { findSkill } from '../../core/skills/taxonomy';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -139,12 +140,15 @@ export class CoachScene extends Phaser.Scene {
 
     const rows = this.renderMode(tab);
 
-    const back = neonButton(this, width / 2, height - 62, 'BACK', () => this.scene.start('BrainScan'), {
+    const back = neonButton(this, width / 2, height - 62, 'BACK', () => goTo(this, 'BrainScan'), {
       width: 220,
       height: 48,
       fontSize: 19,
     });
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('BrainScan'));
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goTo(this, 'BrainScan');
+    });
 
     new MenuNav(this, [tabs, ...rows, [back]]);
     navHint(this, height - 20);
@@ -310,6 +314,6 @@ export class CoachScene extends Phaser.Scene {
     }
     getAudio(this)?.play('ui');
     this.registry.set(target.key, entry.skillId);
-    this.scene.start(target.scene);
+    goTo(this, target.scene);
   }
 }

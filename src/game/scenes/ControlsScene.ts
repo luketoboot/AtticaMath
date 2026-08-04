@@ -11,6 +11,7 @@ import {
   type KeyBindings,
 } from '../../core/input/bindings';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { MenuNav, type MenuItem } from '../../ui/MenuNav';
@@ -114,7 +115,7 @@ export class ControlsScene extends Phaser.Scene {
     });
 
     const goBack = (): void => {
-      this.scene.start('Settings');
+      goTo(this, 'Settings');
     };
     const back = neonButton(this, width / 2, height * 0.9, 'BACK', goBack, {
       width: 200,
@@ -139,7 +140,10 @@ export class ControlsScene extends Phaser.Scene {
     // ESC leaves the screen — unless we are mid-capture, where the deferred
     // capture listener consumes it as "cancel" instead.
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
-      if (!this.capturing && e.code === 'Escape') goBack();
+      if (!this.capturing && e.code === 'Escape') {
+        getAudio(this)?.play('back');
+        goBack();
+      }
     });
 
     this.renderSlots();

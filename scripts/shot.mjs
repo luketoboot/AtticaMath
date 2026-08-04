@@ -362,8 +362,18 @@ async function shoot(page, { name, scene, data, save, keys }, opts) {
         const session = target.session;
         if (session && typeof session.tick === 'function') session.tick = () => {};
 
-        // Tween phase depends on wall-clock. Pausing before the settle wait
-        // leaves every tween at its opening value.
+        // Tween phase depends on wall-clock — in this page a wall-clock that
+        // is pinned (Date.now above feeds the TweenManager's delta), so left
+        // alone no tween ever advances. That used to be the freeze: screens
+        // were fully formed at create and tweens were decoration. Screens now
+        // *arrive* by tween — entry reveals start life invisible — so frame
+        // zero is a blank. Fast-forward instead: fixed 100ms steps fed to
+        // each tween directly (a single giant delta dies in the delay state),
+        // far enough that every create-time reveal and roll-up completes and
+        // every looping tween lands on the same phase, then pause what's left.
+        for (const tw of [...target.tweens.tweens]) {
+          for (let step = 0; step < 60; step++) tw.update(100);
+        }
         target.tweens.pauseAll();
 
         // The CRT shader accumulates real elapsed time and drives a 60Hz mains
@@ -391,6 +401,24 @@ async function shoot(page, { name, scene, data, save, keys }, opts) {
   if (pressed) {
     for (const key of pressed) await page.keyboard.press(key);
     await page.waitForTimeout(opts.after);
+  }
+
+  if (opts.freeze) {
+    // Overlays launched after the freeze — by a preset's keys, or by a scene
+    // teaching itself on first entry — are scenes whose tweens the freeze
+    // never saw, and overlays arrive by camera fade now, so unfinished they
+    // are an invisible overlay over a finished board. One more fast-forward,
+    // across everything that is up, right before the canvas is read. (With
+    // the pinned clock above, tweens cannot advance on their own between
+    // here and the screenshot, so captures stay reproducible.)
+    await page.evaluate(() => {
+      const game = window.__game;
+      for (const active of game.scene.getScenes(true)) {
+        for (const tw of [...active.tweens.tweens]) {
+          for (let step = 0; step < 60; step++) tw.update(100);
+        }
+      }
+    });
   }
 
   const dir = opts.golden ? GOLDEN_DIR : OUT_DIR;

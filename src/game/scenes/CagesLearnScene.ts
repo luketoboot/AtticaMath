@@ -41,6 +41,8 @@ const PANEL_Y = 268;
 export class CagesLearnScene extends Phaser.Scene {
   private step = 0;
   private target = 'Cages';
+  /** Set once the leave animation is running, so a second key cannot re-leave. */
+  private closing = false;
   private cellText: Phaser.GameObjects.Text[] = [];
   private cellBg!: Phaser.GameObjects.Graphics;
   private borders!: Phaser.GameObjects.Graphics;
@@ -59,6 +61,10 @@ export class CagesLearnScene extends Phaser.Scene {
     this.target = data.target ?? 'Cages';
     this.step = 0;
     this.cellText = [];
+    this.closing = false;
+    // Same easing as the other overlays — nothing in the game snaps on.
+    this.cameras.main.alpha = 0;
+    this.tweens.add({ targets: this.cameras.main, alpha: 1, duration: 120 });
 
     // Opaque, unlike the briefing panel. That one shows the board through it on
     // purpose — you are mid-run and want to see what you were looking at. Here
@@ -159,7 +165,7 @@ export class CagesLearnScene extends Phaser.Scene {
 
   private onKey(event: KeyboardEvent): void {
     if (!this.fresh(event)) return;
-    if (event.key === 'Escape' || event.key === 'h' || event.key === 'H') return this.close();
+    if (event.key === 'Escape' || event.key === 'h' || event.key === 'H') return this.close(true);
     if (event.key === 'Backspace' || event.key === 'ArrowLeft') return this.go(-1);
     if (event.key === ' ' || event.key === 'Enter' || event.key === 'ArrowRight') {
       return this.go(1);
@@ -176,10 +182,21 @@ export class CagesLearnScene extends Phaser.Scene {
     this.render(delta > 0);
   }
 
-  private close(): void {
-    this.scene.stop();
-    if (this.scene.isPaused(this.target)) this.scene.resume(this.target);
-    else this.scene.start(this.target);
+  // The dismiss keys carry the back tone; buttons already voice themselves.
+  private close(sound = false): void {
+    if (this.closing) return;
+    this.closing = true;
+    if (sound) getAudio(this)?.play('back');
+    this.tweens.add({
+      targets: this.cameras.main,
+      alpha: 0,
+      duration: 100,
+      onComplete: () => {
+        this.scene.stop();
+        if (this.scene.isPaused(this.target)) this.scene.resume(this.target);
+        else this.scene.start(this.target);
+      },
+    });
   }
 
   // --- drawing ---

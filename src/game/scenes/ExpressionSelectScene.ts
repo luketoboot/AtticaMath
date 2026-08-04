@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import { CONFIG } from '../../core/config';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -89,7 +90,7 @@ export class ExpressionSelectScene extends Phaser.Scene {
       fontSize: 26,
       accent: PALETTE.yellow,
     });
-    const back = neonButton(this, width / 2, 552, 'BACK', () => this.scene.start('Menu'), {
+    const back = neonButton(this, width / 2, 552, 'BACK', () => goTo(this, 'Menu'), {
       width: 220,
       height: 50,
       fontSize: 19,
@@ -99,7 +100,10 @@ export class ExpressionSelectScene extends Phaser.Scene {
     nav.setColumn(0, levels.findIndex((l) => l.id === this.levelId));
     navHint(this, height - 26);
 
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goTo(this, 'Menu');
+    });
     this.refresh();
   }
 
@@ -117,6 +121,6 @@ export class ExpressionSelectScene extends Phaser.Scene {
 
   private launch(): void {
     this.registry.set(EXPRESSION_LEVEL_KEY, this.levelId);
-    this.scene.start('Expression', { levelId: this.levelId });
+    goTo(this, 'Expression', { levelId: this.levelId });
   }
 }

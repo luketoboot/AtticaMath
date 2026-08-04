@@ -18,7 +18,7 @@ import {
   type CosmeticProgress,
 } from '../../core/cosmetics/cosmetics';
 import { applyCrt } from '../../fx/applyCrt';
-import { glowPulse, shake } from '../../fx/juice';
+import { glowPulse, goTo, shake } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintBadge } from '../../ui/badges';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -169,14 +169,17 @@ export class ShopScene extends Phaser.Scene {
     const grid = this.buildGrid(defs);
 
     const goBack = (): void => {
-      this.scene.start('Menu');
+      goTo(this, 'Menu');
     };
     const back = neonButton(this, width / 2, height - 62, 'BACK', goBack, {
       width: 220,
       height: 46,
       fontSize: 20,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     const nav = new MenuNav(this, [tabs, ...grid, [back]]);
     nav.setColumn(0, Math.max(0, COSMETIC_KINDS.findIndex((k) => k.kind === this.kind)));

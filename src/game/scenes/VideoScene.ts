@@ -10,6 +10,7 @@
  * looking straight at them.
  */
 import Phaser from 'phaser';
+import { getAudio } from '../../audio/getAudio';
 import {
   defaultVideoSettings,
   isDefaultVideo,
@@ -19,6 +20,7 @@ import {
   VIDEO_STEP,
 } from '../../core/settings/video';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { setVideoSettings } from '../../fx/videoSettings';
 import { drawBackdrop } from '../../ui/backdrop';
@@ -138,14 +140,17 @@ export class VideoScene extends Phaser.Scene {
     );
 
     const goBack = (): void => {
-      this.scene.start('Settings');
+      goTo(this, 'Settings');
     };
     const back = neonButton(this, width / 2 + 132, footer, 'BACK', goBack, {
       width: 200,
       height: 44,
       fontSize: 20,
     });
-    this.input.keyboard?.once('keydown-ESC', goBack);
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goBack();
+    });
 
     const rows: MenuItem[][] = [[{ ...crt, onAdjust: toggleCrt }]];
     for (const row of this.rows) rows.push([row]);

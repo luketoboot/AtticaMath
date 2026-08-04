@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import type { KakoomaOp } from '../../core/kakooma/kakooma';
 import { applyCrt } from '../../fx/applyCrt';
+import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { drawBackdrop } from '../../ui/backdrop';
 import { makeIcon } from '../../ui/icons';
@@ -106,7 +107,7 @@ export class KakoomaSelectScene extends Phaser.Scene {
       fontSize: 26,
       accent: PALETTE.yellow,
     });
-    const back = neonButton(this, width / 2, 552, 'BACK', () => this.scene.start('Menu'), {
+    const back = neonButton(this, width / 2, 552, 'BACK', () => goTo(this, 'Menu'), {
       width: 220,
       height: 50,
       fontSize: 19,
@@ -116,7 +117,10 @@ export class KakoomaSelectScene extends Phaser.Scene {
     nav.setColumn(0, VARIANTS.findIndex((v) => v.op === this.op));
     navHint(this, height - 26);
 
-    this.input.keyboard?.once('keydown-ESC', () => this.scene.start('Menu'));
+    this.input.keyboard?.once('keydown-ESC', () => {
+      getAudio(this)?.play('back');
+      goTo(this, 'Menu');
+    });
     this.refresh();
   }
 
@@ -133,6 +137,6 @@ export class KakoomaSelectScene extends Phaser.Scene {
 
   private launch(): void {
     this.registry.set(KAKOOMA_OP_KEY, this.op);
-    this.scene.start('Kakooma', { op: this.op });
+    goTo(this, 'Kakooma', { op: this.op });
   }
 }

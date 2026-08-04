@@ -35,7 +35,9 @@ export type SfxName =
   | 'comboUp'
   | 'nearMiss'
   | 'sniper'
-  | 'waveClear';
+  | 'waveClear'
+  | 'confirm'
+  | 'back';
 
 export interface SfxOptions {
   /** Frequency multiplier — used to climb the streak ladder. */
@@ -895,6 +897,20 @@ export class AudioManager {
       case 'ui':
         this.tone(ctx, t, 'square', 880 * p, 0.035, 0.1 * g);
         this.click(ctx, t, 0.02, 0.14 * g);
+        break;
+
+      // Confirm steps up where traversal ('ui') stays flat, and back steps
+      // down — the three menu verbs are one family at three pitches, so the
+      // ear learns the grammar without being told.
+      case 'confirm':
+        this.tone(ctx, t, 'square', 660 * p, 0.045, 0.11 * g);
+        this.tone(ctx, t + 0.05, 'square', 990 * p, 0.09, 0.12 * g);
+        this.click(ctx, t, 0.02, 0.12 * g);
+        break;
+
+      case 'back':
+        this.tone(ctx, t, 'square', 660 * p, 0.04, 0.1 * g);
+        this.tone(ctx, t + 0.05, 'square', 440 * p, 0.09, 0.1 * g);
         break;
 
       case 'purchase':
