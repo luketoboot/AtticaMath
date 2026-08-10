@@ -35,6 +35,52 @@ describe('generator coverage', () => {
   });
 });
 
+describe('divisibility recognition recipes', () => {
+  const rng = createRng(31);
+  const cases: readonly [string, number][] = [
+    ['div.by.3', 3],
+    ['div.by.4', 4],
+    ['div.by.7', 7],
+    ['div.by.11', 11],
+  ];
+
+  for (const [id, d] of cases) {
+    it(`${id} always names the least multiple of ${d} strictly above n`, () => {
+      for (let i = 0; i < 300; i++) {
+        const p = generateProblem(id, rng);
+        const n = Number(p.prompt.match(/AFTER (\d+)$/)![1]);
+        const answer = Number(p.answer);
+        expect(answer % d).toBe(0);
+        expect(answer).toBeGreaterThan(n);
+        // Least such multiple: nothing between n and the answer qualifies.
+        expect(answer - n).toBeLessThanOrEqual(d);
+      }
+    });
+  }
+
+  it('rates the split, so a long walk to the answer costs more', () => {
+    // The research point: item difficulty comes from the distance to the
+    // nearest true multiple, not from how big the operands are.
+    const seen = new Map<number, number>();
+    const r = createRng(5);
+    for (let i = 0; i < 400; i++) {
+      const p = generateProblem('div.by.7', r);
+      const n = Number(p.prompt.match(/AFTER (\d+)$/)![1]);
+      seen.set(Number(p.answer) - n, p.difficulty);
+    }
+    const splits = [...seen.keys()].sort((a, b) => a - b);
+    expect(splits.length).toBeGreaterThan(4);
+    expect(seen.get(splits[splits.length - 1]!)!).toBeGreaterThan(seen.get(splits[0]!)!);
+  });
+
+  it('keeps elevens above two digits, where every multiple is a repdigit', () => {
+    for (let i = 0; i < 200; i++) {
+      const p = generateProblem('div.by.11', rng);
+      expect(Number(p.answer)).toBeGreaterThan(99);
+    }
+  });
+});
+
 describe('recipe correctness', () => {
   const rng = createRng(7);
 

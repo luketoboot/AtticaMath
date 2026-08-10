@@ -86,6 +86,35 @@ function timesTableRecipe(family: number): Recipe {
   };
 }
 
+/**
+ * "Next multiple of d after n" — divisibility recognition with one right
+ * answer, which a yes/no question could never be on a digits-only buffer. Same
+ * wall factor.prime hit, and the same way around it.
+ *
+ * Be honest about what this is: POLARITY asks the player to *verify* a number
+ * they are handed, and this asks them to *produce* one. Those are different
+ * memory processes, so the typed form is a weaker claim on the same skill
+ * rather than the same claim. It exists so the skill stays reachable from
+ * Meteor Defense, the Playbook drill and the placement sweep — the mode is
+ * where the rating really comes from.
+ *
+ * Difficulty rides the split, the distance the player has to walk to the
+ * answer. Landing one short of a multiple is nearly free; landing just past one
+ * means carrying the whole gap.
+ */
+function nextMultipleRecipe(d: number, minN: number, maxN: number): Recipe {
+  return (rng) => {
+    const n = rng.int(minN, maxN);
+    const next = (Math.floor(n / d) + 1) * d;
+    return {
+      skillIds: [`div.by.${d}`],
+      prompt: `NEXT MULTIPLE OF ${d} AFTER ${n}`,
+      answer: String(next),
+      difficultyAdjust: (next - n - 1) * Math.round(90 / d),
+    };
+  };
+}
+
 const RECIPES: Record<SkillId, Recipe> = {
   'add.single': (rng) => {
     // Sums that do not bridge ten (that is its own skill).
@@ -256,6 +285,16 @@ const RECIPES: Record<SkillId, Recipe> = {
       difficultyAdjust: 0,
     };
   },
+
+  // --- divisibility recognition ---
+  // Ranges are set so the trick is load-bearing: every two-digit multiple of 11
+  // is a repdigit, and four's rule only earns its keep once the hundreds have to
+  // be discarded first.
+  'div.by.3': nextMultipleRecipe(3, 10, 98),
+  'div.by.4': nextMultipleRecipe(4, 100, 980),
+  'div.by.7': nextMultipleRecipe(7, 10, 96),
+  'div.by.11': nextMultipleRecipe(11, 100, 970),
+
   'ooo.basic': (rng) => {
     // a + b × c or a × b + c with small operands; multiplication binds first.
     const a = rng.int(2, 9);

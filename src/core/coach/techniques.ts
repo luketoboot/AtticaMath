@@ -398,6 +398,58 @@ export const TECHNIQUES: readonly Technique[] = [
     examples: ['3+4×5 → 3+20 → 23.', '6×3−4 → 18−4 → 14.'],
   },
 
+  // --- divisibility recognition ---
+  // One technique per trick, which is the same cut the taxonomy makes: the
+  // skills exist because these four methods are genuinely different moves.
+  {
+    skillId: 'div.by.3',
+    title: 'ADD THE DIGITS',
+    method: [
+      'Sum the digits. If the sum is a three, so is the number. Keep summing until it is one digit.',
+      'It survives any reshuffle — 471, 714 and 147 are all threes, because the digits never changed.',
+    ],
+    examples: [
+      '78 → 7+8 is 15 → 1+5 is 6 → a three.',
+      '85 → 8+5 is 13 → 1+3 is 4 → not a three.',
+    ],
+  },
+  {
+    skillId: 'div.by.4',
+    title: 'LAST TWO ONLY',
+    method: [
+      'Every hundred is already a four, so cover the hundreds and judge what is left.',
+      'On those two digits: halve, then halve again. Whole both times and it is a four.',
+    ],
+    examples: [
+      '316 → cover the 3 → 16 → halve to 8, halve to 4 → a four.',
+      '742 → 42 → halve to 21, halve to 10.5 → not a four.',
+    ],
+  },
+  {
+    skillId: 'div.by.7',
+    title: 'WALK FROM AN ANCHOR',
+    method: [
+      'Sevens have no digit trick. Hold anchors instead — 35, 70, and the big one, 7×10 stacks.',
+      'Jump to the nearest anchor below and step up in sevens. Land exactly and it is a seven.',
+    ],
+    examples: [
+      '84 → anchor 70 → 77, 84 → a seven.',
+      '82 → 70 → 77, 84 overshoots → not a seven.',
+    ],
+  },
+  {
+    skillId: 'div.by.11',
+    title: 'ALTERNATING SUM',
+    method: [
+      'Add and subtract the digits in turn, left to right. Land on 0 or 11 and it is an eleven.',
+      'Two digits make it trivial: only the doubles are elevens, so the rule is for three and up.',
+    ],
+    examples: [
+      '253 → 2−5+3 is 0 → an eleven (11×23).',
+      '374 → 3−7+4 is 0 → an eleven. 385 → 3−8+5 is 0 → also one.',
+    ],
+  },
+
   // --- factors ---
   {
     skillId: 'factor.smallest',

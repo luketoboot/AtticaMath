@@ -23,18 +23,33 @@ const GROUPS: readonly { title: string; prefixes: readonly string[] }[] = [
   { title: 'ADDITION', prefixes: ['add.'] },
   { title: 'SUBTRACTION', prefixes: ['sub.'] },
   { title: 'MIXED', prefixes: ['ooo.'] },
+  // The tables split off from the rest of multiplication once the column had to
+  // be broken up anyway, and it reads better: eleven families and four
+  // multi-digit methods were never really one heading.
+  { title: 'TIMES TABLES', prefixes: ['mul.table.'] },
   { title: 'MULTIPLICATION', prefixes: ['mul.'] },
   { title: 'DIVISION', prefixes: ['div.'] },
   { title: 'FACTORS', prefixes: ['factor.'] },
   { title: 'FRACTIONS & PERCENT', prefixes: ['frac.', 'pct.'] },
 ];
 
-/** Column split, by group index. Three columns so 44 skills fit one screen. */
-const COLUMNS: readonly (readonly number[])[] = [[0, 1, 2], [3], [4, 5, 6]];
+/** First group whose prefix matches owns the skill, so none is listed twice. */
+function skillsInGroup(index: number): readonly SkillDef[] {
+  return SKILLS.filter(
+    (s) => GROUPS.findIndex((g) => g.prefixes.some((p) => s.id.startsWith(p))) === index,
+  );
+}
+
+/**
+ * Column split, by group index. Still three columns at 48 skills — a fourth
+ * would starve the labels, and "one number as a percent of another" is already
+ * the widest thing on the screen. The rows shrank instead.
+ */
+const COLUMNS: readonly (readonly number[])[] = [[0, 1, 2], [3, 4, 6], [5, 7]];
 
 /** Row rhythm. Named because they trade against each other for vertical room. */
-const ROW_H = 27;
-const HEADER_H = 28;
+const ROW_H = 24;
+const HEADER_H = 26;
 const GROUP_GAP = 10;
 /** Share of the column given to the label before the bar starts. */
 const LABEL_SHARE = 0.62;
@@ -84,7 +99,7 @@ export class BrainScanScene extends Phaser.Scene {
     COLUMNS.forEach((indices, i) => {
       const x0 = margin + span * i;
       this.renderColumn(
-        indices.map((g) => GROUPS[g]!),
+        indices,
         x0,
         x0 + span - 26, // gutter between columns
         saves,
@@ -123,7 +138,7 @@ export class BrainScanScene extends Phaser.Scene {
   }
 
   private renderColumn(
-    groups: readonly { title: string; prefixes: readonly string[] }[],
+    indices: readonly number[],
     x0: number,
     x1: number,
     saves: SaveManager,
@@ -131,7 +146,8 @@ export class BrainScanScene extends Phaser.Scene {
   ): void {
     let y = 112;
     let band = 0;
-    for (const group of groups) {
+    for (const index of indices) {
+      const group = GROUPS[index]!;
       // Cyan at 17px, not hot magenta at 15. Two reasons, and they agree.
       //
       // The CRT tore the old headings: magentaHot is the most saturated colour
@@ -155,7 +171,7 @@ export class BrainScanScene extends Phaser.Scene {
         .setOrigin(0, 0.5)
         .setAlpha(0.35);
       y += HEADER_H;
-      for (const skill of SKILLS.filter((s) => group.prefixes.some((p) => s.id.startsWith(p)))) {
+      for (const skill of skillsInGroup(index)) {
         // Banding carries the eye across the gap from a label to its bar. At
         // this density a rule per row would out-shout the data, so it is a
         // fill barely above the backdrop.

@@ -66,6 +66,24 @@ export const SKILLS: readonly SkillDef[] = [
   { id: 'div.long', label: 'Three digit division', baseDifficulty: 1200, tier: 5, op: 'div', digits: 3 },
   { id: 'div.big', label: 'Four digit division', baseDifficulty: 1400, tier: 6, op: 'div', digits: 4 },
 
+  // Divisibility recognition, which POLARITY drills. Deciding whether a number
+  // is a multiple of seven is not the seven times table: production and
+  // verification prime each other barely at all, so crediting mul.table.7 for
+  // this would inflate a rating that then composes waves in every other mode.
+  //
+  // Cut by the method the recognition needs, not by the divisor — one entry per
+  // trick is also what the Playbook can actually teach. Composite divisors
+  // credit their constituents, so a wave on 12 rates threes and fours.
+  //
+  // 2, 5 and 10 are deliberately absent. They are the surface heuristics a
+  // player falls back on when the real check is too slow, so rating them would
+  // put a permanently mastered row on the Brain Scan for something nobody had
+  // to learn — and a wave built on them would make the shortcut optimal.
+  { id: 'div.by.3', label: 'Multiples of three', baseDifficulty: 480, tier: 2, op: 'div', digits: 2 },
+  { id: 'div.by.4', label: 'Multiples of four', baseDifficulty: 560, tier: 3, op: 'div', digits: 3 },
+  { id: 'div.by.7', label: 'Multiples of seven', baseDifficulty: 720, tier: 4, op: 'div', digits: 2 },
+  { id: 'div.by.11', label: 'Multiples of eleven', baseDifficulty: 800, tier: 4, op: 'div', digits: 3 },
+
   // Order of operations
   { id: 'ooo.basic', label: 'Order of operations', baseDifficulty: 950, tier: 5, op: 'mixed', digits: 1 },
 
