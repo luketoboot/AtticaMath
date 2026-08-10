@@ -26,7 +26,7 @@ import type { CoachConfig } from '../config';
 import type { SkillId } from '../skills/taxonomy';
 
 /** Modes that keep a trouble record. */
-export type TroubleMode = 'meteor' | 'factor' | 'collapse' | 'expression';
+export type TroubleMode = 'meteor' | 'factor' | 'collapse' | 'expression' | 'polarity';
 
 export interface TroubleEntry {
   /** The problem as the player saw it: "8 + 6", "FACTOR 91", "3/4". */
@@ -122,6 +122,10 @@ const RANKERS: Readonly<Record<TroubleMode, (a: TroubleEntry, b: TroubleEntry) =
   expression: byMisses,
   collapse: byMisses,
   factor: bySlowest,
+  // POLARITY records one entry per number met, and misses is the only signal on
+  // it: the clock is meaningless when a mote's arrival, not the player, sets
+  // the pace, so there is nothing for bySlowest to sort on.
+  polarity: byMisses,
 };
 
 /** Whether an entry is worth showing at all under its mode's ranking. */

@@ -13,6 +13,7 @@ export type LeaderboardMode =
   | 'collapse'
   | 'kakooma'
   | 'cages'
+  | 'polarity'
   | 'boss';
 
 /**
@@ -25,6 +26,7 @@ export const LEADERBOARD_MODES: readonly LeaderboardMode[] = [
   'expression',
   'factor',
   'collapse',
+  'polarity',
   'kakooma',
   'cages',
 ];
@@ -36,6 +38,7 @@ export const MODE_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   collapse: 'COLLAPSE',
   kakooma: 'KAKOOMA',
   cages: 'CAGES',
+  polarity: 'POLARITY',
   boss: 'BOSS RUSH',
 };
 
@@ -50,6 +53,7 @@ export const MODE_TAB_LABEL: Readonly<Record<LeaderboardMode, string>> = {
   collapse: 'COLLAPSE',
   kakooma: 'KAKOOMA',
   cages: 'CAGES',
+  polarity: 'POLARITY',
   boss: 'BOSS RUSH',
 };
 
@@ -71,6 +75,7 @@ export const MODE_RANKING: Readonly<Record<LeaderboardMode, Ranking>> = {
   collapse: 'high',
   kakooma: 'high',
   cages: 'low',
+  polarity: 'high',
   boss: 'high',
 };
 
@@ -91,6 +96,8 @@ export function modeFromSceneKey(key: string | undefined): LeaderboardMode {
       return 'kakooma';
     case 'Cages':
       return 'cages';
+    case 'Polarity':
+      return 'polarity';
     case 'Boss':
       return 'boss';
     default:

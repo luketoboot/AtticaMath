@@ -19,6 +19,7 @@ export type IconName =
   | 'expression'
   | 'factor'
   | 'collapse'
+  | 'polarity'
   | 'boss'
   | 'hangar'
   | 'leaderboard'
@@ -185,6 +186,24 @@ function collapse(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameOb
     g,
     glyph(scene, -0.6 * s, -0.34 * s, '½', s * 0.4, st.color),
     glyph(scene, 0.6 * s, 0.34 * s, '%', s * 0.4, st.dim),
+  ];
+}
+
+function polarity(scene: Phaser.Scene, st: IconStyle): Phaser.GameObjects.GameObject[] {
+  const s = st.size / 2;
+  const g = scene.add.graphics();
+  // Two overlapping fields with a lit lens between them: the common multiples,
+  // which is the one idea the mode is about.
+  g.lineStyle(2.5, st.color, 1);
+  g.strokeCircle(-0.34 * s, 0, 0.58 * s);
+  g.lineStyle(2.5, st.dim, 1);
+  g.strokeCircle(0.34 * s, 0, 0.58 * s);
+  g.fillStyle(st.color, 0.55);
+  g.fillCircle(0, 0, 0.22 * s);
+  return [
+    g,
+    glyph(scene, -0.62 * s, 0, '×', s * 0.42, st.color),
+    glyph(scene, 0.62 * s, 0, '×', s * 0.42, st.dim),
   ];
 }
 
@@ -402,6 +421,7 @@ const PAINTERS: Readonly<
   expression,
   factor,
   collapse,
+  polarity,
   boss,
   hangar,
   leaderboard,

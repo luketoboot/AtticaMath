@@ -219,6 +219,7 @@ describe('presentation helpers', () => {
     expect(modeFromSceneKey('Expression')).toBe('expression');
     expect(modeFromSceneKey('Factor')).toBe('factor');
     expect(modeFromSceneKey('Collapse')).toBe('collapse');
+    expect(modeFromSceneKey('Polarity')).toBe('polarity');
     expect(modeFromSceneKey('Boss')).toBe('boss');
     expect(modeFromSceneKey('Game')).toBe('meteor');
     expect(modeFromSceneKey(undefined)).toBe('meteor');
@@ -232,7 +233,9 @@ describe('presentation helpers', () => {
       expect(MODE_TAB_LABEL[mode]).toBeTruthy();
     }
     const boards = new Set(
-      ['Game', 'Expression', 'Factor', 'Collapse', 'Kakooma', 'Cages'].map(modeFromSceneKey),
+      ['Game', 'Expression', 'Factor', 'Collapse', 'Polarity', 'Kakooma', 'Cages'].map(
+        modeFromSceneKey,
+      ),
     );
     expect([...boards].sort()).toEqual([...LEADERBOARD_MODES].sort());
   });

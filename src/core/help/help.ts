@@ -88,6 +88,20 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
     gotcha:
       'You pass straight through your own colour. Only the other gun can hurt you, and only the right gun can hit a target.',
   },
+  Polarity: {
+    title: 'POLARITY',
+    goal: 'Two divisors. Break what your one divides, and eat what it divides.',
+    lines: [
+      { key: 'WASD / F', text: 'Fly. Hold F to crawl for threading — the hitbox is the white dot.' },
+      { key: 'SPACE', text: 'Fire, held. Shots ring off anything your divisor does not divide.' },
+      { key: 'SHIFT', text: 'Flip divisors. You cannot flip again for a moment, so mean it.' },
+      { key: 'INCOMING', text: 'A bullet your divisor divides is absorbed and charges the meter.' },
+      { key: 'PODS', text: 'SPREAD, LANCE, SEEKER, SIEVE. A kill nearby turns fire into points.' },
+      { key: 'E', text: 'Spend a full meter to re-declare the pair and reclassify the field.' },
+    ],
+    gotcha:
+      'Enemies fire the colour they are not — so the divisor that breaks them is the one their shots kill you in.',
+  },
   Kakooma: {
     title: 'KAKOOMA',
     goal: 'In each cell of nine numbers, one is what two of the others make. Find it.',

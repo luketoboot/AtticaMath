@@ -53,6 +53,14 @@ const MODES: readonly (ModeCardSpec & { scene: string })[] = [
     onSelect: () => {},
   },
   {
+    label: 'POLARITY',
+    tagline: 'WEAR THE DIVISOR THAT MAKES THE NUMBER SAFE.',
+    icon: 'polarity',
+    accent: PALETTE.cyan,
+    scene: 'Polarity',
+    onSelect: () => {},
+  },
+  {
     label: 'KAKOOMA',
     tagline: 'ONE NUMBER IS WHAT TWO OTHERS MAKE. FIND IT.',
     icon: 'kakooma',
@@ -114,7 +122,7 @@ export class MenuScene extends Phaser.Scene {
     // Modes across one row, so no mode reads as buried under another. The
     // card narrows as modes are added rather than the row wrapping: a second
     // row would make the modes on it read as lesser.
-    const cardLayout = { width: 170, height: 214 };
+    const cardLayout = { width: 148, height: 214 };
     const deck = new CardDeck(this, this.modeSpecs(), cardLayout, (i, n) => ({
       x: spread(width / 2, 1120, i, n),
       y: 322,

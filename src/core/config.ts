@@ -3,6 +3,11 @@
  */
 import type { ChainConfig } from './collapse/chain';
 import type { FlightConfig } from './flight/newtonian';
+import type { PolarityChainConfig } from './polarity/chain';
+import type { PathConfig } from './polarity/formations';
+import type { HeatConfig } from './polarity/heat';
+import type { MotePoolConfig } from './polarity/motes';
+import type { LedgerConfig } from './polarity/signal';
 import type { AsteroidOptions } from './shapes/asteroid';
 import type { SkillFilter } from './skills/taxonomy';
 
@@ -676,6 +681,77 @@ export interface CagesConfig {
   perCellDifficulty: number;
 }
 
+export interface PolarityConfig {
+  /** Ship traverse, pixels per second. */
+  shipSpeed: number;
+  /** How big the ship is drawn, and how far off the wall it is held. */
+  shipRadius: number;
+  /** Ease toward the requested velocity, in seconds. See core/polarity/drive. */
+  moveSmoothing: number;
+  /**
+   * What can actually be hit — far smaller than the hull, as in every bullet
+   * hell worth the name. A ship drawn at its own hitbox is either too small to
+   * read or too fat to thread a pattern with, and the genre settled this
+   * decades ago: draw the fighter, hit the pilot. The core is painted on the
+   * hull so the player is never guessing where the difference is.
+   */
+  shipHitRadius: number;
+  carrierRadius: number;
+  bulletRadius: number;
+  /** How the pressure ramps over a run. See core/polarity/heat.ts. */
+  heat: HeatConfig;
+  /**
+   * Ceiling on bullets in the air. Carrier fire is generated as a wave runs
+   * rather than authored, so its dodgeability cannot be proven the way the
+   * carrier paths are — it is bounded here instead.
+   */
+  maxLiveBullets: number;
+  /** The player's gun. */
+  shotSpeed: number;
+  killPoints: number;
+  /** Odds a broken carrier leaves a weapon pod. */
+  podChance: number;
+  /** How long a dropped pod waits to be collected, and how fast it drifts down. */
+  podLifeSeconds: number;
+  podFallSpeed: number;
+  podRadius: number;
+  /** Enemy fire wiped out by a kill nearby, and what each cancelled shot pays. */
+  cancelRadius: number;
+  cancelPoints: number;
+  /** Movement multiplier while focus is held. */
+  focusSpeedFactor: number;
+  startingHp: number;
+  /**
+   * Dead time after a flip, during which the polarity is in neither state and
+   * nothing can be absorbed. Committing to a colour is the decision the mode is
+   * about, and a flip that costs nothing is not a commitment.
+   */
+  swapLockoutSeconds: number;
+  /** Motes absorbed to fill the meter, and how long a spent RECOMPOSE holds. */
+  meterCapacity: number;
+  recomposeChoiceSeconds: number;
+  /** How far off the ship's path a mote can pass and still count as a decision. */
+  graceRadius: number;
+  /** Value range motes are drawn from. */
+  valueLo: number;
+  valueHi: number;
+  pool: MotePoolConfig;
+  chain: PolarityChainConfig;
+  path: PathConfig;
+  ledger: LedgerConfig;
+  /**
+   * Sensitivity at which a cashed ledger counts as a correct attempt. It gates
+   * the mastery counter only — the rating already moves on the graded figure —
+   * so this is the line between "read these well" and merely "read these".
+   */
+  correctDPrime: number;
+  /** Score for one absorbed mote, before the chain multiplies it. */
+  absorbPoints: number;
+  /** Credits for a wave cleared, and for each link banked. */
+  waveCredits: number;
+  linkCredits: number;
+}
+
 export interface GameConfig {
   rating: RatingConfig;
   waves: WaveConfig;
@@ -690,6 +766,7 @@ export interface GameConfig {
   asteroid: AsteroidOptions & { minSpinDeg: number; maxSpinDeg: number };
   factor: FactorConfig;
   collapse: CollapseConfig;
+  polarity: PolarityConfig;
   kakooma: KakoomaConfig;
   cages: CagesConfig;
   boss: BossConfig;
@@ -1021,6 +1098,99 @@ export const CONFIG: GameConfig = {
     matchBase: 150,
     tierBonus: 75,
     unreducedBonus: 50,
+  },
+  polarity: {
+    // Fast. The arena is 1280 wide and the ship crosses it in about a second
+    // and a half — at half this it was technically working and felt broken,
+    // because a tap moved the hull by less than its own width and nothing on
+    // screen said the key had registered.
+    shipSpeed: 780,
+    shipRadius: 23,
+    shipHitRadius: 9,
+    // Two thirds of the way to full speed in this long. Enough to stop the
+    // hull snapping between positions, short enough that the glide after
+    // release is a few dozen pixels and a threaded gap stays threaded.
+    moveSmoothing: 0.075,
+    carrierRadius: 26,
+    bulletRadius: 17,
+    heat: {
+      // Wave one fires at two thirds pace and aims every shot; by wave six the
+      // authored intervals are in force and the rings are out.
+      openingFireStretch: 1.55,
+      fireStretchWaves: 5,
+      fanFromWave: 3,
+      ringFromWave: 5,
+      fanChanceBase: 0.25,
+      fanChanceGrowth: 0.07,
+      maxFanChance: 0.6,
+      ringBulletsBase: 6,
+      ringBulletsPerWave: 0.7,
+      maxRingBullets: 12,
+      wildShareBase: 0.08,
+      wildShareGrowth: 0.025,
+      maxWildShare: 0.26,
+      bulletSpeedBase: 200,
+      bulletSpeedPerWave: 12,
+      maxBulletSpeed: 330,
+      carrierSpeedBase: 52,
+      carrierSpeedPerWave: 4,
+      maxCarrierSpeed: 96,
+    },
+    maxLiveBullets: 40,
+    shotSpeed: 900,
+    killPoints: 120,
+    // Roughly one pod every four or five kills: often enough that the roster is
+    // the texture of a run, rare enough that BOLT is still the gun you know.
+    podChance: 0.22,
+    podLifeSeconds: 7,
+    podFallSpeed: 70,
+    podRadius: 20,
+    // Generous, because the cancel is the payoff of the whole loop: break a
+    // carrier in a thicket of its own fire and the thicket becomes points.
+    cancelRadius: 190,
+    cancelPoints: 25,
+    focusSpeedFactor: 0.38,
+    startingHp: 6,
+    // Long enough that a flip is a plan and not a twitch, short enough that a
+    // player who has read the field ahead is never fighting the controls.
+    swapLockoutSeconds: 0.18,
+    meterCapacity: 24,
+    recomposeChoiceSeconds: 3,
+    graceRadius: 90,
+    // Two and three digits. Below ten there is nothing to recognise, and past a
+    // few hundred the reading time swamps the deciding time.
+    valueLo: 12,
+    valueHi: 480,
+    pool: {
+      // Two in three, which leaves room for the easy items that keep a wave
+      // moving without letting them carry it.
+      heuristicProofShare: 0.66,
+      nearMissShare: 0.55,
+    },
+    chain: {
+      linkLength: 3,
+      basePayout: 100,
+      payoutGrowth: 2,
+      // Ikaruga caps at 25,600 from the ninth link. Same ceiling, same reason:
+      // past that the score stops being a number anyone can hold.
+      maxPayout: 25600,
+    },
+    path: {
+      // Derived from shipSpeed against a 1280 arena, so the integrity check is
+      // asking about the ship the player is actually flying.
+      shipSpeedFraction: 780 / 1280,
+      killHalfWidth: 0.03,
+      minLinks: 2,
+    },
+    ledger: {
+      minSignalTrials: 8,
+      minNoiseTrials: 8,
+      minResponsesEachWay: 3,
+    },
+    correctDPrime: 1,
+    absorbPoints: 40,
+    waveCredits: 14,
+    linkCredits: 4,
   },
   boss: {
     baseHp: 250,
