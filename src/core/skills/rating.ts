@@ -45,6 +45,29 @@ export interface AttemptResult {
    * evidence they are slow.
    */
   untimed?: boolean;
+  /**
+   * A graded outcome in [0,1], used in place of the hit/miss bit. Set by modes
+   * whose evidence is an aggregate rather than a single answer — POLARITY reads
+   * a stream of yes/no judgements, where any one of them is a coin flip and
+   * only the sensitivity across a batch of them means anything. It passes
+   * signal-detection d' through the 2AFC identity to land on the guess-corrected
+   * proportion correct, so 0.5 is "no evidence" and moves the rating nowhere.
+   *
+   * `correct` is still required and still drives the mastery counter: a batch
+   * may be evidence enough to move a rating without being a correct answer.
+   */
+  partial?: number;
+}
+
+/** The graded outcome to score this attempt against, hit/miss unless overridden. */
+function actualScore(attempt: AttemptResult): number {
+  // A non-finite partial would poison a rating permanently: ratings persist to
+  // localStorage, and reconcileTable only seeds keys that are missing, never
+  // repairs one that is present and NaN.
+  if (attempt.partial === undefined || !Number.isFinite(attempt.partial)) {
+    return attempt.correct ? 1 : 0;
+  }
+  return Math.min(1, Math.max(0, attempt.partial));
 }
 
 /** Probability the player (rating r) answers a problem of given difficulty correctly. */
@@ -85,7 +108,7 @@ export function updateSkill(state: SkillState, attempt: AttemptResult, cfg: Rati
   const provisional = state.attempts < cfg.provisionalAttempts;
   const k = cfg.kFactor * (provisional ? cfg.provisionalKMultiplier : 1);
   const expected = expectedScore(state.rating, attempt.difficulty, cfg);
-  const actual = attempt.correct ? 1 : 0;
+  const actual = actualScore(attempt);
   const target = targetLatencyMs(attempt.difficulty, cfg);
   const timed = attempt.untimed !== true;
   let delta = k * (actual - expected);

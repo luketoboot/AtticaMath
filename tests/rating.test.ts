@@ -114,6 +114,77 @@ describe('updateSkill', () => {
   });
 });
 
+describe('updateSkill with a graded partial', () => {
+  const base = { rating: 500, attempts: 20, correct: 20, fluency: 1, lastAttemptWave: 0 };
+
+  it('moves nothing when the evidence matches expectation', () => {
+    // The whole point of the seam: a batch that discriminated no better than
+    // chance lands on 0.5, and against a problem at the player's own rating
+    // that is exactly the expected score, so the rating holds.
+    const next = updateSkill(
+      base,
+      { correct: false, responseMs: 0, difficulty: 500, wave: 5, untimed: true, partial: 0.5 },
+      cfg,
+    );
+    expect(next.rating).toBeCloseTo(base.rating, 9);
+  });
+
+  it('scales the delta between the miss and the hit it replaces', () => {
+    const attempt = { correct: true, responseMs: 0, difficulty: 500, wave: 5, untimed: true };
+    const miss = updateSkill(base, { ...attempt, partial: 0 }, cfg).rating;
+    const half = updateSkill(base, { ...attempt, partial: 0.5 }, cfg).rating;
+    const full = updateSkill(base, { ...attempt, partial: 1 }, cfg).rating;
+    expect(miss).toBeLessThan(half);
+    expect(half).toBeLessThan(full);
+  });
+
+  it('overrides the rating delta but never the mastery counter', () => {
+    // A batch can be poor evidence and still be a pass, or vice versa. The two
+    // must be able to disagree, or d' would be grinding out milestones.
+    const next = updateSkill(
+      base,
+      { correct: true, responseMs: 0, difficulty: 500, wave: 5, untimed: true, partial: 0 },
+      cfg,
+    );
+    expect(next.rating).toBeLessThan(base.rating);
+    expect(next.correct).toBe(base.correct + 1);
+  });
+
+  it('clamps out of range rather than letting it overshoot a hit', () => {
+    const attempt = { correct: true, responseMs: 0, difficulty: 500, wave: 5, untimed: true };
+    const over = updateSkill(base, { ...attempt, partial: 1.7 }, cfg);
+    const hit = updateSkill(base, { ...attempt, partial: 1 }, cfg);
+    expect(over.rating).toBeCloseTo(hit.rating, 9);
+
+    const under = updateSkill(base, { ...attempt, partial: -0.3 }, cfg);
+    const miss = updateSkill(base, { ...attempt, partial: 0 }, cfg);
+    expect(under.rating).toBeCloseTo(miss.rating, 9);
+  });
+
+  it('falls back to the hit/miss bit when the number is not one', () => {
+    // A degenerate d' (0/0) must not be able to write NaN into a save file.
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      const next = updateSkill(
+        base,
+        { correct: true, responseMs: 0, difficulty: 500, wave: 5, untimed: true, partial: bad },
+        cfg,
+      );
+      expect(Number.isFinite(next.rating)).toBe(true);
+      expect(next.rating).toBeGreaterThan(base.rating);
+    }
+  });
+
+  it('leaves fluency alone, since a batch has no pace', () => {
+    const state = { ...base, fluency: 2.4 };
+    const next = updateSkill(
+      state,
+      { correct: true, responseMs: 0, difficulty: 500, wave: 5, untimed: true, partial: 0.95 },
+      cfg,
+    );
+    expect(next.fluency).toBe(2.4);
+  });
+});
+
 describe('applyAttempt', () => {
   it('updates every component skill and leaves others alone', () => {
     const table = createSkillTable(['add.single', 'add.bridge', 'mul.table.9'], cfg);
