@@ -56,6 +56,7 @@ import { GUNS, POD_GUNS, type GunDef, type GunKind } from './guns';
 import { heatFor, type WaveHeat } from './heat';
 import { fillSlots, isFillable } from './motes';
 import { SignalLedger, dPrime, partialFor, type MoteClass, type Resolution } from './signal';
+import { addPoints, buy, canBuy, modsFor, newTree, type Mods, type TreeState } from './tree';
 
 export type Polarity = 'a' | 'b';
 
@@ -120,6 +121,8 @@ export interface ShotOutcome {
   divisor: number;
   /** A weapon pod the kill left behind. */
   pod?: GunKind;
+  /** A skill point the kill left behind. */
+  point?: boolean;
 }
 
 export interface HitOutcome {
@@ -173,6 +176,9 @@ export class PolaritySession {
   private gun: GunKind = 'bolt';
   private heat: WaveHeat;
   private gunAmmo: number | null = null;
+  /** The per-run tree. Wiped with the session, never persisted. */
+  private tree: TreeState = newTree();
+  private mods: Mods = modsFor(newTree());
   private readonly ledgers = new Map<number, Ledger>();
   private trouble: TroubleLog;
   private lastTipSkill: SkillId | undefined;
@@ -237,7 +243,11 @@ export class PolaritySession {
     return this.meter;
   }
   get recomposeReady(): boolean {
-    return this.meter >= this.cfg.polarity.meterCapacity;
+    return this.meter >= this.meterCapacity;
+  }
+  /** Bullets needed to charge RECOMPOSE, after the tree has had its say. */
+  get meterCapacity(): number {
+    return Math.max(4, Math.round(this.cfg.polarity.meterCapacity * this.mods.meterRate));
   }
   get liveCarriers(): readonly LiveCarrier[] {
     return [...this.carriers.values()];
@@ -258,6 +268,42 @@ export class PolaritySession {
   /** Pulls left, or null on the gun you never run out of. */
   get gunRounds(): number | null {
     return this.gunAmmo;
+  }
+
+  /** The per-run tree, and everything it currently adds up to. */
+  get treeState(): TreeState {
+    return this.tree;
+  }
+  get treeMods(): Mods {
+    return this.mods;
+  }
+  get skillPoints(): number {
+    return this.tree.points;
+  }
+
+  /** Take a node, if it is adjacent, affordable and inside the budget. */
+  buyNode(id: number): boolean {
+    const next = buy(this.tree, id, this.cfg.polarity.tree);
+    if (next === this.tree) return false;
+    this.tree = next;
+    this.mods = modsFor(next);
+    // Extra hull arrives the moment it is bought rather than at the next wave,
+    // which is the only sane reading of "+1 hull" while something is shooting.
+    this.hp += this.modDelta('bonusHull');
+    return true;
+  }
+
+  canBuyNode(id: number): boolean {
+    return canBuy(this.tree, id, this.cfg.polarity.tree);
+  }
+
+  /** Hull already granted by the tree, so a new node only pays the difference. */
+  private grantedHull = 0;
+  private modDelta(_key: 'bonusHull'): number {
+    const owed = this.mods.bonusHull;
+    const delta = owed - this.grantedHull;
+    this.grantedHull = owed;
+    return delta;
   }
 
   /** Whether the ship as it stands could break this carrier. */
@@ -284,7 +330,7 @@ export class PolaritySession {
   swap(): boolean {
     if (this.lockoutRemaining > 0) return false;
     this.polarity = this.polarity === 'a' ? 'b' : 'a';
-    this.lockoutRemaining = this.cfg.polarity.swapLockoutSeconds;
+    this.lockoutRemaining = this.cfg.polarity.swapLockoutSeconds * (1 - this.mods.flipRecovery);
     return true;
   }
 
@@ -478,7 +524,8 @@ export class PolaritySession {
   /** Take a pod. Swapping guns always refills, so a pod is never a downgrade. */
   equip(kind: GunKind): void {
     this.gun = kind;
-    this.gunAmmo = GUNS[kind].ammo;
+    const rounds = GUNS[kind].ammo;
+    this.gunAmmo = rounds === null ? null : Math.round(rounds * this.mods.ammo);
   }
 
   /**
@@ -538,16 +585,31 @@ export class PolaritySession {
     this.noteCarrier(carrier, true);
 
     const colour: Colour = carrier.cls === 'bridge' ? 'joker' : this.polarity;
-    const step = absorb(this.chainState, colour, this.cfg.polarity.chain);
+    let step = absorb(this.chainState, colour, this.cfg.polarity.chain);
     this.chainState = step.state;
+    // A bridge counting twice is the tree paying you for the thing the mode
+    // already wants you to hunt.
+    if (this.mods.bridgesCountDouble && carrier.cls === 'bridge' && !step.broke) {
+      const again = absorb(this.chainState, 'joker', this.cfg.polarity.chain);
+      this.chainState = again.state;
+      if (again.linked) step = { ...again, payout: again.payout + step.payout };
+    }
     if (step.linked) {
       this.totalLinks += 1;
       this.bestLinks = Math.max(this.bestLinks, step.state.links);
+      // A link that repairs is the only healing in the mode, and it is earned
+      // by the hardest thing in it: taking three of a colour in order.
+      if (this.mods.linksRepair) this.hp += 1;
     }
 
-    const points = this.cfg.polarity.killPoints * carrier.maxHp + step.payout;
+    const points = Math.round(
+      this.cfg.polarity.killPoints * carrier.maxHp * this.mods.killPoints +
+        step.payout * this.mods.chainPayout,
+    );
     this.score += points;
     const pod = this.rollPod();
+    const point = this.rng.chance(this.cfg.polarity.spChance + this.mods.spChance);
+    if (point) this.tree = addPoints(this.tree, this.cfg.polarity.tree.pointsPerPickup);
     return {
       connected: true,
       bit: true,
@@ -559,6 +621,7 @@ export class PolaritySession {
       value: carrier.value,
       divisor,
       ...(pod === undefined ? {} : { pod }),
+      ...(point ? { point: true } : {}),
     };
   }
 
@@ -570,7 +633,7 @@ export class PolaritySession {
    * and hunting bridges is already its own reward through the chain.
    */
   private rollPod(): GunKind | undefined {
-    if (!this.rng.chance(this.cfg.polarity.podChance)) return undefined;
+    if (!this.rng.chance(this.cfg.polarity.podChance * this.mods.podChance)) return undefined;
     return this.rng.pick([...POD_GUNS]);
   }
 
@@ -586,7 +649,7 @@ export class PolaritySession {
   ramCarrier(carrierId: number): boolean {
     if (!this.carriers.has(carrierId)) return false;
     this.takeDamage();
-    this.chainState = newChain();
+    if (!this.mods.chainSurvivesDamage) this.chainState = newChain();
     return true;
   }
 
@@ -600,7 +663,12 @@ export class PolaritySession {
    * wrong costs a hull point and it is still the same assertion, which is why
    * damage and grading are decided separately.
    */
-  bulletHit(bulletId: number): HitOutcome {
+  /** Whether this bullet is one the worn divisor makes safe — for the magnet. */
+  isSafeBullet(bullet: LiveBullet): boolean {
+    return bullet.cls === 'bridge' || bullet.cls === (this.polarity === 'a' ? 'aOnly' : 'bOnly');
+  }
+
+  bulletHit(bulletId: number, focused = false): HitOutcome {
     const bullet = this.bullets.get(bulletId);
     if (!bullet) return { absorbed: false, damaged: false, points: 0 };
     this.bullets.delete(bulletId);
@@ -608,17 +676,25 @@ export class PolaritySession {
     const res: Resolution = this.tickPolarity === 'a' ? 'absorbedA' : 'absorbedB';
     this.grade(bullet.cls, bullet.value, res);
 
-    const safe = bullet.cls === 'bridge' || bullet.cls === (this.tickPolarity === 'a' ? 'aOnly' : 'bOnly');
+    // Focus eating wilds is the one node that changes what is safe rather than
+    // how safe you are. It cannot help with the *reading* — a wild is divisible
+    // by neither divisor and there is nothing to work out about it.
+    const wildEaten = focused && this.mods.focusEatsWilds && bullet.cls === 'neither';
+    const safe =
+      wildEaten ||
+      bullet.cls === 'bridge' ||
+      bullet.cls === (this.tickPolarity === 'a' ? 'aOnly' : 'bOnly');
     if (!safe) {
       this.takeDamage();
-      this.chainState = newChain();
+      if (!this.mods.chainSurvivesDamage) this.chainState = newChain();
       return { absorbed: false, damaged: true, points: 0 };
     }
 
     this.absorbed += 1;
-    this.meter = Math.min(this.cfg.polarity.meterCapacity, this.meter + 1);
-    this.score += this.cfg.polarity.absorbPoints;
-    return { absorbed: true, damaged: false, points: this.cfg.polarity.absorbPoints };
+    this.meter = Math.min(this.meterCapacity, this.meter + 1);
+    const gained = Math.round(this.cfg.polarity.absorbPoints * this.mods.absorbPoints);
+    this.score += gained;
+    return { absorbed: true, damaged: false, points: gained };
   }
 
   /**
@@ -655,7 +731,7 @@ export class PolaritySession {
     const bullet = this.bullets.get(bulletId);
     if (!bullet) return undefined;
     this.bullets.delete(bulletId);
-    this.score += this.cfg.polarity.cancelPoints;
+    this.score += Math.round(this.cfg.polarity.cancelPoints * this.mods.cancelPoints);
     this.cancelled += 1;
     return bullet.value;
   }

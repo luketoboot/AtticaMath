@@ -8,6 +8,7 @@ import type { PathConfig } from './polarity/formations';
 import type { HeatConfig } from './polarity/heat';
 import type { MotePoolConfig } from './polarity/motes';
 import type { LedgerConfig } from './polarity/signal';
+import type { TreeConfig } from './polarity/tree';
 import type { AsteroidOptions } from './shapes/asteroid';
 import type { SkillFilter } from './skills/taxonomy';
 
@@ -709,8 +710,11 @@ export interface PolarityConfig {
   /** The player's gun. */
   shotSpeed: number;
   killPoints: number;
-  /** Odds a broken carrier leaves a weapon pod. */
+  /** Odds a broken carrier leaves a weapon pod, and one that leaves a point. */
   podChance: number;
+  spChance: number;
+  /** The per-run skill tree. See core/polarity/tree.ts. */
+  tree: TreeConfig;
   /** How long a dropped pod waits to be collected, and how fast it drifts down. */
   podLifeSeconds: number;
   podFallSpeed: number;
@@ -1142,6 +1146,13 @@ export const CONFIG: GameConfig = {
     // Roughly one pod every four or five kills: often enough that the roster is
     // the texture of a run, rare enough that BOLT is still the gun you know.
     podChance: 0.22,
+    spChance: 0.3,
+    tree: {
+      // Small against a hundred and forty nodes, and that is the point: the
+      // budget is what turns cheap filler into the price of reaching a keystone.
+      nodeBudget: 22,
+      pointsPerPickup: 1,
+    },
     podLifeSeconds: 7,
     podFallSpeed: 70,
     podRadius: 20,

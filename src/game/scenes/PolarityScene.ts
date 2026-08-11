@@ -177,6 +177,7 @@ export class PolarityScene extends Phaser.Scene {
   private bannerText!: Phaser.GameObjects.Text;
   private gunText!: Phaser.GameObjects.Text;
   private gunGlyph!: Phaser.GameObjects.Graphics;
+  private spText!: Phaser.GameObjects.Text;
   private hitText!: Phaser.GameObjects.Text;
 
   constructor() {
@@ -258,6 +259,12 @@ export class PolarityScene extends Phaser.Scene {
     onActionKey(this, this.bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Polarity' });
+      this.scene.pause();
+    });
+    this.input.keyboard?.on('keydown-T', () => {
+      if (this.phase === 'over' || this.scene.isActive('PolarityTree')) return;
+      // Paused, because the tree is a decision and the field is a clock.
+      this.scene.launch('PolarityTree', { session: this.session });
       this.scene.pause();
     });
     this.input.keyboard?.on('keydown-R', () => this.scene.restart());
@@ -377,6 +384,9 @@ export class PolarityScene extends Phaser.Scene {
       .setOrigin(1, 0.5)
       .setDepth(20);
 
+    this.spText = this.add
+      .text(28, 94, '', { ...small, fontStyle: 'bold', color: CSS.magentaHot })
+      .setDepth(20);
     this.gunGlyph = this.add.graphics().setPosition(36, 78).setDepth(20);
     this.gunText = this.add
       .text(52, 70, '', { ...small, color: CSS.yellow })
@@ -404,7 +414,7 @@ export class PolarityScene extends Phaser.Scene {
       .setDepth(30);
 
     this.add
-      .text(width / 2, height - 22, 'WASD MOVE  ·  YOUR DIVISOR FIRES  ·  THE OTHER FLIPS  ·  F FOCUS  ·  E RECOMPOSE  ·  H RULES', {
+      .text(width / 2, height - 22, 'WASD MOVE · YOUR DIVISOR FIRES · THE OTHER FLIPS · F FOCUS · T TREE · E RECOMPOSE · H RULES', {
         fontFamily: FONT,
         fontSize: '13px',
         color: CSS.cyanDim,
@@ -598,7 +608,7 @@ export class PolarityScene extends Phaser.Scene {
   private tryFire(): void {
     if (this.phase !== 'wave' || this.time.now < this.nextShotAt) return;
     const gun = this.session.equippedGun;
-    this.nextShotAt = this.time.now + gun.cooldown * 1000;
+    this.nextShotAt = this.time.now + (gun.cooldown / this.session.treeMods.fireRate) * 1000;
     this.sinceShot = 0;
 
     for (const angle of boltAngles(gun)) {
@@ -629,10 +639,10 @@ export class PolarityScene extends Phaser.Scene {
       gfx,
       x: this.drive.x,
       y: this.drive.y - p.shipRadius * 1.15,
-      vx: Math.sin(rad) * p.shotSpeed * gun.speedScale,
-      vy: -Math.cos(rad) * p.shotSpeed * gun.speedScale,
-      damage: gun.damage,
-      pierces: gun.pierces,
+      vx: Math.sin(rad) * p.shotSpeed * gun.speedScale * this.session.treeMods.shotSpeed,
+      vy: -Math.cos(rad) * p.shotSpeed * gun.speedScale * this.session.treeMods.shotSpeed,
+      damage: gun.damage + this.session.treeMods.bonusDamage,
+      pierces: gun.pierces || this.session.treeMods.pierce,
       homes: gun.homes,
       hit: new Set<number>(),
       dead: false,
@@ -671,7 +681,12 @@ export class PolarityScene extends Phaser.Scene {
       this.drive,
       input,
       {
-        speed: CONFIG.polarity.shipSpeed * (this.focused ? CONFIG.polarity.focusSpeedFactor : 1),
+        speed:
+          CONFIG.polarity.shipSpeed *
+          this.session.treeMods.speed *
+          (this.focused
+            ? CONFIG.polarity.focusSpeedFactor * this.session.treeMods.focusMobility
+            : 1),
         radius: CONFIG.polarity.shipRadius,
         smoothing: CONFIG.polarity.moveSmoothing,
       },
@@ -757,8 +772,15 @@ export class PolarityScene extends Phaser.Scene {
       const gap = Math.hypot(b.x - this.drive.x, b.y - this.drive.y);
       b.closest = Math.min(b.closest, gap);
 
+      // Safe fire drifts toward the ship once the tree says it should.
+      const magnet = this.session.treeMods.magnet;
+      if (magnet > 0 && gap < magnet && this.session.isSafeBullet(b.bullet)) {
+        b.x += ((this.drive.x - b.x) / gap) * 150 * dt;
+        b.y += ((this.drive.y - b.y) / gap) * 150 * dt;
+      }
+
       if (gap < p.shipHitRadius + p.bulletRadius * 0.75) {
-        const outcome = this.session.bulletHit(b.bullet.id);
+        const outcome = this.session.bulletHit(b.bullet.id, this.focused);
         this.despawn(b, outcome.absorbed);
         if (outcome.absorbed) {
           getAudio(this)?.play('block', { gain: 0.5 });
@@ -888,8 +910,12 @@ export class PolarityScene extends Phaser.Scene {
     this.killCarrier(d, true);
     cameraPunch(this, 0.008, 160);
 
-    this.cancelAround(d.x, d.y, CONFIG.polarity.cancelRadius);
+    this.cancelAround(d.x, d.y, CONFIG.polarity.cancelRadius * this.session.treeMods.cancelRadius);
     if (outcome.pod) this.spawnPod(outcome.pod, d.x, d.y);
+    if (outcome.point) {
+      this.floatText(d.x, d.y - 22, '+1 SP', CSS.magentaHot, 18);
+      getAudio(this)?.play('confirm', { gain: 0.4 });
+    }
     if (outcome.linked) {
       getAudio(this)?.play('comboUp');
       cameraPunch(this, 0.02, 260);
@@ -1160,6 +1186,10 @@ export class PolarityScene extends Phaser.Scene {
     const low = rounds !== null && rounds <= 8;
     this.gunText.setColor(low ? CSS.magentaHot : CSS.yellow);
     drawGunGlyph(this.gunGlyph, gun.kind, 9, low ? PALETTE.magentaHot : PALETTE.yellow);
+
+    const sp = this.session.skillPoints;
+    this.spText.setText(sp > 0 ? `${sp} SP — T` : '');
+    this.spText.setColor(sp > 0 ? CSS.magentaHot : CSS.cyanDim);
 
     const hits = this.session.kills + this.session.cancelled;
     this.hitText.setText(hits > 0 ? `${hits} HIT` : '');

@@ -24,6 +24,7 @@ import { ModeSelectScene } from './game/scenes/ModeSelectScene';
 import { PauseScene } from './game/scenes/PauseScene';
 import { PlaybookScene } from './game/scenes/PlaybookScene';
 import { PolarityScene } from './game/scenes/PolarityScene';
+import { PolarityTreeScene } from './game/scenes/PolarityTreeScene';
 import { SettingsScene } from './game/scenes/SettingsScene';
 import { ShopScene } from './game/scenes/ShopScene';
 import { SpriteLabScene } from './game/scenes/SpriteLabScene';
@@ -53,6 +54,7 @@ const game = new Phaser.Game({
     CagesLearnScene,
     CollapseScene,
     PolarityScene,
+    PolarityTreeScene,
     ExerciseSelectScene,
     ExerciseScene,
     // BossScene is benched pending a redesign — see the note in MenuScene.
