@@ -18,14 +18,14 @@ describe('legal pairs', () => {
   it('refuses a pair where one divides the other', () => {
     // The B-only class would be empty: every multiple of four is a multiple of
     // two, so a third of the field could never be filled.
-    for (const [a, b] of [[2, 4], [3, 9], [4, 8], [2, 6], [3, 12], [6, 12], [5, 10], [3, 6]]) {
+    for (const [a, b] of [[2, 4], [3, 9], [4, 8], [2, 6], [3, 6], [2, 8], [3, 3]]) {
       expect(isLegalPair(a!, b!), `${a}/${b}`).toBe(false);
       expect(isLegalPair(b!, a!), `${b}/${a}`).toBe(false);
     }
   });
 
   it('accepts pairs that genuinely carve four ways', () => {
-    for (const [a, b] of [[3, 4], [4, 7], [6, 8], [7, 11], [8, 9], [9, 12], [3, 10]]) {
+    for (const [a, b] of [[3, 4], [4, 7], [6, 8], [7, 8], [8, 9], [6, 9], [2, 3]]) {
       expect(isLegalPair(a!, b!), `${a}/${b}`).toBe(true);
     }
   });
@@ -75,14 +75,21 @@ describe('classOf', () => {
 });
 
 describe('skill credit', () => {
-  it('gives twelve both of the methods it is made of', () => {
-    expect(skillIdsFor(12)).toEqual(['div.by.3', 'div.by.4']);
-  });
-
   it('files composites under the method that actually does the work', () => {
     expect(skillIdsFor(6)).toEqual(['div.by.3']);
     expect(skillIdsFor(9)).toEqual(['div.by.3']);
     expect(skillIdsFor(8)).toEqual(['div.by.4']);
+  });
+
+  it('deals single digits only, because the divisor is the trigger', () => {
+    // The key you press to fire is the number you wear, and a two-digit
+    // divisor is not a key. Eleven keeps its skill everywhere else.
+    for (const d of DIVISORS) {
+      expect(d, `divisor ${d}`).toBeGreaterThanOrEqual(2);
+      expect(d, `divisor ${d}`).toBeLessThanOrEqual(9);
+    }
+    expect(skillIdsFor(11)).toEqual([]);
+    expect(skillIdsFor(12)).toEqual([]);
   });
 
   it('rates nothing for the divisors the last digit settles', () => {

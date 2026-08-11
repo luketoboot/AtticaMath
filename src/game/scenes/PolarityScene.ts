@@ -93,6 +93,11 @@ const POLARITY_CSS: Record<Polarity, string> = { a: CSS.cyan, b: CSS.magentaHot 
 
 type Phase = 'wave' | 'breather' | 'over';
 
+/** Both keys that mean a digit, so the numpad and the top row read the same. */
+function digitCodes(n: number): readonly string[] {
+  return [`Digit${n}`, `Numpad${n}`];
+}
+
 /**
  * POLARITY.
  *
@@ -163,6 +168,8 @@ export class PolarityScene extends Phaser.Scene {
   private pairPanel!: Phaser.GameObjects.Graphics;
   private wornBig!: Phaser.GameObjects.Text;
   private otherBig!: Phaser.GameObjects.Text;
+  private wornHint!: Phaser.GameObjects.Text;
+  private otherHint!: Phaser.GameObjects.Text;
   private chainText!: Phaser.GameObjects.Text;
   private chainBar!: Phaser.GameObjects.Rectangle;
   private meterBar!: Phaser.GameObjects.Rectangle;
@@ -218,9 +225,13 @@ export class PolarityScene extends Phaser.Scene {
 
     this.bindings = sceneBindings(this);
     this.keys = new KeyState(this);
-    this.input.keyboard?.addCapture('UP,DOWN,LEFT,RIGHT,SPACE');
+    this.input.keyboard?.addCapture('UP,DOWN,LEFT,RIGHT,SPACE,TWO,THREE,FOUR,FIVE,SIX,SEVEN,EIGHT,NINE');
 
-    onActionKey(this, this.bindings.switchWeapon, () => this.flip());
+    // The divisor is the trigger. Every other mode in the game asks for a
+    // number; this one was the odd one out, reading a value off the HUD and
+    // firing an unrelated key. Now the polarity you wear is the key under your
+    // finger, and committing to a colour physically moves your hand.
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onDigit(e.code));
     // E rather than a bound action: the two bound ones are spoken for, and
     // Cages already teaches E as "the extra thing this mode does".
     this.input.keyboard?.on('keydown-E', () => this.tryRecompose());
@@ -331,8 +342,16 @@ export class PolarityScene extends Phaser.Scene {
       .text(width / 2 + 74, 34, '', { fontFamily: FONT, fontSize: '26px', fontStyle: 'bold' })
       .setOrigin(0.5)
       .setDepth(20);
-    this.add
-      .text(width / 2, 66, 'BREAK & EAT      DODGE', {
+    this.wornHint = this.add
+      .text(width / 2 - 74, 62, 'HOLD TO FIRE', {
+        fontFamily: FONT,
+        fontSize: '11px',
+        color: CSS.cyanDim,
+      })
+      .setOrigin(0.5)
+      .setDepth(20);
+    this.otherHint = this.add
+      .text(width / 2 + 74, 62, 'PRESS TO FLIP', {
         fontFamily: FONT,
         fontSize: '11px',
         color: CSS.cyanDim,
@@ -385,7 +404,7 @@ export class PolarityScene extends Phaser.Scene {
       .setDepth(30);
 
     this.add
-      .text(width / 2, height - 22, 'WASD MOVE · SPACE FIRE · F FOCUS · SHIFT FLIP · E RECOMPOSE · H RULES', {
+      .text(width / 2, height - 22, 'WASD MOVE  ·  YOUR DIVISOR FIRES  ·  THE OTHER FLIPS  ·  F FOCUS  ·  E RECOMPOSE  ·  H RULES', {
         fontFamily: FONT,
         fontSize: '13px',
         color: CSS.cyanDim,
@@ -517,14 +536,48 @@ export class PolarityScene extends Phaser.Scene {
     this.paintShip();
   }
 
+  /**
+   * A number key went down.
+   *
+   * Your own divisor fires — but that is polled in `update` so it can be held,
+   * so this only has to deal with the other two cases. The *other* divisor
+   * flips you to it and deliberately does not also fire: letting one press do
+   * both would erase the swap lockout, and the lockout is the whole of the
+   * commitment the mode is built on. Anything else buzzes, because a digit that
+   * is not live this wave is a real thing to have got wrong and the player
+   * should hear it rather than wonder why nothing happened.
+   */
+  private onDigit(code: string): void {
+    if (this.phase !== 'wave') return;
+    const match = /^(?:Digit|Numpad)([2-9])$/.exec(code);
+    if (!match) return;
+    const digit = Number(match[1]);
+    if (digit === this.session.activeDivisor) return;
+
+    const [a, b] = this.session.currentPair;
+    if (digit === a || digit === b) {
+      this.flip();
+      return;
+    }
+    getAudio(this)?.play('error', { gain: 0.3 });
+    this.flashBanner(`NO ×${digit} THIS WAVE`, 700);
+  }
+
   private tryRecompose(): void {
     if (this.phase !== 'wave' || !this.session.recomposeReady) {
       getAudio(this)?.play('error');
       return;
     }
     const best = this.session.recomposeOptions()[0];
-    if (best === undefined || !this.session.recompose(best)) return;
+    if (best === undefined) return;
+    const scattered = this.session.recompose(best);
+    if (scattered === null) return;
 
+    // Whatever the new pair could not touch runs for it.
+    for (const id of scattered) {
+      const fled = this.carriers.find((c) => c.carrier.id === id && !c.dead);
+      if (fled) this.killCarrier(fled, false);
+    }
     for (const d of this.carriers) {
       drawCarrier(d.gfx, d.carrier.cls, CONFIG.polarity.carrierRadius, d.carrier.hp < d.carrier.maxHp);
       this.paintPips(d);
@@ -628,9 +681,10 @@ export class PolarityScene extends Phaser.Scene {
     this.ship.setPosition(this.drive.x, this.drive.y);
     this.animateShip(dt, input);
 
-    // Held fire. A shmup that wants a keypress per shot is a shmup nobody
-    // finishes, and the decision here is which polarity to be, not when to pull.
-    if (this.keys.isDown(this.bindings.launch)) this.tryFire();
+    // Held fire, on whichever digit is currently loaded. A shmup that wants a
+    // keypress per shot is a shmup nobody finishes, and the decision here is
+    // which polarity to be, not when to pull.
+    if (this.keys.isDown(digitCodes(this.session.activeDivisor))) this.tryFire();
 
     if (this.phase === 'wave') this.spawnDueBullets(dt);
     this.moveCarriers(width, height);
@@ -1085,6 +1139,9 @@ export class PolarityScene extends Phaser.Scene {
     const otherDiv = worn === 'a' ? b : a;
     this.wornBig.setText(`×${wornDiv}`).setColor(POLARITY_CSS[worn]);
     this.otherBig.setText(`×${otherDiv}`).setColor(CSS.cyanDim);
+    // The live key is lit in its own colour; the other stays quiet.
+    this.wornHint.setColor(POLARITY_CSS[worn]);
+    this.otherHint.setColor(CSS.cyanDim);
 
     const width = this.scale.width;
     this.pairPanel.clear();

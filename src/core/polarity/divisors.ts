@@ -17,24 +17,31 @@ import { getSkill, type SkillId } from '../skills/taxonomy';
 import type { MoteClass } from './signal';
 
 /**
- * Divisors a wave can be declared with. Two, five and ten are in the pool and
- * deliberately rate nothing: they are the surface checks a player falls back on
- * when the real one is too slow, so they make a gentle opening pair and a
- * dishonest rating.
+ * Divisors a wave can be declared with.
+ *
+ * Single digits only, because in POLARITY the divisor *is* the trigger: the key
+ * you press to fire is the number you are wearing. A two-digit divisor would
+ * need two keystrokes to shoot, which is not a trigger, so ten, eleven and
+ * twelve are out of this mode. `div.by.11` is untouched everywhere else — its
+ * generator recipe, the Playbook drill, the placement sweep and its Brain Scan
+ * row all still work; it simply stops being trained here.
+ *
+ * Two and five are in the pool and deliberately rate nothing: they are the
+ * surface checks a player falls back on when the real one is too slow, so they
+ * make a gentle opening pair and a dishonest rating.
  */
-export const DIVISORS: readonly number[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+export const DIVISORS: readonly number[] = [2, 3, 4, 5, 6, 7, 8, 9];
 
 /** Divisors settled by glancing at the last digit. Playable, never rated. */
-export const UNRATED_DIVISORS: readonly number[] = [2, 5, 10];
+export const UNRATED_DIVISORS: readonly number[] = [2, 5];
 
 /**
  * The recognition skills a divisor exercises.
  *
  * Composite divisors credit the methods they are actually made of rather than
- * getting a row of their own: spotting a multiple of twelve is spotting a
- * multiple of three and a multiple of four at once, and six is the three with
- * the parity check thrown in free. Eight is filed under fours because the move
- * is the same one — halve what the hundreds leave behind — just run once more.
+ * getting a row of their own: six and nine are the digit-sum check with a
+ * parity or a second pass on top, and eight is filed under fours because the
+ * move is the same one — halve what the hundreds leave behind — run once more.
  */
 export function skillIdsFor(divisor: number): readonly SkillId[] {
   switch (divisor) {
@@ -47,10 +54,6 @@ export function skillIdsFor(divisor: number): readonly SkillId[] {
       return ['div.by.4'];
     case 7:
       return ['div.by.7'];
-    case 11:
-      return ['div.by.11'];
-    case 12:
-      return ['div.by.3', 'div.by.4'];
     default:
       return [];
   }
