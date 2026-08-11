@@ -30,7 +30,11 @@ export const CLASS_COLOR: Record<MoteClass, number> = {
   aOnly: PALETTE.cyan,
   bOnly: PALETTE.magentaHot,
   bridge: PALETTE.yellow,
-  neither: PALETTE.deepPurple,
+  // Red, and bright. A wild is the one shot no polarity makes safe, and in
+  // deep purple it was the least visible thing on the screen — the object you
+  // cannot answer should never also be the object you cannot see. Red is the
+  // only unused hue in the palette and it happens to mean exactly this.
+  neither: PALETTE.red,
 };
 
 type Pt = readonly [number, number];
@@ -80,7 +84,80 @@ function hexagon(r: number): Phaser.Geom.Point[] {
 }
 
 /**
- * Paint a carrier. `phase` is seconds, for the parts that breathe.
+ * How much work to spend on a hull.
+ *
+ * `flat` is the outline and its class marks — what a carrier needs to be
+ * identified. `rim` adds a light source. `full` adds panel work on top.
+ *
+ * These exist as a dial rather than as three functions because the question
+ * "does the extra detail survive the CRT at 60 pixels" is answered by looking,
+ * not by arguing, and a dial is what lets you put them side by side.
+ */
+export type CarrierDetail = 'flat' | 'rim' | 'full';
+
+/** Light comes from the top left, as it does in every readable piece of art. */
+const LIGHT: readonly [number, number] = [-0.7071, -0.7071];
+
+/**
+ * Re-stroke the edges facing the light, brighter and thicker.
+ *
+ * A flat neon outline reads as a sticker: the same weight all the way round
+ * tells the eye there is no third dimension. One brighter side is the whole
+ * trick — it costs one extra pass and it is the difference between a shape and
+ * an object.
+ *
+ * Facing is taken from the edge midpoint against the hull centre rather than
+ * from a true normal, which needs no winding order and is accurate enough for
+ * light on a sixty pixel silhouette.
+ */
+function rimLight(g: Phaser.GameObjects.Graphics, pts: readonly Phaser.Geom.Point[], colour: number): void {
+  // The full neon edge first, at its normal weight. Splitting the outline into
+  // a lit half and a dim half is the obvious way to do this and it is wrong
+  // here: on black, with bloom, a saturated unbroken edge is what makes the
+  // shape read at all, and dimming half of it just looks washed out. So the
+  // highlight is added *on top* of a complete outline rather than replacing
+  // part of it.
+  g.lineStyle(2.6, colour, 1);
+  g.strokePoints([...pts], true, true);
+
+  g.lineStyle(1.6, PALETTE.white, 0.75);
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    const len = Math.hypot(mx, my) || 1;
+    if ((mx / len) * LIGHT[0] + (my / len) * LIGHT[1] <= 0.25) continue;
+    g.lineBetween(a.x, a.y, b.x, b.y);
+  }
+}
+
+/** Asymmetric plating, which is what stops a shape reading as an icon. */
+function panelWork(g: Phaser.GameObjects.Graphics, cls: MoteClass, r: number, colour: number): void {
+  g.lineStyle(1.4, colour, 0.5);
+  if (cls === 'aOnly') {
+    g.lineBetween(-r * 0.72, -r * 0.1, -r * 0.3, -r * 0.1);
+    g.lineBetween(r * 0.34, -r * 0.22, r * 0.86, -r * 0.02);
+    g.lineBetween(r * 0.3, r * 0.5, r * 0.5, r * 0.72);
+    g.fillStyle(colour, 0.35);
+    g.fillRect(-r * 0.66, r * 0.28, r * 0.26, r * 0.1);
+  } else if (cls === 'bOnly') {
+    g.lineBetween(-r * 0.24, -r * 0.5, -r * 0.24, r * 0.1);
+    g.lineBetween(r * 0.24, -r * 0.42, r * 0.24, r * 0.06);
+    g.lineBetween(-r * 0.5, r * 0.16, -r * 0.86, r * 0.14);
+    g.fillStyle(colour, 0.35);
+    g.fillRect(r * 0.1, r * 0.42, r * 0.1, r * 0.3);
+  } else {
+    g.lineBetween(-r * 0.5, r * 0.42, r * 0.5, r * 0.42);
+    g.lineBetween(-r * 0.34, -r * 0.62, -r * 0.14, -r * 0.3);
+    g.lineBetween(r * 0.34, -r * 0.62, r * 0.14, -r * 0.3);
+    g.fillStyle(colour, 0.3);
+    g.fillRect(-r * 0.12, -r * 0.9, r * 0.24, r * 0.16);
+  }
+}
+
+/**
+ * Paint a carrier.
  *
  * Redrawn only when something about it changes — class, damage — rather than
  * every frame, so a field of thirty of these costs nothing.
@@ -90,6 +167,7 @@ export function drawCarrier(
   cls: MoteClass,
   r: number,
   hurt: boolean,
+  detail: CarrierDetail = 'rim',
 ): void {
   const colour = CLASS_COLOR[cls];
   g.clear();
@@ -102,8 +180,14 @@ export function drawCarrier(
   g.fillPoints(body, true);
   g.fillStyle(colour, hurt ? 0.34 : 0.2);
   g.fillPoints(body, true);
-  g.lineStyle(2.6, colour, 1);
-  g.strokePoints(body, true, true);
+
+  if (detail === 'flat') {
+    g.lineStyle(2.6, colour, 1);
+    g.strokePoints(body, true, true);
+  } else {
+    rimLight(g, body, colour);
+  }
+  if (detail === 'full') panelWork(g, cls, r, colour);
 
   if (cls === 'aOnly') {
     // Side pods and a single lit eye above the number: a gunship, watching.
@@ -156,9 +240,12 @@ export function drawBullet(g: Phaser.GameObjects.Graphics, cls: MoteClass, r: nu
   const colour = CLASS_COLOR[cls];
   g.clear();
 
-  // The halo: what makes a CAVE bullet visible against a busy field.
-  g.fillStyle(colour, 0.18);
-  g.fillCircle(0, 0, r * 1.35);
+  // The halo: what makes a CAVE bullet visible against a busy field. The wild
+  // gets the widest and brightest of them, being the one that cannot be
+  // answered by reading it.
+  const wild = cls === 'neither';
+  g.fillStyle(colour, wild ? 0.3 : 0.18);
+  g.fillCircle(0, 0, r * (wild ? 1.6 : 1.35));
 
   if (cls === 'aOnly') {
     g.fillStyle(colour, 0.34);
@@ -189,9 +276,9 @@ export function drawBullet(g: Phaser.GameObjects.Graphics, cls: MoteClass, r: nu
       const rr = i % 2 === 0 ? 1.18 : 0.6;
       barb.push([Math.cos(th) * rr, Math.sin(th) * rr]);
     }
-    g.fillStyle(colour, 0.24);
+    g.fillStyle(colour, 0.45);
     g.fillPoints(poly(barb, r), true);
-    g.lineStyle(2.2, colour, 1);
+    g.lineStyle(2.6, colour, 1);
     g.strokePoints(poly(barb, r), true, true);
   }
 

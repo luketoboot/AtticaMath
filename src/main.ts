@@ -26,6 +26,7 @@ import { PlaybookScene } from './game/scenes/PlaybookScene';
 import { PolarityScene } from './game/scenes/PolarityScene';
 import { SettingsScene } from './game/scenes/SettingsScene';
 import { ShopScene } from './game/scenes/ShopScene';
+import { SpriteLabScene } from './game/scenes/SpriteLabScene';
 import { VideoScene } from './game/scenes/VideoScene';
 
 const game = new Phaser.Game({
@@ -67,6 +68,8 @@ const game = new Phaser.Game({
     VideoScene,
     PauseScene,
     HelpScene,
+    // A measuring instrument, reachable only by name from the shot harness.
+    SpriteLabScene,
   ],
 });
 

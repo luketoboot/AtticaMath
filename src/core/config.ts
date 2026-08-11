@@ -1111,7 +1111,7 @@ export const CONFIG: GameConfig = {
     // hull snapping between positions, short enough that the glide after
     // release is a few dozen pixels and a threaded gap stays threaded.
     moveSmoothing: 0.075,
-    carrierRadius: 26,
+    carrierRadius: 32,
     bulletRadius: 17,
     heat: {
       // Wave one fires at two thirds pace and aims every shot; by wave six the
