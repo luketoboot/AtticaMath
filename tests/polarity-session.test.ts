@@ -361,7 +361,7 @@ describe('RECOMPOSE', () => {
     const session = newSession();
     session.nextWave();
     expect(session.recomposeReady).toBe(false);
-    expect(session.recompose(session.recomposeOptions()[0]!)).toBe(false);
+    expect(session.recompose(session.recomposeOptions()[0]!)).toBeNull();
   });
 
   it('re-declares the pair and reclassifies the whole field', () => {
@@ -382,15 +382,43 @@ describe('RECOMPOSE', () => {
 
     const keep = session.currentPair[0];
     const option = session.recomposeOptions()[0]!;
-    expect(session.recompose(option)).toBe(true);
+    const before = session.liveCarriers.length;
+    const scattered = session.recompose(option);
+    expect(scattered).not.toBeNull();
     expect(session.currentPair).toEqual([keep, option]);
     expect(session.meterCharge).toBe(0);
 
+    // Nothing unbreakable is ever left standing: a carrier the new pair cannot
+    // touch flees rather than falling untouchable in the wild colour.
     for (const c of session.liveCarriers) {
       const inA = c.value % keep === 0;
       const inB = c.value % option === 0;
+      expect(inA || inB, `${c.value} under ${keep}/${option}`).toBe(true);
       expect(c.cls).toBe(inA && inB ? 'bridge' : inA ? 'aOnly' : 'bOnly');
     }
+    expect(session.liveCarriers.length).toBe(before - scattered!.length);
+  });
+
+  it('scatters what the new pair could not touch, and pays nothing for it', () => {
+    // The cost of choosing a divisor: carriers it cannot reach get away, with
+    // no points and no chain, so a reshuffle is a decision rather than a freebie.
+    const session = newSession(5);
+    session.nextWave();
+    let guard = 0;
+    while (!session.recomposeReady && guard++ < 400) {
+      session.tick(0.3);
+      for (const b of session.fireGuns(0.3)) {
+        if (bulletSafe(b, session.state)) session.bulletHit(b.id);
+        else session.bulletExpired(b.id, 20, 3);
+      }
+      if (session.waveCleared) session.nextWave();
+    }
+    const score = session.score;
+    const kills = session.kills;
+    session.recompose(session.recomposeOptions()[0]!);
+    expect(session.score).toBe(score);
+    expect(session.kills).toBe(kills);
+    expect(session.chain.links).toBe(0);
   });
 
   it('only ever offers a divisor that makes a legal pair', () => {

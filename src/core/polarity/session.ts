@@ -758,30 +758,51 @@ export class PolaritySession {
    */
   recomposeOptions(): readonly number[] {
     const keep = this.pair[0];
-    const live = [...this.liveCarriers.map((c) => c.value), ...this.liveBullets.map((b) => b.value)];
+    const carriers = this.liveCarriers;
     const candidates = legalPairs()
       .filter(([a, b]) => a === keep || b === keep)
       .map(([a, b]) => (a === keep ? b : a))
       .filter((d) => d !== this.pair[1]);
 
+    const live = [...carriers.map((c) => c.value), ...this.liveBullets.map((b) => b.value)];
     const safety = (d: number): number => live.filter((v) => v % d === 0 || v % keep === 0).length;
     return [...candidates].sort((x, y) => safety(y) - safety(x));
   }
 
-  /** Spend the meter and re-declare the pair, reclassifying the live field. */
-  recompose(divisor: number): boolean {
-    if (!this.recomposeReady) return false;
+  /**
+   * Spend the meter and re-declare the pair, reclassifying the live field.
+   *
+   * Returns the carriers the new pair scattered, or null if the meter was not
+   * full. A carrier divisible by neither half of the pair you chose could never
+   * be broken by anything — it would fall untouchable, wearing the wild colour,
+   * and the player would never learn why. Rather than leave that on the board,
+   * those carriers flee: no points, no chain, filed with the coach as ones that
+   * got away. That makes the choice of divisor a real cost rather than a free
+   * reshuffle, which is what a spent meter should buy.
+   */
+  recompose(divisor: number): readonly number[] | null {
+    if (!this.recomposeReady) return null;
     const keep = this.pair[0];
     if (!legalPairs().some(([a, b]) => (a === keep && b === divisor) || (b === keep && a === divisor))) {
-      return false;
+      return null;
     }
     this.meter = 0;
     this.pair = [keep, divisor];
-    for (const c of this.carriers.values()) c.cls = classOf(c.value, keep, divisor) as CarrierClass;
+
+    const scattered: number[] = [];
+    for (const c of [...this.carriers.values()]) {
+      const cls = classOf(c.value, keep, divisor);
+      if (cls === 'neither') {
+        scattered.push(c.id);
+        this.carrierEscaped(c.id);
+        continue;
+      }
+      c.cls = cls;
+    }
     for (const b of this.bullets.values()) b.cls = classOf(b.value, keep, divisor);
     this.polarity = 'a';
     this.lockoutRemaining = this.cfg.polarity.swapLockoutSeconds;
-    return true;
+    return scattered;
   }
 
   // --- the coach ---
