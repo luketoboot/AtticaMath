@@ -26,14 +26,17 @@ import type { MoteClass } from './signal';
  * generator recipe, the Playbook drill, the placement sweep and its Brain Scan
  * row all still work; it simply stops being trained here.
  *
- * Two and five are in the pool and deliberately rate nothing: they are the
- * surface checks a player falls back on when the real one is too slow, so they
- * make a gentle opening pair and a dishonest rating.
+ * Two is not in the pool at all. "Is it even" is the fastest read in
+ * arithmetic and the one every player already has — it is the surface heuristic
+ * this mode is built to defeat, so a wave declared on it would be a wave with
+ * half the thinking removed. Five stays, because the last-digit check is nearly
+ * as free and that makes it a useful gentle half for an opening pair, but it
+ * rates nothing for the same reason.
  */
-export const DIVISORS: readonly number[] = [2, 3, 4, 5, 6, 7, 8, 9];
+export const DIVISORS: readonly number[] = [3, 4, 5, 6, 7, 8, 9];
 
-/** Divisors settled by glancing at the last digit. Playable, never rated. */
-export const UNRATED_DIVISORS: readonly number[] = [2, 5];
+/** Settled by glancing at the last digit. Playable, never rated. */
+export const UNRATED_DIVISORS: readonly number[] = [5];
 
 /**
  * The recognition skills a divisor exercises.

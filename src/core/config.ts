@@ -1143,9 +1143,10 @@ export const CONFIG: GameConfig = {
     maxLiveBullets: 40,
     shotSpeed: 900,
     killPoints: 120,
-    // Roughly one pod every four or five kills: often enough that the roster is
-    // the texture of a run, rare enough that BOLT is still the gun you know.
-    podChance: 0.22,
+    // About one pod every twelve kills, so a wave usually has none and
+    // occasionally has one. At four times this the roster was always in hand
+    // and BOLT never got a look in — a pod has to be a treat to be a reward.
+    podChance: 0.08,
     spChance: 0.3,
     tree: {
       // Small against a hundred and forty nodes, and that is the point: the
