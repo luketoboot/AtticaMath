@@ -1,0 +1,53 @@
+# Build and publish dist/ to GitHub Pages on every push to master.
+#
+# Needs one-time setup in the repo: Settings → Pages → Source: GitHub Actions.
+# vite.config.ts already builds with base './', so the bundle is happy under
+# the /<repo>/ subpath Pages serves it from.
+#
+# The daily board's Supabase credentials come from repo secrets if they exist.
+# With them unset the build still ships a complete game — the daily falls back
+# to a device-local board and says so on screen. That fallback is a designed
+# state, not an error.
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
