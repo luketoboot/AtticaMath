@@ -10,8 +10,7 @@ Owner-supplied music tracks. Files here are served at the site root, so
 | Track     | File                      | Played by                                                       |
 | --------- | ------------------------- | --------------------------------------------------------------- |
 | `menu`    | Last_Exit_Before_Dawn.mp3 | Menu, ModeSelect, Shop, Settings, Controls, BrainScan, Leaderboard |
-| `game`    | Midnight_Interceptor.mp3  | GameScene (Meteor Defense), ExpressionScene                       |
-| `boss`    | Red_Room_Standoff.mp3     | BossScene                                                         |
+| `game`    | Midnight_Interceptor.mp3  | GameScene (Meteor Defense), ExpressionScene, BossScene (benched)  |
 | `drift`   | Black_Glass_Horizon.mp3   | FactorScene (Factor Storm), CollapseScene                         |
 | `pulse`   | Chain_Reaction.mp3        | CollapseScene                                                     |
 | `debrief` | Rain_on_the_Pane.mp3      | DebriefScene                                                      |

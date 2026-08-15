@@ -60,7 +60,9 @@ export class BossScene extends Phaser.Scene {
   create(): void {
     const { width, height } = this.scale;
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
-    getAudio(this)?.playMusic('boss');
+    // The dedicated boss track (Red_Room_Standoff.mp3) left with the bench —
+    // restore it from git history alongside this scene's registration.
+    getAudio(this)?.playMusic('game');
     applyCrt(this);
     clearHitStop(this);
     this.events.once('shutdown', () => clearHitStop(this));

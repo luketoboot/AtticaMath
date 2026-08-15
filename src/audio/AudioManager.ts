@@ -46,13 +46,12 @@ export interface SfxOptions {
   gain?: number;
 }
 
-export type MusicTrack = 'menu' | 'game' | 'boss' | 'drift' | 'pulse' | 'debrief';
+export type MusicTrack = 'menu' | 'game' | 'drift' | 'pulse' | 'debrief';
 
 /** Owner-supplied looping tracks in public/music/. Missing files are skipped. */
 const MUSIC_TRACKS: Record<MusicTrack, string> = {
   menu: 'music/Last_Exit_Before_Dawn.mp3',
   game: 'music/Midnight_Interceptor.mp3',
-  boss: 'music/Red_Room_Standoff.mp3',
   // Free-flight modes: weightless rather than driving.
   drift: 'music/Black_Glass_Horizon.mp3',
   // The beat-driven counterpart to drift, for when a session needs a push.
