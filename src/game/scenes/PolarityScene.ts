@@ -10,7 +10,9 @@ import {
   type Polarity,
   type ShotOutcome,
 } from '../../core/polarity/session';
-import { CLASS_COLOR, drawBullet, drawCarrier } from '../PolarityEnemyGfx';
+import { classColors, drawBullet, drawCarrier } from '../PolarityEnemyGfx';
+import { channelColors } from '../../fx/channels';
+import type { MoteClass } from '../../core/polarity/signal';
 import { GUNS, boltAngles, bounceLine, killLine, type GunKind } from '../../core/polarity/guns';
 import type { RunStats } from '../../core/economy/economy';
 import { newMilestones } from '../../core/skills/milestones';
@@ -88,8 +90,8 @@ interface StarLayer {
   offset: number;
 }
 
-const POLARITY_COLOR: Record<Polarity, number> = { a: PALETTE.cyan, b: PALETTE.magentaHot };
-const POLARITY_CSS: Record<Polarity, string> = { a: CSS.cyan, b: CSS.magentaHot };
+// The channel hues resolve per run from the save's palette setting — see
+// core/settings/channels for why this is a dial and not a constant.
 
 type Phase = 'wave' | 'breather' | 'over';
 
@@ -128,6 +130,9 @@ function digitCodes(n: number): readonly string[] {
  */
 export class PolarityScene extends Phaser.Scene {
   private session!: PolaritySession;
+  private polarityColor!: Record<Polarity, number>;
+  private polarityCss!: Record<Polarity, string>;
+  private classColor!: Record<MoteClass, number>;
   private saves!: SaveManager;
   private skillsAtLaunch: SkillTable = {};
 
@@ -196,6 +201,10 @@ export class PolarityScene extends Phaser.Scene {
     this.events.on(Phaser.Scenes.Events.PAUSE, () => getAudio(this)?.stopAllLoops());
 
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    const chan = channelColors(this.saves.save.settings.channels);
+    this.polarityColor = { a: chan.a, b: chan.b };
+    this.polarityCss = { a: chan.aCss, b: chan.bCss };
+    this.classColor = classColors(chan);
     this.skillsAtLaunch = this.saves.save.skills;
 
     this.session = new PolaritySession({
@@ -324,10 +333,10 @@ export class PolarityScene extends Phaser.Scene {
   private paintShip(): void {
     const worn = this.session.state;
     this.wornText.setText(`×${this.session.activeDivisor}`);
-    this.wornText.setColor(POLARITY_CSS[worn]);
+    this.wornText.setColor(this.polarityCss[worn]);
     drawPolarityHull(this.hull, {
-      colour: POLARITY_COLOR[worn],
-      other: POLARITY_COLOR[worn === 'a' ? 'b' : 'a'],
+      colour: this.polarityColor[worn],
+      other: this.polarityColor[worn === 'a' ? 'b' : 'a'],
       radius: CONFIG.polarity.shipRadius,
     });
   }
@@ -449,7 +458,7 @@ export class PolarityScene extends Phaser.Scene {
       scoldedAt: -999,
       dead: false,
     };
-    drawCarrier(gfx, carrier.cls, r, false);
+    drawCarrier(gfx, carrier.cls, r, false, 'rim', this.classColor);
     this.paintPips(drawn);
     return drawn;
   }
@@ -464,7 +473,7 @@ export class PolarityScene extends Phaser.Scene {
     const total = maxHp * w + (maxHp - 1) * 3;
     for (let i = 0; i < maxHp; i++) {
       const x = -total / 2 + i * (w + 3);
-      g.fillStyle(CLASS_COLOR[cls], i < hp ? 0.95 : 0.2);
+      g.fillStyle(this.classColor[cls], i < hp ? 0.95 : 0.2);
       g.fillRect(x, r * 0.52, w, 3);
     }
   }
@@ -481,7 +490,7 @@ export class PolarityScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const container = this.add.container(from.x, from.y, [gfx, label]).setDepth(4);
-    drawBullet(gfx, bullet.cls, p.bulletRadius);
+    drawBullet(gfx, bullet.cls, p.bulletRadius, this.classColor);
 
     // Aimed at where the ship is standing, then rotated by the pattern's own
     // offset — or thrown on an absolute compass heading, for a ring.
@@ -589,10 +598,10 @@ export class PolarityScene extends Phaser.Scene {
       if (fled) this.killCarrier(fled, false);
     }
     for (const d of this.carriers) {
-      drawCarrier(d.gfx, d.carrier.cls, CONFIG.polarity.carrierRadius, d.carrier.hp < d.carrier.maxHp);
+      drawCarrier(d.gfx, d.carrier.cls, CONFIG.polarity.carrierRadius, d.carrier.hp < d.carrier.maxHp, 'rim', this.classColor);
       this.paintPips(d);
     }
-    for (const d of this.bullets) drawBullet(d.gfx, d.bullet.cls, CONFIG.polarity.bulletRadius);
+    for (const d of this.bullets) drawBullet(d.gfx, d.bullet.cls, CONFIG.polarity.bulletRadius, this.classColor);
     this.paintShip();
 
     getAudio(this)?.play('shield');
@@ -625,7 +634,7 @@ export class PolarityScene extends Phaser.Scene {
   private spawnBolt(angleDeg: number): void {
     const p = CONFIG.polarity;
     const gun = this.session.equippedGun;
-    const colour = POLARITY_COLOR[this.session.state];
+    const colour = this.polarityColor[this.session.state];
     const long = gun.pierces;
 
     const gfx = this.add.graphics().setDepth(6);
@@ -887,7 +896,7 @@ export class PolarityScene extends Phaser.Scene {
     }
 
     this.paintPips(d);
-    drawCarrier(d.gfx, d.carrier.cls, CONFIG.polarity.carrierRadius, true);
+    drawCarrier(d.gfx, d.carrier.cls, CONFIG.polarity.carrierRadius, true, 'rim', this.classColor);
     if (!outcome.killed) {
       getAudio(this)?.play('boltHit', { gain: 0.4 });
       this.tweens.add({ targets: d.container, scale: { from: 1.16, to: 1 }, duration: 120 });
@@ -1082,7 +1091,7 @@ export class PolarityScene extends Phaser.Scene {
   private animateShip(dt: number, input: { up: boolean; down: boolean; left: boolean; right: boolean }): void {
     const p = CONFIG.polarity;
     const worn = this.session.state;
-    const colour = POLARITY_COLOR[worn];
+    const colour = this.polarityColor[worn];
     const t = this.time.now / 1000;
 
     // Lean on the velocity rather than the key, so the roll eases out with the
@@ -1129,7 +1138,7 @@ export class PolarityScene extends Phaser.Scene {
     if (moving && this.trailAt <= 0) {
       this.trailAt = 0.03;
       const gfx = this.add.graphics().setDepth(9);
-      gfx.lineStyle(2, POLARITY_COLOR[this.session.state], 0.4);
+      gfx.lineStyle(2, this.polarityColor[this.session.state], 0.4);
       gfx.strokeCircle(0, 0, p.shipRadius * 0.62);
       gfx.setPosition(this.drive.x, this.drive.y);
       gfx.setRotation(this.ship.rotation);
@@ -1163,17 +1172,17 @@ export class PolarityScene extends Phaser.Scene {
     // so a glance answers "what am I" without any comparison.
     const wornDiv = worn === 'a' ? a : b;
     const otherDiv = worn === 'a' ? b : a;
-    this.wornBig.setText(`×${wornDiv}`).setColor(POLARITY_CSS[worn]);
+    this.wornBig.setText(`×${wornDiv}`).setColor(this.polarityCss[worn]);
     this.otherBig.setText(`×${otherDiv}`).setColor(CSS.cyanDim);
     // The live key is lit in its own colour; the other stays quiet.
-    this.wornHint.setColor(POLARITY_CSS[worn]);
+    this.wornHint.setColor(this.polarityCss[worn]);
     this.otherHint.setColor(CSS.cyanDim);
 
     const width = this.scale.width;
     this.pairPanel.clear();
-    this.pairPanel.fillStyle(POLARITY_COLOR[worn], 0.14);
+    this.pairPanel.fillStyle(this.polarityColor[worn], 0.14);
     this.pairPanel.fillRoundedRect(width / 2 - 128, 10, 108, 48, 6);
-    this.pairPanel.lineStyle(2.5, POLARITY_COLOR[worn], 1);
+    this.pairPanel.lineStyle(2.5, this.polarityColor[worn], 1);
     this.pairPanel.strokeRoundedRect(width / 2 - 128, 10, 108, 48, 6);
 
     const chain = this.session.chain;

@@ -202,6 +202,34 @@ describe('v8 → v9 walkthrough migration', () => {
   });
 });
 
+describe('v9 → v10 channel palette migration', () => {
+  it('dresses an existing profile in the colours it already had', () => {
+    const base = defaultSave();
+    const { channels: _drop, ...settings } = base.settings;
+    const v9 = { ...base, version: 9 as const, settings };
+    const out = migrate(v9);
+    expect(out.version).toBe(CURRENT_SAVE_VERSION);
+    // Everyone has been playing in magenta/cyan since the palette existed;
+    // the default is not a change, it is what they were already looking at.
+    expect(out.settings.channels).toBe('neon');
+  });
+
+  it('keeps a chosen palette', () => {
+    const save = defaultSave();
+    save.settings.channels = 'ember';
+    expect(migrate(save).settings.channels).toBe('ember');
+  });
+
+  it('repairs a hand-edited palette the game does not have', () => {
+    const base = defaultSave();
+    const broken = {
+      ...base,
+      settings: { ...base.settings, channels: 'octarine' },
+    };
+    expect(migrate(broken as unknown as Save).settings.channels).toBe('neon');
+  });
+});
+
 describe('v6 → v7 coach migration', () => {
   it('starts the coach empty, because the past cannot be reconstructed', () => {
     const { trouble: _drop, ...v6 } = { ...defaultSave(), version: 6 as const };

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { ChannelColors } from '../fx/channels';
 import { PALETTE } from '../fx/palette';
 import type { MoteClass } from '../core/polarity/signal';
 
@@ -36,6 +37,14 @@ export const CLASS_COLOR: Record<MoteClass, number> = {
   // only unused hue in the palette and it happens to mean exactly this.
   neither: PALETTE.red,
 };
+
+/**
+ * The class map under a chosen channel pair (core/settings/channels). Only the
+ * two channels move with the setting — bridge and wild keep their meanings.
+ */
+export function classColors(chan: ChannelColors): Record<MoteClass, number> {
+  return { ...CLASS_COLOR, aOnly: chan.a, bOnly: chan.b };
+}
 
 type Pt = readonly [number, number];
 
@@ -168,8 +177,9 @@ export function drawCarrier(
   r: number,
   hurt: boolean,
   detail: CarrierDetail = 'rim',
+  colors: Record<MoteClass, number> = CLASS_COLOR,
 ): void {
-  const colour = CLASS_COLOR[cls];
+  const colour = colors[cls];
   g.clear();
 
   // A dark body under everything, so the neon has something to sit on and the
@@ -236,8 +246,13 @@ export function drawCarrier(
  * bright core instead. A bullet has to be identifiable in peripheral vision at
  * a glance, which is a different job from having a personality.
  */
-export function drawBullet(g: Phaser.GameObjects.Graphics, cls: MoteClass, r: number): void {
-  const colour = CLASS_COLOR[cls];
+export function drawBullet(
+  g: Phaser.GameObjects.Graphics,
+  cls: MoteClass,
+  r: number,
+  colors: Record<MoteClass, number> = CLASS_COLOR,
+): void {
+  const colour = colors[cls];
   g.clear();
 
   // The halo: what makes a CAVE bullet visible against a busy field. The wild

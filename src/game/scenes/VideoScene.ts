@@ -12,6 +12,10 @@
 import Phaser from 'phaser';
 import { getAudio } from '../../audio/getAudio';
 import {
+  CHANNEL_PALETTE_LABEL,
+  otherChannelPalette,
+} from '../../core/settings/channels';
+import {
   defaultVideoSettings,
   isDefaultVideo,
   VIDEO_KNOBS,
@@ -19,6 +23,7 @@ import {
   VIDEO_MIN,
   VIDEO_STEP,
 } from '../../core/settings/video';
+import { channelColors } from '../../fx/channels';
 import { applyCrt } from '../../fx/applyCrt';
 import { goTo } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
@@ -79,12 +84,30 @@ export class VideoScene extends Phaser.Scene {
       applyCrt(this);
       this.refreshNote();
     };
-    const crt = neonButton(this, width / 2, 122, crtLabel(), toggleCrt, {
-      width: 320,
+    const crt = neonButton(this, width / 2 - 184, 122, crtLabel(), toggleCrt, {
+      width: 340,
       height: 44,
-      fontSize: 19,
+      fontSize: 17,
     });
     crt.setAccent(saves.save.settings.crtEnabled ? PALETTE.cyan : PALETTE.cyanDim);
+
+    // The hue pair POLARITY and COLLAPSE wear. The button's accent is the
+    // current channel-B hue, so the choice previews itself even though those
+    // modes are not on this screen to show it.
+    const channelsLabel = (): string =>
+      `CHANNELS  ${CHANNEL_PALETTE_LABEL[saves.save.settings.channels]}`;
+    const toggleChannels = (): void => {
+      saves.save.settings.channels = otherChannelPalette(saves.save.settings.channels);
+      saves.persist();
+      channels.setText(channelsLabel());
+      channels.setAccent(channelColors(saves.save.settings.channels).b);
+    };
+    const channels = neonButton(this, width / 2 + 184, 122, channelsLabel(), toggleChannels, {
+      width: 340,
+      height: 44,
+      fontSize: 17,
+    });
+    channels.setAccent(channelColors(saves.save.settings.channels).b);
 
     this.shaderNote = this.add
       .text(width / 2, 152, '', { fontFamily: FONT, fontSize: '11px', color: CSS.yellow })
@@ -152,7 +175,12 @@ export class VideoScene extends Phaser.Scene {
       goBack();
     });
 
-    const rows: MenuItem[][] = [[{ ...crt, onAdjust: toggleCrt }]];
+    const rows: MenuItem[][] = [
+      [
+        { ...crt, onAdjust: toggleCrt },
+        { ...channels, onAdjust: toggleChannels },
+      ],
+    ];
     for (const row of this.rows) rows.push([row]);
     rows.push([this.resetButton, back]);
     new MenuNav(this, rows);

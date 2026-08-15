@@ -7,6 +7,10 @@ import { CONFIG, type GameConfig } from '../config';
 import { defaultEquipped, resolveEquipped, type Equipped } from '../cosmetics/cosmetics';
 import { defaultBindings, type KeyBindings } from '../input/bindings';
 import {
+  sanitizeChannelPalette,
+  type ChannelPalette,
+} from '../settings/channels';
+import {
   defaultVideoSettings,
   sanitizeVideoSettings,
   type VideoSettings,
@@ -23,7 +27,7 @@ export interface StorageAdapter {
 }
 
 export const SAVE_KEY = 'mathgame.save';
-export const CURRENT_SAVE_VERSION = 9;
+export const CURRENT_SAVE_VERSION = 10;
 
 export interface SaveV1 {
   version: 1;
@@ -111,7 +115,16 @@ export interface SaveV9 extends Omit<SaveV8, 'version'> {
   taught: string[];
 }
 
-export type Save = SaveV9;
+/**
+ * Which hue pair the two-channel modes wear (see core/settings/channels).
+ * A display preference like the video dials, so it lives beside them.
+ */
+export interface SaveV10 extends Omit<SaveV9, 'version' | 'settings'> {
+  version: 10;
+  settings: SaveV9['settings'] & { channels: ChannelPalette };
+}
+
+export type Save = SaveV10;
 
 export function defaultSave(): Save {
   return {
@@ -127,6 +140,7 @@ export function defaultSave(): Save {
       musicVolume: 0.8,
       sfxVolume: 0.9,
       video: defaultVideoSettings(),
+      channels: 'neon',
     },
     bestScore: 0,
     milestones: [],
@@ -225,12 +239,22 @@ export function migrate(raw: unknown): Save {
     // the honest state as well as the useful one.
     save = { ...save, version: 9, taught: [] };
   }
+  if (save.version === 9) {
+    // Everyone has been playing in magenta/cyan since the palette existed;
+    // the default is what they already had.
+    const v9 = save as unknown as SaveV9;
+    save = { ...v9, version: 10, settings: { ...v9.settings, channels: 'neon' } };
+  }
   if (save.version === CURRENT_SAVE_VERSION) {
     const current = save as unknown as Save;
     // A hand-edited or half-written settings block must not reach the shader.
     return {
       ...current,
-      settings: { ...current.settings, video: sanitizeVideoSettings(current.settings?.video) },
+      settings: {
+        ...current.settings,
+        video: sanitizeVideoSettings(current.settings?.video),
+        channels: sanitizeChannelPalette(current.settings?.channels),
+      },
       // A hand-edited or truncated save must not hand the coach a non-object.
       trouble: typeof current.trouble === 'object' && current.trouble !== null ? current.trouble : {},
       taught: Array.isArray(current.taught) ? current.taught : [],

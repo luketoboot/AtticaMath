@@ -44,6 +44,7 @@ import { applyAttempt, type SkillTable } from '../../core/skills/rating';
 import { runDeltas } from '../../core/skills/report';
 import { generateAsteroid, hitsCircle, maxRadius, type AsteroidShape } from '../../core/shapes/asteroid';
 import { applyCrt } from '../../fx/applyCrt';
+import { channelColors, type ChannelColors } from '../../fx/channels';
 import { cameraPunch, clearHitStop, glowPulse, goTo, impact, shake, shockwave, timeScale } from '../../fx/juice';
 import { CSS, FONT, PALETTE } from '../../fx/palette';
 import { paintAsteroid } from '../AsteroidGfx';
@@ -128,14 +129,8 @@ interface StarLayer {
 
 type Phase = 'wave' | 'over';
 
-const GUN_COLOR: Record<GunKind, number> = {
-  fraction: PALETTE.cyan,
-  percent: PALETTE.magentaHot,
-};
-const GUN_CSS: Record<GunKind, string> = {
-  fraction: CSS.cyan,
-  percent: CSS.magentaHot,
-};
+// The two gun hues resolve per run from the save's palette setting — see
+// core/settings/channels for why they are a dial and not constants.
 const GUN_LABEL: Record<GunKind, string> = {
   fraction: 'FRACTION GUN',
   percent: 'PERCENT GUN',
@@ -198,6 +193,9 @@ export class CollapseScene extends Phaser.Scene {
   private carriersLeft = 0;
   private nearMissed = new Set<number>();
   private saves!: SaveManager;
+  private chan!: ChannelColors;
+  private gunColor!: Record<GunKind, number>;
+  private gunCss!: Record<GunKind, string>;
   /** Skill table as the run began, for the debrief's brain-delta column. */
   private skillsAtLaunch: SkillTable = {};
 
@@ -272,6 +270,9 @@ export class CollapseScene extends Phaser.Scene {
     this.pickups = [];
     this.nearMissed.clear();
     this.saves = this.registry.get(SAVE_REGISTRY_KEY) as SaveManager;
+    this.chan = channelColors(this.saves.save.settings.channels);
+    this.gunColor = { fraction: this.chan.a, percent: this.chan.b };
+    this.gunCss = { fraction: this.chan.aCss, percent: this.chan.bCss };
     // Collapse rates as it goes, straight into the save — so the run report's
     // "before" is this reference, held from launch. Tables update immutably.
     this.skillsAtLaunch = this.saves.save.skills;
@@ -519,7 +520,7 @@ export class CollapseScene extends Phaser.Scene {
     // when the ship is a few pixels across in the corner of your eye.
     const ping = this.add
       .circle(this.shipX, this.shipY, 16)
-      .setStrokeStyle(3, GUN_COLOR[this.gun], 1)
+      .setStrokeStyle(3, this.gunColor[this.gun], 1)
       .setDepth(6);
     this.tweens.add({
       targets: ping,
@@ -558,7 +559,7 @@ export class CollapseScene extends Phaser.Scene {
       trailAt: 0,
     });
     getAudio(this)?.play(this.gun === 'fraction' ? 'gunFraction' : 'gunPercent');
-    this.muzzleFlash(x, y, angle, GUN_COLOR[this.gun]);
+    this.muzzleFlash(x, y, angle, this.gunColor[this.gun]);
 
     // Recoil. Small, but it couples the gun to the flight model — sustained
     // fire actually pushes you off your line, which is the whole reason a
@@ -574,22 +575,22 @@ export class CollapseScene extends Phaser.Scene {
 
   /**
    * The two bolts must be tellable apart at a glance and mid-panic. The
-   * fraction bolt is a cyan slash — a division bar in flight. The percent bolt
-   * is a magenta ring, the ∘ of the % sign.
+   * fraction bolt is a slash in its channel's hue — a division bar in flight.
+   * The percent bolt is a ring in the other channel's, the ∘ of the % sign.
    */
   private makeBolt(gun: GunKind, x: number, y: number, angle: number): Phaser.GameObjects.Container {
     const parts: Phaser.GameObjects.GameObject[] = [];
     if (gun === 'fraction') {
       parts.push(
-        this.add.rectangle(0, 0, 26, 4, PALETTE.cyan),
+        this.add.rectangle(0, 0, 26, 4, this.chan.a),
         this.add.rectangle(11, 0, 8, 8, PALETTE.white),
-        this.add.rectangle(-13, 0, 10, 2, PALETTE.cyan, 0.5),
+        this.add.rectangle(-13, 0, 10, 2, this.chan.a, 0.5),
       );
     } else {
       parts.push(
-        this.add.circle(0, 0, 8).setStrokeStyle(3, PALETTE.magentaHot, 1),
+        this.add.circle(0, 0, 8).setStrokeStyle(3, this.chan.b, 1),
         this.add.circle(0, 0, 2.5, PALETTE.white, 1),
-        this.add.circle(-13, 0, 3, PALETTE.magenta, 0.5),
+        this.add.circle(-13, 0, 3, this.chan.bDeep, 0.5),
       );
     }
     return this.add.container(x, y, parts).setRotation(angle).setDepth(4);
@@ -614,7 +615,7 @@ export class CollapseScene extends Phaser.Scene {
       );
       if (hit) {
         const normal = Math.atan2(b.y - hit.y, b.x - hit.x);
-        this.impactSparks(b.x, b.y, normal, GUN_COLOR[b.gun]);
+        this.impactSparks(b.x, b.y, normal, this.gunColor[b.gun]);
         getAudio(this)?.play('boltHit');
         const flown = b.flown;
         this.killBolt(b);
@@ -631,7 +632,7 @@ export class CollapseScene extends Phaser.Scene {
     if (this.time.now - b.trailAt < 16) return;
     b.trailAt = this.time.now;
     const ghost = this.add
-      .circle(x, y, this.time.now % 2 === 0 ? 4 : 3, GUN_COLOR[b.gun], 0.5)
+      .circle(x, y, this.time.now % 2 === 0 ? 4 : 3, this.gunColor[b.gun], 0.5)
       .setDepth(3);
     b.trail.push(ghost);
     this.tweens.add({
@@ -1011,7 +1012,7 @@ export class CollapseScene extends Phaser.Scene {
     const shape = generateAsteroid(this.shapeRng, radius, a);
     const gfx = this.add.graphics();
     paintAsteroid(gfx, shape, {
-      stroke: isFraction ? PALETTE.cyan : PALETTE.magenta,
+      stroke: isFraction ? this.chan.a : this.chan.bDeep,
       strokeWidth: 3,
       strokeAlpha: 0.95,
       fill: PALETTE.black,
@@ -1088,7 +1089,7 @@ export class CollapseScene extends Phaser.Scene {
    */
   private paintToken(t: LiveToken, armed = t.id === this.armedId): void {
     const phased = this.isPhased(t);
-    const hue = t.kind === 'fraction' ? PALETTE.cyan : PALETTE.magenta;
+    const hue = t.kind === 'fraction' ? this.chan.a : this.chan.bDeep;
 
     paintAsteroid(t.gfx, t.shape, {
       stroke: armed ? PALETTE.yellow : hue,
@@ -1415,7 +1416,7 @@ export class CollapseScene extends Phaser.Scene {
    * the thing you are looking at beats making you glance away mid-fight.
    */
   private paintShip(): void {
-    drawHull(this.hull, this.hullDef, GUN_COLOR[this.gun], CONFIG.flight.shipRadius);
+    drawHull(this.hull, this.hullDef, this.gunColor[this.gun], CONFIG.flight.shipRadius);
   }
 
   private createHud(): void {
@@ -1487,7 +1488,7 @@ export class CollapseScene extends Phaser.Scene {
   /** Redraw the weapon readout; `swapped` plays the rack animation with it. */
   private paintGun(swapped: boolean): void {
     this.gunIcon.removeAll(true);
-    const tint = GUN_COLOR[this.gun];
+    const tint = this.gunColor[this.gun];
     if (this.gun === 'fraction') {
       this.gunIcon.add(this.add.rectangle(0, 0, 26, 4, tint));
       this.gunIcon.add(this.add.rectangle(11, 0, 8, 8, PALETTE.white));
@@ -1495,7 +1496,7 @@ export class CollapseScene extends Phaser.Scene {
       this.gunIcon.add(this.add.circle(0, 0, 8).setStrokeStyle(3, tint, 1));
       this.gunIcon.add(this.add.circle(0, 0, 2.5, PALETTE.white, 1));
     }
-    this.gunText.setText(GUN_LABEL[this.gun]).setColor(GUN_CSS[this.gun]);
+    this.gunText.setText(GUN_LABEL[this.gun]).setColor(this.gunCss[this.gun]);
 
     if (!swapped) return;
     this.gunText.setScale(1.18);
