@@ -445,7 +445,7 @@ export class KakoomaScene extends Phaser.Scene {
       return `THE NINE ANSWERS ARE A CELL — FIND THE ${made} ONE LAST TIME`;
     }
     if (this.picked !== undefined) return 'NOW TYPE THE NUMBER YOU FOUND  ·  BACKSPACE TO GO BACK';
-    return `IN EACH CELL, ONE NUMBER IS THE ${made} OF TWO OTHERS  ·  NUMPAD PICKS A CELL, THEN TYPE THE NUMBER`;
+    return `IN EACH CELL, ONE NUMBER IS THE ${made} OF TWO OTHERS  ·  NUMPAD PICKS A CELL, THEN TYPE THE NUMBER  ·  H RULES`;
   }
 
   // --- leaving ---

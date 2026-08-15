@@ -1473,7 +1473,7 @@ export class CollapseScene extends Phaser.Scene {
       .text(
         width / 2,
         height - 26,
-        'W THRUST · A/D TURN  ·  SPACE FIRE  ·  SHIFT SWAP GUN  ·  YOU PHASE THROUGH YOUR OWN COLOUR  ·  R RETRY',
+        'W THRUST · A/D TURN  ·  SPACE FIRE  ·  SHIFT SWAP GUN  ·  YOU PHASE THROUGH YOUR OWN COLOUR  ·  R RETRY  ·  H RULES',
         { fontFamily: FONT, fontSize: '14px', color: CSS.cyanDim },
       )
       .setOrigin(0.5)

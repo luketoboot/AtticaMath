@@ -120,6 +120,11 @@ export class ExpressionScene extends Phaser.Scene {
       this.scene.launch('Help', { target: 'Expression' });
       this.scene.pause();
     });
+    // The key exists in every mode; a key nothing advertises does not.
+    this.add
+      .text(24, height - 22, 'H RULES', { fontFamily: FONT, fontSize: '13px', color: CSS.cyanDim })
+      .setOrigin(0, 0.5)
+      .setAlpha(0.7);
     onActionKey(this, bindings.pause, () => {
       if (this.phase === 'over') return;
       this.scene.launch('Pause', { target: 'Expression' });

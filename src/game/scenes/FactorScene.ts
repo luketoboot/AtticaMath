@@ -867,7 +867,7 @@ export class FactorScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(hud);
     this.keyHints = this.add
-      .text(24, height - 40, 'W THRUST · S REVERSE · A/D TURN  ·  TYPE A FACTOR TO SPLIT  ·  A PRIME DIES BY ITS OWN NAME', {
+      .text(24, height - 40, 'W THRUST · S REVERSE · A/D TURN  ·  TYPE A FACTOR TO SPLIT  ·  A PRIME DIES BY ITS OWN NAME  ·  H RULES', {
         fontFamily: FONT,
         fontSize: '14px',
         color: CSS.cyanDim,

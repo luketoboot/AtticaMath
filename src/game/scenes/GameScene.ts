@@ -263,6 +263,17 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.startWave();
+
+    // The mode a brand-new player lands in first, so its briefing must not be
+    // something they have to already know the key for. Once, then never again
+    // unless asked — the H hint on screen carries it from here. The wave
+    // underneath pauses with the scene, so reading costs nothing.
+    if (!this.saves.save.taught.includes('Game')) {
+      this.saves.save.taught.push('Game');
+      this.saves.persist();
+      this.scene.launch('Help', { target: 'Game' });
+      this.scene.pause();
+    }
   }
 
   override update(_time: number, deltaMs: number): void {
@@ -1252,7 +1263,7 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0, 0.5)
       .setDepth(hud);
     this.add
-      .text(24, height - 44, 'A / D  DODGE', { fontFamily: FONT, fontSize: '14px', color: CSS.cyanDim })
+      .text(24, height - 44, 'A / D  DODGE  ·  H  RULES', { fontFamily: FONT, fontSize: '14px', color: CSS.cyanDim })
       .setAlpha(0.7)
       .setDepth(hud);
 
