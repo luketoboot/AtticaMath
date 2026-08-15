@@ -88,6 +88,38 @@ A run is one grid and the result is the time on it, which goes on its own board 
 
 The rules fit in two lines and knowing them still leaves a player with no idea what a move looks like, which no amount of rewording fixes. So the mode demonstrates itself: a worked 4x4, one forced digit at a time, each step naming the cage or the line that forced it. It runs once on first entry and lives on `E` after that. The example and its reasoning are data in `core/cages/example.ts`, and the tests prove every digit it writes was forced — an example that leaps is teaching guessing.
 
+### Factor Storm
+
+Asteroids, with the rocks wearing composites. Type a factor of the rock under your nose and it splits into that factor and the quotient — `84` into `12` and `7`, which split again — so the board **multiplies before it clears**, and a wave is a factor tree worked leaf by leaf until only primes are left to die. Flight is Newtonian rotate-and-thrust on a wrapping field (`core/flight`, shared with Collapse): facing and velocity independent, W along the nose, near-frictionless. The first control scheme was direct WASD so the left hand could fly alone; it was replaced because accelerating along the input axis made every turn also a thrust.
+
+The asymmetry is the whole mode: **a composite can never be shot by its own name** — it accepts only proper factors, and typing what it says dead-ends with `NOT PRIME — BREAK IT` — while a prime accepts *only* itself. This shipped wrong once, and the mode was a transcription exercise: the fastest play was copying digits off the screen, and the test that should have caught it had encoded the exploit and passed. `1` is never legal, and no fragment of 1 can exist.
+
+Aiming is steering: the gun locks whatever the nose points at (`pickByNose`), because proximity is the one thing the player does not control. Bearings are computed across the wrap seam, hysteresis stops two straddled rocks strobing, and a tight snap cone overrides both the hysteresis *and* a half-typed buffer — swinging onto a new rock drops the typed digits silently, because re-aiming is not a mistake. The buffer holds while it could still grow into a legal shot, so a rock of 63 lets you reach 21 without the 2 going off on the way.
+
+Rocks up to 24 wear their quantity as counters arranged in their **squarest rectangle** (`core/factor/lattice.ts`) — Euclid's own definition, not a teaching aid bolted on: a composite is a number that makes a proper rectangle, a prime is one stuck as a single line. The cap is physical (counters need pixels), which turns the difficulty curve into an abstraction ladder: quantity while quantity is legible, symbols after. Naming a factor opens the counters into that many piles before they scatter.
+
+Every split credits `div.exact` plus the larger factor's table; primes credit `factor.prime`, which nothing else in the game can rate. The hidden-factor skills (`factor.smallest`, `factor.deep`) only credit when the split was not given away by an even digit or a trailing 5. A rock that reaches the ship is rated as an **unanswered question** — once per rock, however many times it hits, against the split the player was meant to find — because before that ruling every factor rating in the game came from a correct attempt and could only climb. Wrong digits are deliberately unrated: every digit is a live guess in this input model, and a mode that quietly downgraded exploration would teach timidity. Nuked rocks rate nothing and pay nothing, the same ruling Polarity makes for cancelled bullets. Balanced splits pay double (finding a middle factor is the harder step) and primes pay most, being the tail that has to be recognised rather than reduced. Rock values are drawn from the player's weakest table families, weighted but always diluted — a wave is never a wall of the worst one.
+
+### Collapse
+
+Twin guns over the same Newtonian field: fraction tokens and percentage tokens drift together, and a pair annihilates when one is armed with **its own** gun and its equivalent is then shot with **the other**. Arming works from either side, so the conversion drills in both directions. The loaded gun also decides what is solid — the ship phases through tokens of its own colour and is killed by everything else — so a swap flips both halves of the game at once: what you can shoot, and what can shoot back. The swap carries a short fire lockout, because committing to a half of the field is the decision the mode is actually about. This is the two-state ship Polarity's section refers back to.
+
+The pool (`core/collapse/equiv.ts`) holds only terminating equivalents — a mode built on "push it into the exact match" cannot afford `1/3`, which has no exact match to push into — and percentages are unique within a wave, so every fraction has exactly one home and a mis-push is unambiguously a misread rather than a coin flip. The pool is shared: Meteor Defense generates its fraction→percent problems from the same `EQUIV_POOL`, because two pools would drift and a player drilled on one set and rated on another is being told something untrue about what they know.
+
+What is rated is chosen as carefully as what is not. Latency runs from the moment the charge was armed — that is when the question was asked; everything before it was flying. A mismatch is a genuine wrong answer and rated as one, against the fraction, since that is the form being read. A wrong-gun shot is *not*: firing the fraction cannon at a percentage is a fumble, and rating it would teach the model that a player who cannot aim cannot do fractions — it simply does not bite, checked before anything else. An unreduced fraction (`6/8` for 75%) credits `frac.reduce` on top and rates harder, because reading through it is a second step.
+
+Scoring is a chain of tiers rather than a smooth curve, so every crossing is an event the audio can land on — a number that creeps up is not something a player can feel. And because this is the only mode where the player aims, distance pays: a threaded cross-field shot earns a share of whatever the collapse was already worth (LONG SHOT / SNIPER / DEAD EYE), judged on ground the bolt actually covered since bolts wrap, and only on the completing shot — the arming shot scores nothing, so a bonus there would have nowhere to land. The top tier sits deliberately at the edge of the gun's range, and a test holds it reachable.
+
+### Kakooma
+
+Every other mode asks the same question — here is a problem, produce the answer. Kakooma (Greg Tang's puzzle) inverts it: here are nine numbers, and exactly one is the sum (or product) of two of the others — *find it*. A single cell costs dozens of mental sums and the player experiences it as searching, with the arithmetic as a side effect. That makes it the complement to Meteor Defense rather than a variant: knowing 7+8=15 on cue and spotting that a 15 is sitting near a 7 and an 8 are different skills. Solved cells collapse to the number they were hiding, and when the ninth falls the survivors form the final three-by-three — the grid literally becomes its own last puzzle, no second screen needed to explain it.
+
+No HP; the clock is the run. Ninety seconds, a bonus per cleared grid, a four-second bite per wrong call — sized so that with nine numbers on offer, guessing is slower than looking. This is a fluency mode on purpose; Exercise already owns thinking slowly. The numpad is the fast path twice over — a 3×3 of cells has exactly the shape of a numpad, and so does the 3×3 inside each one — but the second stage types the **value found, not the position**: positional digits shipped first and broke the project's own natural-mapping rule (a player who found a 20 typed "20" and was charged for it). Prefixes wait rather than fire — the buffer commits only when no longer number on the board starts with it, ENTER claims the short one — because firing on a unique prefix left the trailing 0 arriving with nothing to mean, buzzing at a player who had done exactly the right thing.
+
+Rating goes to the fact that was found, not the cell it was in, mapped finest-reading-first (`add.complement10` for an exact ten, `add.bridge` across it, tables by the larger factor) — but with a **search premium** per number in the cell, because the same fact under a search load that grows with the cell is a harder question, and rating it bare would let the mode inflate the table. Every call rates, right or wrong: pointing at a number and saying it is the sum of two others is a real claim.
+
+Generation is constructive and backwards — final cell first, each sub-cell built to land on one of its numbers, distractors admitted one at a time and refused if they create a second relationship, since "exactly one" is a property of the whole set and nine random numbers under twenty collide constantly. The sum is bounded rather than the addends, which is what stops the answer being findable by picking the largest number on screen (a test holds that rate under 60%). Product cells plant only times-table facts and draw their distractors from factors and the products they make — a board half full of numbers nobody would consider as a factor is a search collapsed into a glance. A repeated number appears only to put a double on the table. The generator widens its range rather than fail, because a player cannot tell a stalled generator from a broken game.
+
 ### Polarity
 
 Ikaruga, and specifically the half of Ikaruga that Collapse does not already have. Collapse has the two-state ship, the swap lockout and phasing through your own colour; what it lacks is absorption as a resource and a chain scored on the *order* of kills, which is what makes Ikaruga a puzzle rather than a filter.
@@ -138,18 +170,20 @@ A synthwave AI operator that speaks between waves only, never interrupts play. D
 
 ## RPG Meta
 
-No base building. Loadout and upgrade system only.
+No base building, and — since save v4 — **nothing purchasable touches a run**. The shop originally sold stat upgrades (+2 HP, a slow field, a free miss, a spread cannon); they were retired and refunded, because two runs are only comparable if both players brought the same ship, and a board topped by whoever ground credits first measures patience rather than arithmetic. The old price list survives in exactly one place, the save migration, so a v3 profile gets its credits back rather than discovering its gear silently deleted.
 
-- Runs earn currency based on performance
-- Weapons change how answers interact with the field: spread cannon (hits all meteors sharing the typed answer), slow field, one miss shield, streak multiplier that ramps on consecutive correct answers
-- Loadout picked before a run, permanent upgrades bought between runs
+- Runs earn currency on performance (`creditsForRun`; Cages needs its own formula because its score is a duration and paying per point would pay most to the slowest)
+- Every advantage is an **in-run drop** (`core/drops`): freeze, nuke, repair, double, chain, shield — timers rather than permanent state, so a run's texture comes from what is active now, not what the player owns. Pools are per mode and tested, because the tempting failure is keeping a pickup in a pool and quietly giving it no effect: chain is meteor-only ("one answer kills everything sharing it" needs meteors that share an answer). How you catch one matches the mode — a pod to slide under, a float to fly through, or handed over on the solve in the keyboard-only modes
+- Credits buy **cosmetics that change nothing**: five slots (hull, trail, cannon, burst, badge), one free starter each. A hull is an outline in ship-radius units so a bought silhouette can never change the collision circle — looking different is the product, being bigger would be an advantage, and advantages are not for sale. Tests hold this
+- Part of the catalogue will not sell at any price until the save's own record earns it (lifetime waves, best score, skills mastered) — a catalogue you can buy front-to-back with enough grinding is just a long receipt. Locked tiles are countdowns, not walls, and the shop reports `locked` before `insufficient`, so the player grinds the right thing
 - Milestones surfaced from the skill table ("12s mastered") appear as unlocks in the operator debrief
 - Economy code lives in core/economy, testable, tunables in config
 
 ## Aesthetic Rules
 
 - Palette: hot magenta, cyan, deep purple, black, with white/yellow for critical info. High contrast, readable at speed
-- CRT pipeline is always on by default with a toggle in settings (accessibility)
+- CRT pipeline is always on by default with a toggle in settings (accessibility), and every effect has its own dial on the video screen
+- Colour is never the only carrier of meaning. The two-channel modes give every class its own silhouette, and the channel pair itself is a setting (`core/settings/channels`): magenta/cyan by default, amber/blue for the one player in twelve who cannot split the default pair at speed. Bridge-yellow and wild-red never move — those meanings were never the problem
 - Screen shake, hit flash, particle bursts on kills. Juice matters. Every correct answer should feel like a kill in an action game
 - Typeface: chunky pixel or condensed retro face, must stay legible for multi digit numbers at small sizes
 - No clip art, no cartoon mascots, no school iconography
@@ -172,7 +206,7 @@ No base building. Loadout and upgrade system only.
 4. Basic HUD: HP, score, streak, input buffer
 5. Operator tips between waves (data driven, at least 15 tips covering add/subtract/multiply)
 6. localStorage saves with versioned schema
-7. Currency earned per run and at least 3 purchasable upgrades
+7. Currency earned per run and a purchasable catalogue (shipped as upgrades, re-ruled cosmetics-only at save v4 — see RPG Meta)
 
 Expression Builder is milestone 2. Nothing else until both modes feel good.
 
