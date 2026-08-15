@@ -248,7 +248,9 @@ export class PolarityScene extends Phaser.Scene {
 
     this.pad = new FlightPad(this, {
       actions: [
-        { id: 'flip', label: 'FLIP', onPress: () => this.flip(), accent: PALETTE.magenta, size: 96 },
+        // The button that IS the channel choice wears channel B, not a
+        // hardcoded magenta the ember palette never uses.
+        { id: 'flip', label: 'FLIP', onPress: () => this.flip(), accent: this.polarityColor.b, size: 96 },
         {
           id: 'recompose',
           label: 'RECOMP',

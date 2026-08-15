@@ -108,6 +108,9 @@ export class BossScene extends Phaser.Scene {
     // is how a mode gets abandoned rather than learned.
     this.input.keyboard?.on('keydown-H', () => {
       if (this.scene.isActive('Help')) return;
+      // While the pad is open, H is its vim-left — not the briefing key.
+      // (numpad is declared below; the closure only runs once create is done.)
+      if (numpad.visible) return;
       this.scene.launch('Help', { target: 'Boss' });
       this.scene.pause();
     });

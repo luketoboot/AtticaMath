@@ -34,6 +34,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # The gates run here too, not only in ci.yml — the two workflows race on
+      # the same push, and a deploy that outran a red test suite would publish
+      # a broken save migration under a red badge.
+      - run: npm run test
+      - run: npm run audio
       - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}

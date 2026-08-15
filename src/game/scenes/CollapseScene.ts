@@ -1024,7 +1024,7 @@ export class CollapseScene extends Phaser.Scene {
         fontFamily: FONT,
         fontSize: isFraction ? '26px' : '24px',
         fontStyle: 'bold',
-        color: isFraction ? CSS.cyan : CSS.magentaHot,
+        color: isFraction ? this.chan.aCss : this.chan.bCss,
         stroke: CSS.black,
         strokeThickness: 4,
       })

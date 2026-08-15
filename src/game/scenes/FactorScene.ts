@@ -190,6 +190,8 @@ export class FactorScene extends Phaser.Scene {
     // is how a mode gets abandoned rather than learned.
     this.input.keyboard?.on('keydown-H', () => {
       if (this.scene.isActive('Help')) return;
+      // While the pad is open, H is its vim-left — not the briefing key.
+      if (this.numpad.visible) return;
       this.scene.launch('Help', { target: 'Factor' });
       this.scene.pause();
     });
