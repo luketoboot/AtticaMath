@@ -93,8 +93,8 @@ export const HELP: Readonly<Record<string, HelpPage>> = {
     goal: 'Two divisors. Break what your one divides, and eat what it divides.',
     lines: [
       { key: 'WASD / F', text: 'Fly. Hold F to crawl for threading — the hitbox is the white dot.' },
-      { key: 'YOUR ×', text: 'The divisor you wear is your trigger. Wearing x7? Hold 7 to fire.' },
-      { key: 'THE OTHER', text: 'Press the other divisor to flip to it. A moment before you can flip back.' },
+      { key: 'YOUR ×', text: 'The divisor you wear is your trigger. Hold it — or SPACE — to fire.' },
+      { key: 'THE OTHER', text: 'Press the other divisor — or SHIFT — to flip. A moment before you flip back.' },
       { key: 'INCOMING', text: 'A bullet your divisor divides is absorbed and charges the meter.' },
       { key: 'PODS', text: 'SPREAD, LANCE, SEEKER, SIEVE. A kill nearby turns fire into points.' },
       { key: 'E', text: 'Spend a full meter to re-declare the pair and reclassify the field.' },

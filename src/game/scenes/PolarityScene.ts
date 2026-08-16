@@ -32,7 +32,7 @@ import {
 import { KeyState, onActionKey, sceneBindings } from '../input/KeyState';
 import { FlightPad } from '../../ui/FlightPad';
 import { isTouchDevice } from '../../ui/Numpad';
-import type { KeyBindings } from '../../core/input/bindings';
+import { codeMatches, type KeyBindings } from '../../core/input/bindings';
 import { SAVE_REGISTRY_KEY, type SaveManager } from '../storage';
 
 /** Anything on screen wearing a number. The session owns what it is. */
@@ -242,6 +242,15 @@ export class PolarityScene extends Phaser.Scene {
     // firing an unrelated key. Now the polarity you wear is the key under your
     // finger, and committing to a colour physically moves your hand.
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onDigit(e.code));
+    // The padless grip: the same physical verbs Collapse uses. SPACE holds
+    // fire (polled in update, beside the digit) and SHIFT flips, so a keyboard
+    // without a numpad plays this mode the way it already plays Collapse. The
+    // digit keys stay — wearing the key under your finger is still the mode's
+    // identity — this is a second grip, not a replacement. Repeat is filtered
+    // so a held SHIFT does not drum the swap lockout's buzzer.
+    this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+      if (!e.repeat && codeMatches(this.bindings.switchWeapon, e.code)) this.flip();
+    });
     // E rather than a bound action: the two bound ones are spoken for, and
     // Cages already teaches E as "the extra thing this mode does".
     this.input.keyboard?.on('keydown-E', () => this.tryRecompose());
@@ -361,7 +370,7 @@ export class PolarityScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
     this.wornHint = this.add
-      .text(width / 2 - 74, 62, 'HOLD TO FIRE', {
+      .text(width / 2 - 74, 62, 'HOLD / SPACE TO FIRE', {
         fontFamily: FONT,
         fontSize: '11px',
         color: CSS.cyanDim,
@@ -369,7 +378,7 @@ export class PolarityScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
     this.otherHint = this.add
-      .text(width / 2 + 74, 62, 'PRESS TO FLIP', {
+      .text(width / 2 + 74, 62, 'PRESS / SHIFT TO FLIP', {
         fontFamily: FONT,
         fontSize: '11px',
         color: CSS.cyanDim,
@@ -425,7 +434,7 @@ export class PolarityScene extends Phaser.Scene {
       .setDepth(30);
 
     this.add
-      .text(width / 2, height - 22, 'WASD MOVE · YOUR DIVISOR FIRES · THE OTHER FLIPS · F FOCUS · T TREE · E RECOMPOSE · H RULES', {
+      .text(width / 2, height - 22, 'WASD MOVE · YOUR DIVISOR OR SPACE FIRES · THE OTHER OR SHIFT FLIPS · F FOCUS · T TREE · E RECOMPOSE · H RULES', {
         fontFamily: FONT,
         fontSize: '13px',
         color: CSS.cyanDim,
@@ -710,7 +719,11 @@ export class PolarityScene extends Phaser.Scene {
     // Held fire, on whichever digit is currently loaded. A shmup that wants a
     // keypress per shot is a shmup nobody finishes, and the decision here is
     // which polarity to be, not when to pull.
-    if (this.keys.isDown(digitCodes(this.session.activeDivisor))) this.tryFire();
+    if (
+      this.keys.isDown(digitCodes(this.session.activeDivisor)) ||
+      this.keys.isDown(this.bindings.launch)
+    )
+      this.tryFire();
 
     if (this.phase === 'wave') this.spawnDueBullets(dt);
     this.moveCarriers(width, height);
